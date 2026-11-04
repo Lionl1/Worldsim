@@ -1,9 +1,10 @@
 # 🌌 worldsim
 
-**Открытая модель вселенной на Rust: от броска камня до космической паутины. Каждый закон проверяется автоматически.**
+**Открытая физика на Rust: от анализа космической миссии до проверки обученных world models. Каждый закон проверяется автоматически.**
 
-*An open, dependency-free Rust model of the universe — planets, climate, star systems, galaxies and cosmology —
-with an in-browser 3D viewer, real star/exoplanet catalogs, a robot-training environment, dataset generation and 67 automated physics checks.*
+*Open, dependency-free physics in Rust: Mission Lab turns mission requirements into a scorecard and technology trade study, and a qualification ladder tells you when a learned world model can be trusted. Includes robot environments, counterfactual data, a 3D viewer from planets to cosmology, and 73 automated physics checks.*
+
+**Для инженеров миссий:** [Mission Lab](#mission-lab) отвечает, выполняются ли требования, что ломает миссию и какая технология окупится. **Для разработчиков моделей:** [сбор данных и квалификация](#world-models-данные-и-квалификация) показывают, сколько секунд можно верить модели и видит ли она аварии заранее. Что это умеет, чего не умеет и на каких исследованиях основано, описано в [docs/PRODUCT.md](docs/PRODUCT.md).
 
 ```bash
 git clone https://github.com/Lionl1/worldsim && cd worldsim
@@ -12,6 +13,25 @@ cargo run --release          # соберёт и откроет 3D-интерф�
 ```
 
 Нужен только Rust ≥ 1.75 — внешних крейтов нет. Каталоги (вкладка «Карта») скачиваются скриптом из открытых репозиториев. Браузеру нужен интернет только для загрузки three.js с CDN.
+
+## Mission Lab
+
+```bash
+cargo run --release -- mission missions/lunar_lander.json --out report
+```
+
+Описание миссии задаёт аппарат, разбросы, требования и варианты технологий. Готовые примеры лежат в [missions/](missions/). Результат есть и на вкладке «Mission Lab» в интерфейсе.
+
+| Вопрос | Что получите |
+|---|---|
+| Выполнима ли миссия? | Карта требований с интервалом 95%: выполнено, не выполнено или данных мало |
+| Как отказывает? | Виды отказов: большая скорость касания, опрокидывание и другие |
+| Что её ломает? | Влияние каждого разброса в отдельности |
+| Что купить? | Парное сравнение технологий на тех же условиях: что спасено, что потеряно, сколько это весит |
+
+Пример ответа для лунного модуля: успех 90,7%, требований выполнено 0 из 4, а двигатель 7 кН даёт +4,3 ± 2,8 п.п. за 25 кг и закрывает два требования.
+
+Физика упрощена: это инструмент для ранних проектных решений, а не замена высокоточному анализу и испытаниям.
 
 ## Что внутри
 
@@ -24,9 +44,9 @@ cargo run --release          # соберёт и откроет 3D-интерф�
 | 🔭 **Карта** | 11 270 звёзд HYG + 5 283 экзопланеты | любую экзопланету — в модель мира одним кликом |
 | 🌀 **Галактики** | Млечный Путь, столкновение галактик, скопления | Барнс–Хат O(N log N), живое тёмное гало, вириал, кривая вращения |
 | 🕸️ **Космология** | ΛCDM, рост структур из Большого взрыва | Фридман, начальные условия Зельдовича, спектр BBKS/σ₈, particle-mesh через FFT |
-| ✅ **Законы** | 67 тестов | см. ниже |
-
-Отдельной вкладки у [среды для обучения роботов](#среда-для-обучения-роботов) нет: она работает через HTTP API и как библиотека.
+| 🚀 **Mission Lab** | анализ миссии по требованиям | Монте-Карло, интервалы Уилсона, парные сравнения |
+| 🤖 **Роботы** | посадочный модуль, дрон, ровер в реальном времени | Циолковский, импульсная теория винта, трение Кулона, контакт опор, устойчивость |
+| ✅ **Законы** | 73 теста | см. ниже |
 
 ## Проверка законов
 
@@ -53,6 +73,9 @@ cargo test --release                # то же, как тесты
 | Планк → Стефан–Больцман, Вин | численное интегрирование спектра | 10⁻⁸ / 10⁻⁶ |
 | Уравнение Циолковского | посадочный модуль, полный расход топлива | Δv = 1093.18 м/с (теория 1093.14) |
 | Импульсная теория винта | дрон на Марсе: обычные винты / площадь ×40 | −3.41 / +8.88 м/с (падает / взлетает) |
+| Контакт опор | модуль стоит на Марсе | акселерометр показывает g, ±3% |
+| Устойчивость v·ω/g | тот же поворот ровера | на Луне опрокидывает, на Земле нет |
+| Точность ветвления | копия среды против оригинала | совпадают до 10⁻¹² |
 
 ## Командная строка
 
@@ -63,6 +86,8 @@ worldsim thermal moon --lat 0
 worldsim particle earth --species proton --mev 1 --L 3 --pitch 40
 worldsim system --bodies sun,earth,moon,mars,jupiter --years 10 --gr
 worldsim dataset --task projectile --n 10000 --worlds earth,moon,mars,mars:earth:moon --noise 0.01 --out data/proj
+worldsim mission missions/lunar_lander.json --out report
+worldsim collect --task lander --worlds moon,mars:earth:moon --episodes 1000 --randomize --counterfactuals 3 --out runs/data
 worldsim serve --port 8080
 ```
 
@@ -76,9 +101,13 @@ worldsim serve --port 8080
 
 | Задача | Цель | Действия | Наблюдения |
 |---|---|---|---|
-| `lander` | мягко сесть на площадку | `throttle` 0…1, `torque_x/y/z` −1…1 | 26: GPS, скорость, ориентация, гироскоп, радиовысотомер, акселерометр, топливо, давление, лидар |
-| `drone` | долететь до точки и зависнуть | `rotor_1…4` 0…1 | 19: цель, скорость, ориентация, гироскоп, радиовысотомер, акселерометр, батарея, давление, плотность воздуха |
-| `rover` | доехать до цели по рельефу | `left`, `right` −1…1 | 28: цель, курс, скорость, наклон, батарея, высота Солнца, температура, давление, лидар |
+| `lander` | мягко сесть на площадку | `throttle` 0…1, `torque_x/y/z` −1…1 | 35: GPS, скорость, ориентация, гироскоп, радиовысотомер, акселерометр, топливо, давление, лидар, признаки попадания лучей |
+| `drone` | долететь до точки и зависнуть | `rotor_1…4` 0…1 | 20: цель, скорость, ориентация, гироскоп, радиовысотомер, акселерометр, батарея, давление, плотность воздуха, признак попадания |
+| `rover` | доехать до цели по рельефу | `left`, `right` −1…1 | 44: цель, курс, скорость, наклон, батарея, высота Солнца, температура, давление, лидар, признаки попадания |
+
+Модуль стоит на четырёх упругих опорах, поэтому модель видит сам контакт. Дрон стартует в воздухе и может сесть и снова взлететь. Ровер опрокидывается, если уклон и инерция поворота превышают запас устойчивости.
+
+Сложность добавляют порывы ветра (`gust`), задержка приводов (`lag`), скрытый отказ привода (`fault`) и смена мира между эпизодами (`worlds`).
 
 ### HTTP API
 
@@ -91,17 +120,21 @@ curl 'http://localhost:8080/api/env/step?id=1&mode=auto&repeat=100&text=1'   # 1
 ```
 
 `step` возвращает `obs`, `reward`, `terminated`, `truncated` и `info`. Сервер держит соединение открытым (keep-alive), поэтому
-агент может слать много запросов подряд через одно подключение.
+агент может слать много запросов подряд через одно подключение. Числа вне допустимого диапазона дают ошибку 400.
+
+Сервер хранит до 1024 сред и 64 тяжёлые симуляции. Когда места нет, удаляется давно не использованная сессия того же рода. Закончив работу, вызывайте `close`.
 
 | Запрос `/api/env/…` | Параметры |
 |---|---|
 | `tasks`, `list` | — |
-| `make` | `task`, `physics`, `atmosphere`, `surface`, `gravity_scale`, `randomize=1`, `noise` (0 — идеальные сенсоры), `rotor_scale`, `max_steps`, `seed` |
+| `make` | `task`, `physics`, `worlds`, `atmosphere`, `surface`, `gravity_scale`, `randomize=1`, `noise` (0 — идеальные сенсоры), `rotor_scale`, `max_steps`, `frame_skip`, `gust`, `lag`, `fault`, `seed` |
 | `reset` | `id`, `seed` |
-| `step` | `id`, `action=a,b,…` или `mode=auto\|random`, `repeat` (1–100), `text=1` |
-| `state` | `id` |
+| `step` | `id`, `action=a,b,…` или `mode=auto\|random`, `repeat` (1–100), `text=1`, `traj=1` (все промежуточные шаги) |
+| `state` | `id`: также истинное состояние и скрытые параметры |
+| `fork` | `id`: копия среды, чтобы проиграть другое действие из той же точки |
+| `close` | `id` |
 | `terrain` | `id`, `n` (сетка 17–257) |
-| `camera` | `id`, `w`, `h` (4–256), `fov` — карта глубины |
+| `camera` | `id`, `w`, `h` (4–256), `fov`, `mode=depth\|rgb` |
 
 ### Из Rust
 
@@ -126,12 +159,61 @@ println!("{}: {:.1}", env.info.reason, env.ep_return);
 
 | Задача | Земля | Луна | Марс |
 |---|---|---|---|
-| `lander` | 9 | 8 | 8 |
+| `lander` | 10 | 10 | 10 |
 | `drone` | 10 | 0 | 0 |
-| `rover` | 7 | 8 | 5 |
+| `rover` | 8 | 6 | 4 |
 
 На Луне дрону не на что опереться: там нет воздуха. На Марсе обычным винтам не хватает плотности атмосферы. Повторить замер:
 `cargo run --release --example probe_env`.
+
+## World models: данные и квалификация
+
+```bash
+cargo build --release
+worldsim collect --task lander --worlds moon --episodes 500 --randomize --noise 0 --counterfactuals 3 --out runs/moon
+worldsim collect --task lander --worlds earth --episodes 500 --randomize --noise 0 --counterfactuals 3 --out runs/earth
+worldsim collect --task lander --worlds mars:earth:moon --episodes 300 --randomize --noise 0 --counterfactuals 3 --out runs/mix
+
+cd python && pip install -e '.[baseline]'
+python -m worldsim.baseline train --data ../runs/moon ../runs/earth --out ../runs/base.pt
+python -m worldsim.baseline qualify --model ../runs/base.pt --world moon=../runs/moon --world mix=../runs/mix --out ../runs/report
+```
+
+`collect` пишет `.npy` и `meta.json`: наблюдения, действия, истинное состояние, скрытые параметры и причины окончания эпизодов. Результат не зависит от числа потоков. С `--counterfactuals` добавляются ветвления: разные действия из одной точки с истинным ответом.
+
+Подключить свою модель можно любой архитектуры:
+
+```python
+from worldsim import Dataset, WorldModel, qualify, to_markdown
+
+class MyModel(WorldModel):
+    name = "my-rssm"
+    def init(self, obs, params):      # начальное состояние по наблюдениям
+        return encode(obs)
+    def step(self, state, action):    # шаг в воображении
+        state = dynamics(state, action)
+        return state, decode(state)   # предсказание в каналах сенсоров
+
+report = qualify(MyModel(), {"moon": Dataset("runs/moon"), "mix": Dataset("runs/mix")})
+print(to_markdown(report))
+```
+
+| Ступень | Что проверяет |
+|---|---|
+| L1 Точность | горизонт доверия при допусках миссии |
+| L2 Физика | нарушения законов в воображении относительно симулятора |
+| L3 Отклик | эффект действия против истинных ветвлений |
+| L4 Оптимизм | пропущенные аварии и ложные тревоги |
+| L5 Границы | те же проверки в мирах вне обучения |
+
+Для обучения без файлов есть векторная среда, которая работает без HTTP:
+
+```python
+from worldsim import VectorEnv
+env = VectorEnv("lander", "moon,mars,mars:earth:moon", n=64, randomize=True, gust=2.0, threads=8)
+obs = env.reset()
+obs, reward, terminated, truncated, info = env.step(env.autopilot())
+```
 
 ## Как библиотека
 
@@ -153,9 +235,13 @@ src/
   galaxy                                      — Барнс–Хат, начальные условия галактик
   cosmology                                   — Фридман, FFT, particle-mesh
   env                                         — среда для обучения роботов: lander, drone, rover
-  validate                                    — 67 проверок законов
+  validate                                    — 73 проверки законов
+  mission  collect  ffi                       — Mission Lab, сбор переходов, векторная среда для Python
   datagen  server  json  main                 — датасеты, HTTP-сервер, CLI
 web/index.html                                — 3D-интерфейс (three.js), встроен в бинарник
+missions/                                     — примеры миссий
+python/worldsim/                              — клиент, векторная среда, данные, квалификация, базовая модель
+docs/PRODUCT.md                               — продукт, исследования, ограничения, планы
 data/                                         — каталоги HYG и OEC (скачиваются tools/fetch_data.sh, свои лицензии)
 tools/fetch_data.sh, build_data.py           — загрузка и сборка данных из каталогов
 ```
