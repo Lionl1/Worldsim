@@ -13,6 +13,7 @@ pub struct World {
     pub surface: SurfacePreset,
     pub star_luminosity: f64, // Вт
     pub star_distance: f64,   // м
+    pub star_gm: f64,         // м³/с²
 }
 
 #[derive(Clone, Debug)]
@@ -49,8 +50,19 @@ impl World {
             Some(d) => d * AU,
             None => heliocentric_distance(&physics)?,
         };
-        let mut w = World { physics, atmosphere: None, surface, star_luminosity: L_SUN, star_distance };
+        let mut w = World { physics, atmosphere: None, surface, star_luminosity: L_SUN, star_distance, star_gm: 1.327_124_400_18e20 };
         if let Some(ap) = atmo_preset {
+            let t0 = if ap.fixed_temperature { ap.reference_temperature } else { w.surface_temperature_with(Some(&ap)) };
+            w.atmosphere = Some(Atmosphere::build(&ap, w.physics.gm, w.physics.radius, t0)?);
+        }
+        Ok(w)
+    }
+
+    /// Мир из произвольных частей (например, сгенерированная экзопланета у другой звезды).
+    pub fn from_parts(physics: PhysicsPreset, atmo: Option<presets::AtmospherePreset>, surface: SurfacePreset,
+                      star_luminosity: f64, star_gm: f64, star_distance: f64) -> Result<World, String> {
+        let mut w = World { physics, atmosphere: None, surface, star_luminosity, star_distance, star_gm };
+        if let Some(ap) = atmo {
             let t0 = if ap.fixed_temperature { ap.reference_temperature } else { w.surface_temperature_with(Some(&ap)) };
             w.atmosphere = Some(Atmosphere::build(&ap, w.physics.gm, w.physics.radius, t0)?);
         }

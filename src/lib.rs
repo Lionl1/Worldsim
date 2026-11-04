@@ -10,13 +10,18 @@
 
 pub mod atmosphere;
 pub mod ballistics;
+pub mod climate;
 pub mod constants;
+pub mod cosmology;
 pub mod datagen;
+pub mod galaxy;
 pub mod magneto;
 pub mod nbody;
 pub mod orbit;
 pub mod presets;
 pub mod rng;
+pub mod stars;
+pub mod starsystem;
 pub mod thermal;
 pub mod validate;
 pub mod vec3;

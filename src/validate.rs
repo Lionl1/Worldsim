@@ -196,6 +196,117 @@ pub fn magnetosphere() -> Vec<Check> {
     ]
 }
 
+pub fn stars_checks() -> Vec<Check> {
+    use crate::stars;
+    let sun = stars::star("sun").unwrap();
+    let hz = sun.habitable_zone();
+    let ms = stars::Star::main_sequence(1.0);
+    vec![
+        chk("Стефан–Больцман из спектра Планка", "π∫B_λdλ / σT⁴ при 5772 К", stars::planck_integrated(5772.0) / (crate::constants::SIGMA_SB * 5772f64.powi(4)), 1.0, 1e-6, ""),
+        chk("Закон смещения Вина", "λ_max·T численно из Планка", stars::wien_peak(5772.0) * 5772.0 * 1e3, 2.897_771_955, 1e-4, "мм·К"),
+        chk("Масса–светимость + Стефан–Больцман", "T_eff звезды 1 M☉ главной последовательности", ms.teff, 5772.0, 0.001, "К"),
+        chk("Обитаемая зона (Kopparapu 2014)", "внутренняя граница у Солнца", hz.0, 0.95, 0.01, "а.е."),
+        chk("Обитаемая зона (Kopparapu 2014)", "внешняя граница у Солнца", hz.1, 1.67, 0.01, "а.е."),
+        Check { law: "Излучение чёрного тела → цвет", test: "Проксима красная, Сириус голубоватый".into(),
+            value: format!("R/B: {:.2} / {:.2}", stars::star("proxima").unwrap().rgb()[0] / stars::star("proxima").unwrap().rgb()[2], stars::star("sirius_a").unwrap().rgb()[0] / stars::star("sirius_a").unwrap().rgb()[2]),
+            expected: "> 1.5 / < 1".into(),
+            pass: { let p = stars::star("proxima").unwrap().rgb(); let s = stars::star("sirius_a").unwrap().rgb(); p[0] / p[2] > 1.5 && s[0] / s[2] < 1.0 } },
+    ]
+}
+
+pub fn starsystem_checks() -> Vec<Check> {
+    use crate::starsystem::StarSystem;
+    let mut worst: f64 = 0.0;
+    let mut stable = 0;
+    let n = 12;
+    for seed in 0..n {
+        let sys = StarSystem::generate(seed, None).unwrap();
+        let mut nb = sys.nbody();
+        let i0 = nb.invariants();
+        let p_in = sys.planets[0].a.powf(1.5) / sys.star.mass.sqrt() * YEAR;
+        let dt = p_in / 200.0;
+        let a0: Vec<f64> = nb.bodies.iter().skip(1).map(|b| (b.r - nb.bodies[0].r).norm()).collect();
+        for _ in 0..4000 { nb.step(dt); }
+        let i1 = nb.invariants();
+        worst = worst.max(rel(i1.energy, i0.energy));
+        let ok = nb.bodies.iter().skip(1).zip(&a0).all(|(b, r0)| { let r = (b.r - nb.bodies[0].r).norm(); r < 3.0 * r0 && r > r0 / 3.0 });
+        if ok { stable += 1; }
+    }
+    vec![
+        chk_max("Сохранение энергии", "12 сгенерированных систем, 20 оборотов внутренней планеты", worst, 1e-6),
+        Check { law: "Устойчивость по Хиллу", test: "разнос 10–25 R_H: планеты остаются на орбитах".into(), value: format!("{stable}/{n}"), expected: format!("{n}/{n}"), pass: stable == n },
+    ]
+}
+
+pub fn galaxy_checks() -> Vec<Check> {
+    use crate::galaxy;
+    let mut g = galaxy::preset("plummer", 3000, 1).unwrap();
+    let (k, w) = g.energy();
+    let acc = g.tree_acc();
+    let mut errs: Vec<f64> = (0..150).map(|i| { let d = g.direct_acc(i * 20); (acc[i * 20] - d).norm() / d.norm() }).collect();
+    errs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let e0 = k + w;
+    let p_scale: f64 = (0..g.len()).map(|i| g.mass[i] * g.vel[i].norm()).sum();
+    let tc = galaxy::crossing_time(1.0, 1.0);
+    for _ in 0..100 { g.step(tc / 100.0); }
+    let (k1, w1) = g.energy();
+    let mw = galaxy::preset("milky_way", 20000, 2).unwrap();
+    let rc = mw.rotation_curve(20.0, 10);
+    let v8 = rc.iter().find(|(r, _)| *r > 7.0).map(|x| x.1).unwrap_or(0.0);
+    vec![
+        chk("Теорема вириала", "сфера Пламмера: 2K/|W|", 2.0 * k / w.abs(), 1.0, 0.03, ""),
+        chk_max("Барнс–Хат (θ=0.6) vs прямая сумма", "медианная относительная ошибка силы", errs[errs.len() / 2], 0.01),
+        chk_max("Сохранение энергии", "Пламмер, 1 время пересечения, |ΔE/E|", ((k1 + w1) - e0) / e0.abs(), 1e-3),
+        chk_max("Сохранение импульса", "|ΔP| / Σm|v|", g.momentum().norm() / p_scale, 1e-3),
+        chk("Кривая вращения (тёмное гало)", "модель Млечного Пути: v_c на 8 кпк", v8, 220.0, 0.1, "км/с"),
+    ]
+}
+
+pub fn cosmology_checks() -> Vec<Check> {
+    use crate::cosmology::{Cosmology, PmSim, GYR_S};
+    let c = Cosmology::planck2018();
+    let eds = Cosmology::preset("eds").unwrap();
+    let a0 = 0.02;
+    let a1 = 0.1;
+    let mut pm = PmSim::new(c, 32, 128.0, a0, 3);
+    let p0 = pm.measure_power(8);
+    let ps = pm.momentum_scale();
+    for _ in 0..40 { pm.step((a1 - a0) / 40.0); }
+    let p1 = pm.measure_power(8);
+    let ratio: f64 = p0.iter().zip(&p1).take(3).map(|(x, y)| y.1 / x.1).sum::<f64>() / 3.0;
+    vec![
+        chk("Уравнение Фридмана (Planck 2018)", "возраст Вселенной", c.age_gyr(1.0), 13.787, 0.002, "млрд лет"),
+        chk("Уравнение Фридмана (аналитика)", "Эйнштейн–де Ситтер: t₀ = 2/(3H₀)", eds.age_gyr(1.0), 2.0 / 3.0 / eds.h0_si() / GYR_S, 1e-4, "млрд лет"),
+        chk("Линейный рост", "Эйнштейн–де Ситтер: D(a) = a", eds.growth(0.5), 0.5, 1e-4, ""),
+        chk("Линейный рост", "ΛCDM: f(z=0) ≈ Ω_m^0.55", c.growth_rate(1.0), c.omega_m.powf(0.55), 0.01, ""),
+        chk("Нормировка спектра", "σ₈ из P(k)", c.sigma_r(8.0), 0.8102, 1e-6, ""),
+        chk("Фотометрическое расстояние", "d_L(z=1), Planck 2018 (≈6.78 Гпк)", c.luminosity_distance(1.0) / 1e3, 6.78, 0.01, "Гпк"),
+        chk("Гравитационная неустойчивость (PM)", "рост P(k) на больших масштабах a=0.02→0.1 vs D²", ratio, (c.growth(a1) / c.growth(a0)).powi(2), 0.08, ""),
+        chk_max("Сохранение импульса (PM, CIC)", "|ΣP| / Σ|p|", pm.total_momentum() / ps, 1e-10),
+    ]
+}
+
+pub fn climate_checks() -> Vec<Check> {
+    use crate::climate::{self, ClimateOptions};
+    let e = World::preset("earth").unwrap();
+    let r = climate::simulate(&e, &ClimateOptions::default());
+    let eq = r.annual_mean[r.lat.len() / 2];
+    let snow = climate::simulate(&e, &ClimateOptions { initial_t: Some(220.0), years: 60, ..Default::default() });
+    let m = World::preset("mars").unwrap();
+    let rm = climate::simulate(&m, &ClimateOptions::default());
+    vec![
+        chk("Энергобаланс + перенос (EBM)", "Земля: среднегодовая глобальная T", r.global_mean, 288.0, 0.01, "К"),
+        chk("Энергобаланс + перенос (EBM)", "Земля: экватор, среднегодовая (≈299 К)", eq, 299.0, 0.02, "К"),
+        chk("Ледово-альбедная обратная связь", "Земля: кромка льда (наблюдается ≈70°)", r.ice_edge, 70.0, 0.12, "°"),
+        chk_max("1-е начало термодинамики", "Земля: невязка энергии за год", r.energy_residual, 1e-9),
+        chk_max("Радиационное равновесие", "Земля: |⟨ASR−OLR⟩| на верхней границе", r.toa_imbalance, 0.05),
+        Check { law: "Бистабильность (Будыко)", test: "холодный старт при тех же параметрах → «Земля-снежок»".into(),
+            value: format!("{:.0} К, лёд до {:.0}°", snow.global_mean, snow.ice_edge), expected: "лёд до экватора".into(), pass: snow.ice_edge < 5.0 },
+        Check { law: "Конденсация CO₂ (148 К)", test: "Марс: полярные шапки CO₂".into(),
+            value: format!("кромка {:.0}°, полюс {:.0} К", rm.ice_edge, rm.annual_mean[rm.lat.len() - 1]), expected: "шапки выше 70°".into(), pass: rm.ice_edge > 70.0 && rm.ice_edge < 90.0 },
+    ]
+}
+
 pub fn all() -> Vec<Check> {
     let mut v = Vec::new();
     v.extend(kepler());
@@ -205,5 +316,10 @@ pub fn all() -> Vec<Check> {
     v.extend(temperatures());
     v.extend(ballistics_checks());
     v.extend(magnetosphere());
+    v.extend(stars_checks());
+    v.extend(starsystem_checks());
+    v.extend(galaxy_checks());
+    v.extend(cosmology_checks());
+    v.extend(climate_checks());
     v
 }

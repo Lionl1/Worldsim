@@ -12,6 +12,11 @@ fn assert_all(v: Vec<Check>) {
 #[test] fn atmosphere_and_composition() { assert_all(validate::atmosphere()); }
 #[test] fn thermodynamics() { assert_all(validate::temperatures()); }
 #[test] fn mechanics() { assert_all(validate::ballistics_checks()); }
+#[test] fn stars() { assert_all(validate::stars_checks()); }
+#[test] fn star_systems() { assert_all(validate::starsystem_checks()); }
+#[test] fn galaxies() { assert_all(validate::galaxy_checks()); }
+#[test] fn cosmology() { assert_all(validate::cosmology_checks()); }
+#[test] fn climate() { assert_all(validate::climate_checks()); }
 #[test] fn electromagnetism() { assert_all(validate::magnetosphere()); }
 
 #[test]
