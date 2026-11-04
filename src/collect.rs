@@ -98,6 +98,7 @@ pub struct CollectConfig {
     pub camera_n: usize,
     pub camera_every: usize,
     pub params: String,         // параметры реестра: dry_mass=900,gust=2
+    pub custom_terrain: Option<std::sync::Arc<crate::env::Terrain>>,
     pub counterfactuals: usize, // точек ветвления на эпизод: от одного состояния несколько действий с истинным ответом
 }
 
@@ -110,7 +111,7 @@ impl CollectConfig {
         CollectConfig { task: task.into(), worlds: worlds.iter().map(|w| WorldSpec::parse(w)).collect(),
             policies: vec![Policy::Smooth, Policy::Hold, Policy::AutoNoise], episodes, seed: 42, noise: 1.0, randomize: true,
             frame_skip: None, max_steps: None, rotor_scale: 1.0, gust: 0.0, lag: 0.0, fault: 0.0, threads: 1, out_dir: out_dir.into(),
-            terrain_n: 0, camera_n: 0, camera_every: 1, counterfactuals: 0, params: String::new() }
+            terrain_n: 0, camera_n: 0, camera_every: 1, counterfactuals: 0, params: String::new(), custom_terrain: None }
     }
 
     fn env_config(&self, world: usize) -> Result<EnvConfig, String> {
@@ -123,6 +124,7 @@ impl CollectConfig {
         c.actuator_lag = self.lag;
         c.fault_prob = self.fault;
         c.set_list(&self.params)?;
+        c.custom_terrain = self.custom_terrain.clone();
         if let Some(k) = self.frame_skip { c.frame_skip = k; }
         if let Some(m) = self.max_steps { c.max_steps = m; }
         Ok(c)

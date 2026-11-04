@@ -223,6 +223,44 @@ obs = env.reset()
 obs, reward, terminated, truncated, info = env.step(env.autopilot())
 ```
 
+## Для работы с вашей системой
+
+**Свой контроллер.** Те же полёты и требования, но управляет ваша система. Отчёт показывает также парное сравнение со встроенным автопилотом:
+
+```python
+import json
+from worldsim import MissionRunner
+
+runner = MissionRunner(json.load(open("missions/lunar_lander.json")))
+report = runner.evaluate(lambda obs: my_policy(obs), name="my-gnc")   # obs: N×O, ответ: N×A
+print(report["success"], report["delta_vs_autopilot"], report["scorecard"])
+```
+
+**Калибровка по телеметрии.** Параметры подбираются так, чтобы модель повторила записанный полёт. Результат содержит погрешности и признак, определяются ли параметры по этим данным:
+
+```bash
+cd python && python -m worldsim.calibrate --task lander --world moon --csv flight.csv \
+  --fit isp:200:400 --fit t_max:1000:50000 --set terrain_scale=0,crater_scale=0 --out params.json
+```
+
+В CSV нужны столбцы `act_0…` и столбцы состояния (`x y z vx vy vz`, по желанию `mass`). Шаг таблицы равен шагу управления. Проверено только на синтетических записях: на настоящей телеметрии ещё не запускалось. Хороший остаток не доказывает, что упрощённая физика верна для вашего аппарата.
+
+**Рельеф реальной площадки.** Форматы `.asc` (ESRI ASCII Grid), `.csv`, `.npy`; центр карты совпадает с площадкой:
+
+```bash
+worldsim collect --task rover --worlds moon --terrain-file site.asc --episodes 100 --out runs/site
+```
+
+В описании миссии: `"terrain": {"file": "site.asc"}` при локальном запуске или `"terrain": {"n": 65, "size": 800, "heights": [...]}` через API. Сервер не читает файлы по пути из запроса.
+
+**Экспорт для обучения.** Формат LeRobotDataset v3, нужен `pyarrow`:
+
+```bash
+cd python && python -m worldsim.export --data ../runs/moon --out ../runs/moon_lerobot
+```
+
+**Параметры.** Список всех настраиваемых величин с единицами и диапазонами: `worldsim params --task lander`. Они работают в `collect --set`, в описании миссии, в API (`params=isp=320,gust=2`) и в `VectorEnv(params={...})`.
+
 ## Как библиотека
 
 ```rust

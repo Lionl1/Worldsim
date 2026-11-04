@@ -18,6 +18,7 @@ pub mod collect;
 pub mod constants;
 pub mod cosmology;
 pub mod datagen;
+pub mod dem;
 pub mod env;
 pub mod ffi;
 pub mod fluid;

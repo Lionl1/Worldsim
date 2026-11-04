@@ -233,7 +233,8 @@ pub struct EnvConfig {
     pub gust: f64,         // СКО порывов ветра, м/с (процесс Орнштейна–Уленбека, τ = 2 с)
     pub actuator_lag: f64, // постоянная времени приводов, с (0 — мгновенно)
     pub fault_prob: f64,   // вероятность, что в эпизоде один привод ослаблен (скрытый параметр)
-    pub vehicle: Vec<(String, f64)>, // переопределение параметров аппарата, см. VEHICLE_PARAMS
+    pub vehicle: Vec<(String, f64)>, // параметры реестра, см. PARAMS
+    pub custom_terrain: Option<Arc<Terrain>>, // рельеф реальной площадки вместо процедурного
 }
 
 const L: u8 = 1;
@@ -380,7 +381,7 @@ impl EnvConfig {
         };
         Ok(EnvConfig { task, world: WorldSpec::preset(physics), randomize: false, noise: 1.0, frame_skip: 4,
             max_steps: match task { Task::Lander => 5000, Task::Drone => 2500, Task::Rover => 4000 }, rotor_scale: 1.0,
-            worlds: vec![], gust: 0.0, actuator_lag: 0.0, fault_prob: 0.0, vehicle: vec![] })
+            worlds: vec![], gust: 0.0, actuator_lag: 0.0, fault_prob: 0.0, vehicle: vec![], custom_terrain: None })
     }
 
     /// Задать параметр из реестра с проверкой диапазона и применимости к задаче.
@@ -627,7 +628,10 @@ impl Env {
         self.dyn_rng = Rng::new(seed ^ 0xD15C);
         let pad = self.tune.pad;
         let size = match self.cfg.task { Task::Rover => 600.0, _ => 1200.0 };
-        self.terrain = Arc::new(Terrain::generate_tuned(&self.world, seed, size, 161, pad, self.tune.terrain, self.tune.craters, self.tune.friction));
+        self.terrain = match &self.cfg.custom_terrain {
+            Some(t) => t.clone(),
+            None => Arc::new(Terrain::generate_tuned(&self.world, seed, size, 161, pad, self.tune.terrain, self.tune.craters, self.tune.friction)),
+        };
         let r = |rng: &mut Rng, s: f64| if s > 0.0 { rng.uniform(1.0 - s, 1.0 + s) } else { 1.0 };
         let rs = if self.cfg.randomize { 1.0 } else { 0.0 };
         self.p = Params {

@@ -155,3 +155,109 @@ fn w_act(v: &VecEnv) -> usize { v.nact }
 exporter!(ws_vec_state, w_state, |e: &Env| e.state());
 exporter!(ws_vec_params, w_params, |e: &Env| e.params());
 exporter!(ws_vec_autopilot, w_act, |e: &Env| e.autopilot());
+
+// ---------------------------------------------------------------- свой контроллер в Mission Lab
+
+pub struct MissionHandle { runner: crate::mission::Runner }
+
+/// Описание миссии в JSON; рельеф из файла разрешён: это локальный вызов из кода пользователя.
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_new(spec: *const c_char, threads: usize) -> *mut MissionHandle {
+    let text = unsafe { CStr::from_ptr(spec) }.to_string_lossy().into_owned();
+    match crate::mission::MissionSpec::parse_local(&text).and_then(|s| crate::mission::Runner::new(s, threads.max(1))) {
+        Ok(runner) => Box::into_raw(Box::new(MissionHandle { runner })),
+        Err(e) => { set_error(e); std::ptr::null_mut() }
+    }
+}
+
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_free(p: *mut MissionHandle) { if !p.is_null() { drop(unsafe { Box::from_raw(p) }); } }
+
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_spec(p: *mut MissionHandle, buf: *mut u8, cap: usize) -> usize {
+    let h = unsafe { &*p };
+    let e = &h.runner.envs[0];
+    let (lo, hi) = e.act_bounds();
+    write_str(&J::obj().set("runs", h.runner.envs.len()).set("obs_names", e.obs_names()).set("act_names", e.act_names()).set("act_low", lo).set("act_high", hi).set("control_dt", e.control_dt()).render(), buf, cap)
+}
+
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_reset(p: *mut MissionHandle, obs: *mut f32) {
+    let h = unsafe { &mut *p };
+    let no = h.runner.envs[0].obs_names().len();
+    let all = h.runner.reset();
+    let out = unsafe { std::slice::from_raw_parts_mut(obs, all.len() * no) };
+    for (o, v) in out.chunks_mut(no).zip(&all) { copy(o, v); }
+}
+
+/// Возвращает число незавершённых полётов. У завершённых `done` = 1, наблюдение остаётся последним.
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_step(p: *mut MissionHandle, act: *const f32, obs: *mut f32, done: *mut u8) -> usize {
+    let h = unsafe { &mut *p };
+    let n = h.runner.envs.len();
+    let (no, na) = (h.runner.envs[0].obs_names().len(), h.runner.envs[0].act_names().len());
+    let act = unsafe { std::slice::from_raw_parts(act, n * na) };
+    let actions: Vec<Vec<f64>> = act.chunks(na).map(|c| c.iter().map(|x| *x as f64).collect()).collect();
+    let left = h.runner.step(&actions);
+    let (obs, done) = unsafe { (std::slice::from_raw_parts_mut(obs, n * no), std::slice::from_raw_parts_mut(done, n)) };
+    for i in 0..n {
+        copy(&mut obs[i * no..(i + 1) * no], &h.runner.envs[i].last_obs);
+        done[i] = h.runner.done[i] as u8;
+    }
+    left
+}
+
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_report(p: *mut MissionHandle, buf: *mut u8, cap: usize, name: *const c_char) -> usize {
+    let h = unsafe { &*p };
+    let name = unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned();
+    let text = match h.runner.report(&name) { Ok(r) => r.render(), Err(e) => J::obj().set("error", e).render() };
+    write_str(&text, buf, cap)
+}
+
+// ---------------------------------------------------------------- проигрывание записанных команд (калибровка)
+
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_replay_names(task: *const c_char, buf: *mut u8, cap: usize) -> usize {
+    let task = unsafe { CStr::from_ptr(task) }.to_string_lossy().into_owned();
+    let names = EnvConfig::new(&task, "earth").and_then(Env::new).map(|e| e.state_names().iter().map(|x| x.to_string()).collect::<Vec<_>>()).unwrap_or_default();
+    write_str(&J::from(names).render(), buf, cap)
+}
+
+/// Начальные позиция и скорость заданы явно, рельеф берётся по параметрам. Возвращает число шагов или −1 при ошибке.
+#[no_mangle]
+#[allow(clippy::too_many_arguments, clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_replay(task: *const c_char, world: *const c_char, params: *const c_char, init: *const f32, steps: usize, act_dim: usize, actions: *const f32, states: *mut f32) -> i64 {
+    let text = |p: *const c_char| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned();
+    let run = || -> Result<i64, String> {
+        let mut cfg = EnvConfig::new(&text(task), "earth")?;
+        cfg.world = WorldSpec::parse(&text(world));
+        cfg.noise = 0.0;
+        cfg.max_steps = usize::MAX;
+        cfg.set_list(&text(params))?;
+        let mut e = Env::new(cfg)?;
+        let na = e.act_names().len();
+        if na != act_dim { return Err(format!("в записи {act_dim} команд, а аппарат принимает {na}")); }
+        e.reset(1);
+        let x0 = unsafe { std::slice::from_raw_parts(init, 6) };
+        e.set_state(crate::vec3::Vec3::new(x0[0] as f64, x0[1] as f64, x0[2] as f64), crate::vec3::Vec3::new(x0[3] as f64, x0[4] as f64, x0[5] as f64));
+        let ns = e.state_names().len();
+        let act = unsafe { std::slice::from_raw_parts(actions, steps * na) };
+        let out = unsafe { std::slice::from_raw_parts_mut(states, steps * ns) };
+        for t in 0..steps {
+            let a: Vec<f64> = act[t * na..(t + 1) * na].iter().map(|x| *x as f64).collect();
+            let (_, _, te, tr) = e.step(&a);
+            copy(&mut out[t * ns..(t + 1) * ns], &e.state());
+            if te || tr { return Ok(t as i64 + 1); }
+        }
+        Ok(steps as i64)
+    };
+    match run() { Ok(n) => n, Err(m) => { set_error(m); -1 } }
+}

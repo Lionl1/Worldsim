@@ -42,6 +42,7 @@ const HELP: &str = "worldsim — физические модели миров
             [--policies smooth,hold,auto_noise] [--noise 1] [--randomize] [--frame-skip 4] [--max-steps N]
             [--gust 2] [--lag 0.05] [--fault 0.2] [--rotor-scale 1] [--threads N] [--seed 42]
             [--terrain 33] [--camera 64 --camera-every 5] [--counterfactuals 3] [--set throttle_min=0.1,gyro_bias=0.01]
+            [--terrain-file site.asc] [--terrain-size 2000]  рельеф реальной площадки (.asc, .csv, .npy)
             переходы для обучения world model: .npy + meta.json (см. README)
 
 МИР (для любой команды)
@@ -108,7 +109,7 @@ fn allowed_flags(cmd: &str) -> Option<&'static [&'static str]> {
         "version" => &[],
         "mission" => &["out", "threads"],
         "params" => &["task"],
-        "collect" => &["task", "worlds", "episodes", "policies", "noise", "randomize", "frame-skip", "max-steps", "gust", "lag", "fault", "rotor-scale", "threads", "seed", "terrain", "camera", "camera-every", "counterfactuals", "set", "out"],
+        "collect" => &["task", "worlds", "episodes", "policies", "noise", "randomize", "frame-skip", "max-steps", "gust", "lag", "fault", "rotor-scale", "threads", "seed", "terrain", "camera", "camera-every", "counterfactuals", "set", "terrain-file", "terrain-size", "out"],
         _ => return None,
     })
 }
@@ -279,7 +280,7 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
             let path = pos.first().ok_or("укажите файл миссии: worldsim mission missions/lunar_lander.json --out report")?;
             let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
             let threads = num(kv, "threads", std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1) as f64)? as usize;
-            let report = mission::run(&mission::MissionSpec::parse(&text)?, threads)?.set("spec_sha256", worldsim::store::sha256(text.as_bytes()));
+            let report = mission::run(&mission::MissionSpec::parse_local(&text)?, threads)?.set("spec_sha256", worldsim::store::sha256(text.as_bytes()));
             if let Some(out) = kv.get("out") {
                 std::fs::create_dir_all(out).map_err(|e| format!("{out}: {e}"))?;
                 std::fs::write(format!("{out}/report.json"), report.render()).map_err(|e| e.to_string())?;
@@ -310,6 +311,7 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
                 camera_every: num(kv, "camera-every", 1.0)? as usize,
                 counterfactuals: num(kv, "counterfactuals", 0.0)? as usize,
                 params: kv.get("set").cloned().unwrap_or_default(),
+                custom_terrain: kv.get("terrain-file").map(|p| worldsim::dem::load(p, kv.get("terrain-size").and_then(|v| v.parse().ok()), 0.6).map(std::sync::Arc::new)).transpose()?,
             };
             let st = collect::run(&cfg)?;
             println!("{}: {} эпизодов, {} переходов, успешных {:.1}%, {:.0} шагов/с → {}/", cfg.task, st.episodes, st.transitions,

@@ -215,6 +215,14 @@ class Server(unittest.TestCase):
         with self.assertRaises(ValueError):
             worldsim.VectorEnv("lander", "moon", params={"warp": 1})
 
+    def test_api_does_not_read_server_files(self):
+        spec = {"task": "lander", "runs": 2, "requirements": [{"metric": "success", "op": ">=", "value": 0.5}], "terrain": {"file": "/etc/hosts", "size": 100}}
+        with self.assertRaisesRegex(RuntimeError, "terrain.file"):
+            self.c.post("/api/mission/run", json.dumps(spec).encode())
+        # а рельеф прямо в описании работает
+        spec["terrain"] = {"n": 9, "size": 900, "heights": [0.0] * 81}
+        self.assertIn("scorecard", self.c.post("/api/mission/run", json.dumps(spec).encode()))
+
     def test_physics_lab_routes(self):
         for topic in ("tunnel", "levels", "hydrogen", "sod", "dam", "chapman", "nozzle", "crater", "collide", "ocean"):
             self.assertIsInstance(self.c.get(f"/api/lab/{topic}"), dict, topic)
@@ -293,6 +301,101 @@ class Server(unittest.TestCase):
         resp = self.c.conn.getresponse()
         self.assertEqual(resp.status, 400)
         resp.read()
+
+
+class ProductGaps(Base):
+    SPEC = {"name": "тест", "task": "lander", "world": "moon", "runs": 24, "seed": 2, "vehicle": {"t_max": 8000, "fuel": 120, "start_offset": 5, "start_vh": 1},
+            "dispersions": {"t_max": 0.03}, "requirements": [{"metric": "success", "op": ">=", "value": 0.5}]}
+
+    def test_own_controller_in_mission(self):
+        r = worldsim.MissionRunner(self.SPEC)
+        names = r.spec["obs_names"]
+        vz, gz, up = names.index("vel_z"), names.index("gps_dz"), names.index("up_bz")
+
+        def pd(obs):
+            # контроллер снаружи: вертикальный канал на сенсорах, момент ноль
+            a = np.zeros((r.n, r.act_dim), np.float32)
+            target = -np.minimum(1.0 + 0.12 * obs[:, gz], 40.0)
+            a[:, 0] = np.clip(0.2 + 0.5 * (target - obs[:, vz]), 0, 1)
+            return a
+
+        good = r.evaluate(pd, "my-pd")
+        self.assertEqual(good["controller"], "my-pd")
+        self.assertIn("scorecard", good)
+        self.assertEqual(good["unfinished"], 0)
+        self.assertGreater(good["autopilot_success"], 0)
+        off = r.evaluate(lambda obs: np.zeros((r.n, r.act_dim), np.float32), "off")
+        self.assertEqual(off["success"], 0.0)  # без двигателя никто не садится
+        self.assertGreater(good["success"], off["success"])
+        with self.assertRaises(ValueError):
+            r.evaluate(lambda obs: np.zeros((1, 1), np.float32))
+        with self.assertRaises(ValueError):
+            worldsim.MissionRunner({"task": "nope", "requirements": []})
+
+    def test_calibration_recovers_hidden_parameters(self):
+        from worldsim.calibrate import replay
+        rng = np.random.default_rng(0)
+        T = 400
+        act = np.zeros((T, 4), np.float32)
+        act[:, 0] = np.clip(0.3 + 0.2 * np.sin(np.arange(T) / 30), 0, 1)
+        act[::7, 1] = 0.05
+        init = [0, 0, 900, 0, 0, -20]
+        flat = {"terrain_scale": 0, "crater_scale": 0, "fuel": 400}
+        truth = {"t_max": 15000.0, "dry_mass": 800.0, "isp": 310.0}
+        s, names = replay("lander", "moon", {**flat, **truth}, init, act)
+        self.assertEqual(len(s), T)
+        meas = {k: s[:, names.index(k)] + rng.normal(0, e, T) for k, e in (("vz", 0.02), ("mass", 0.05))}
+        r = worldsim.calibrate("lander", "moon", act, meas, init, {"t_max": (5000, 40000), "dry_mass": (300, 2000), "isp": (150, 600)}, flat, restarts=2)
+        for k, v in truth.items():
+            self.assertLess(abs(r["params"][k] - v) / v, 0.05, (k, r["params"][k]))
+        self.assertTrue(r["identifiable"])
+        with self.assertRaises(ValueError):
+            worldsim.calibrate("lander", "moon", act, {"vz": meas["vz"][:5]}, init, {"t_max": (5000, 40000)}, flat)
+        with self.assertRaises(ValueError):
+            worldsim.calibrate("lander", "moon", act, meas, init, {"warp": (1, 2)}, flat, restarts=1)
+
+    def test_real_terrain_from_file(self):
+        n = 81
+        size = 800.0
+        x = np.linspace(-size / 2, size / 2, n)
+        h = 100 + 0.02 * x[None, :] + 0 * x[:, None]
+        # ступень в 40 м на востоке: посадка на неё даст большую высоту над площадкой
+        h[:, x > 150] += 40
+        for ext, write in {".npy": lambda p: np.save(p, h), ".csv": lambda p: np.savetxt(p, h, delimiter=",")}.items():
+            p = self.tmp / f"site{ext}"
+            write(p)
+            spec = {**self.SPEC, "runs": 4, "terrain": {"file": str(p), "size": size}}
+            rep = worldsim.MissionRunner(spec).evaluate(lambda o: np.zeros((4, 4), np.float32))
+            self.assertEqual(rep["unfinished"], 0)
+        asc = self.tmp / "site.asc"
+        with open(asc, "w") as f:
+            f.write(f"ncols {n}\nnrows {n}\nxllcorner 0\nyllcorner 0\ncellsize 10\nNODATA_value -9999\n")
+            for row in h[::-1]:
+                f.write(" ".join(f"{v:.3f}" for v in row) + "\n")
+        out = self.tmp / "dem_run"
+        subprocess.run([str(BIN), "collect", "--task", "rover", "--worlds", "mars", "--episodes", "4", "--terrain-file", str(asc), "--terrain", "9", "--out", str(out)], check=True, capture_output=True)
+        d = np.load(out / "terrain.npy")
+        self.assertLess(abs(float(d[0].max()) - float(h.max())), 2.0)
+        bad = self.tmp / "bad.asc"
+        bad.write_text("ncols 3\nnrows 3\ncellsize 1\n1 2 3\n")
+        r = subprocess.run([str(BIN), "collect", "--task", "rover", "--terrain-file", str(bad), "--out", str(self.tmp / "x")], capture_output=True)
+        self.assertNotEqual(r.returncode, 0)
+
+    def test_lerobot_export(self):
+        try:
+            import pyarrow.parquet as pq
+        except ImportError:
+            self.skipTest("нет pyarrow")
+        from worldsim.export import to_lerobot
+        d = collect(self.tmp / "lr", episodes=6)
+        out = to_lerobot(d, self.tmp / "lr_out")
+        t = pq.read_table(out / "data" / "chunk-000" / "file-000.parquet")
+        self.assertEqual(t.num_rows, len(d))
+        info = json.loads((out / "meta" / "info.json").read_text())
+        self.assertEqual(info["total_episodes"], 6)
+        self.assertEqual(info["features"]["action"]["shape"], [d.act.shape[1]])
+        e = pq.read_table(out / "meta" / "episodes" / "chunk-000" / "file-000.parquet")
+        self.assertEqual(int(e["dataset_to_index"][5].as_py()), len(d))
 
 
 class Security(unittest.TestCase):

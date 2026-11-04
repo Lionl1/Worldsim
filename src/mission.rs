@@ -37,6 +37,7 @@ pub struct Progress { pub done: AtomicUsize, pub total: AtomicUsize, pub cancel:
 pub struct MissionSpec {
     pub name: String, pub task: String, pub world: WorldSpec, pub runs: usize, pub seed: u64, pub rotor_scale: f64,
     pub vehicle: Vec<(String, f64)>, pub dispersions: Vec<(String, f64)>, pub requirements: Vec<Requirement>, pub technologies: Vec<Technology>,
+    pub terrain: Option<std::sync::Arc<crate::env::Terrain>>,
 }
 
 fn pairs(j: Option<&J>, ctx: &str) -> Result<Vec<(String, f64)>, String> {
@@ -49,8 +50,27 @@ fn pairs(j: Option<&J>, ctx: &str) -> Result<Vec<(String, f64)>, String> {
 }
 
 impl MissionSpec {
-    pub fn parse(text: &str) -> Result<MissionSpec, String> {
+    /// Описание, в котором рельеф может лежать в файле. Только для локальных вызовов: через API файлы сервера не читаем.
+    pub fn parse_local(text: &str) -> Result<MissionSpec, String> {
         let j = J::parse(text)?;
+        let mut spec = Self::parse_inner(text, true)?;
+        if let Some(t) = j.get("terrain") {
+            if let Some(path) = t.get("file").and_then(|x| x.as_str()) {
+                let fr = t.get("friction").and_then(|x| x.as_f64()).unwrap_or(0.6);
+                spec.terrain = Some(std::sync::Arc::new(crate::dem::load(path, t.get("size").and_then(|x| x.as_f64()), fr)?));
+            }
+        }
+        Ok(spec)
+    }
+
+    /// Описание от клиента API: читать файлы сервера по пути из запроса нельзя.
+    pub fn parse(text: &str) -> Result<MissionSpec, String> { Self::parse_inner(text, false) }
+
+    fn parse_inner(text: &str, allow_file: bool) -> Result<MissionSpec, String> {
+        let j = J::parse(text)?;
+        if !allow_file && j.get("terrain").and_then(|t| t.get("file")).is_some() {
+            return Err("terrain.file: через API файлы сервера не читаются, передайте terrain.n, terrain.size и terrain.heights".into());
+        }
         let st = |k: &str, d: &str| j.get(k).and_then(|x| x.as_str()).unwrap_or(d).to_string();
         let task = st("task", "lander");
         let mut check = EnvConfig::new(&task, "earth")?;
@@ -102,8 +122,18 @@ impl MissionSpec {
             technologies.push(tech);
         }
         Ok(MissionSpec { name: st("name", "миссия"), task, world, runs: runs as usize, seed: j.get("seed").and_then(|x| x.as_f64()).unwrap_or(1.0) as u64,
-            rotor_scale, vehicle, dispersions, requirements, technologies })
+            rotor_scale, vehicle, dispersions, requirements, technologies, terrain: parse_inline_terrain(&j)? })
     }
+}
+
+/// Рельеф прямо в описании миссии: `{"size": 400, "n": 65, "heights": [...]}`. Файл `{"file": ...}` разрешён только локально.
+fn parse_inline_terrain(j: &J) -> Result<Option<std::sync::Arc<crate::env::Terrain>>, String> {
+    let Some(t) = j.get("terrain") else { return Ok(None) };
+    if t.get("file").is_some() { return Ok(None); }
+    let n = t.get("n").and_then(|x| x.as_f64()).ok_or("terrain.n: нужна сторона сетки")? as usize;
+    let size = t.get("size").and_then(|x| x.as_f64()).ok_or("terrain.size: нужен размер карты, м")?;
+    let h: Vec<f64> = t.get("heights").and_then(|x| x.as_arr()).ok_or("terrain.heights: нужен массив высот")?.iter().map(|v| v.as_f64().unwrap_or(f64::NAN)).collect();
+    Ok(Some(std::sync::Arc::new(crate::dem::terrain_from_grid(h, n, size, t.get("friction").and_then(|x| x.as_f64()).unwrap_or(0.6))?)))
 }
 
 /// Значение параметра: заданное в миссии или значение по умолчанию; от него считается разброс.
@@ -144,8 +174,8 @@ impl RunResult {
 
 fn disp(d: &[(String, f64)], k: &str) -> f64 { d.iter().find(|(n, _)| n == k).map(|(_, v)| *v).unwrap_or(0.0) }
 
-/// Один полёт. Разбросы: относительные — нормальные, усечённые на ±3σ.
-fn fly(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor_scale: f64, seed: u64) -> Result<RunResult, String> {
+/// Среда одного полёта. Разбросы: относительные — нормальные, усечённые на ±3σ.
+fn flight_env(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor_scale: f64, seed: u64) -> Result<Env, String> {
     let mut r = Rng::new(seed ^ 0xD15B);
     let mut cfg = EnvConfig::new(&spec.task, "earth")?;
     cfg.world = spec.world.clone();
@@ -169,8 +199,21 @@ fn fly(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor
         }
     }
     for (k, v) in &veh { cfg.set(k, *v)?; }
+    cfg.custom_terrain = spec.terrain.clone();
     let mut env = Env::new(cfg)?;
     env.reset(seed);
+    Ok(env)
+}
+
+fn result_of(env: &Env) -> RunResult {
+    let i = &env.info;
+    RunResult { success: i.success as u8 as f64, crashed: i.crashed as u8 as f64, touch_speed: i.touch_speed, touch_tilt: i.touch_tilt, touch_offset: i.touch_offset,
+        fuel_used: i.fuel_used, energy_kj: i.energy_used / 1e3, duration: env.t, reason: i.reason.clone() }
+}
+
+/// Один полёт со встроенным автопилотом.
+fn fly(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor_scale: f64, seed: u64) -> Result<RunResult, String> {
+    let mut env = flight_env(spec, vehicle, d, rotor_scale, seed)?;
     // оценка навигации: шумный GPS и скорость сглажены фильтром; идеальные сенсоры дают нулевую ошибку
     let (mut pe, mut ve) = (Vec3::ZERO, Vec3::ZERO);
     let flying = env.cfg.task != Task::Rover;
@@ -186,9 +229,47 @@ fn fly(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor
             ve = ve * 0.8 + Vec3::new(o[3] - v.x, o[4] - v.y, o[5] - v.z) * 0.2;
         }
     }
-    let i = &env.info;
-    Ok(RunResult { success: i.success as u8 as f64, crashed: i.crashed as u8 as f64, touch_speed: i.touch_speed, touch_tilt: i.touch_tilt, touch_offset: i.touch_offset,
-        fuel_used: i.fuel_used, energy_kj: i.energy_used / 1e3, duration: env.t, reason: i.reason.clone() })
+    Ok(result_of(&env))
+}
+
+/// Те же полёты и требования, но управление снаружи: Python вызывает `step` и передаёт действия всех полётов сразу.
+pub struct Runner { pub spec: MissionSpec, pub envs: Vec<Env>, pub done: Vec<bool>, threads: usize }
+
+impl Runner {
+    pub fn new(spec: MissionSpec, threads: usize) -> Result<Runner, String> {
+        let envs = (0..spec.runs).map(|i| flight_env(&spec, &spec.vehicle, &spec.dispersions, spec.rotor_scale, episode_seed(spec.seed, i as u64))).collect::<Result<Vec<_>, _>>()?;
+        Ok(Runner { done: vec![false; envs.len()], envs, spec, threads })
+    }
+    pub fn reset(&mut self) -> Vec<Vec<f64>> {
+        for (i, e) in self.envs.iter_mut().enumerate() { e.reset(episode_seed(self.spec.seed, i as u64)); self.done[i] = false; }
+        self.envs.iter().map(|e| e.last_obs.clone()).collect()
+    }
+    /// Шаг для незавершённых полётов; возвращает, сколько ещё летит.
+    pub fn step(&mut self, actions: &[Vec<f64>]) -> usize {
+        let mut left = 0;
+        for (i, e) in self.envs.iter_mut().enumerate() {
+            if self.done[i] { continue; }
+            let (_, _, t, c) = e.step(&actions[i]);
+            if t || c { self.done[i] = true; } else { left += 1; }
+        }
+        left
+    }
+    /// Отчёт и парное сравнение с автопилотом на тех же условиях.
+    pub fn report(&self, name: &str) -> Result<J, String> {
+        let rs: Vec<RunResult> = self.envs.iter().map(result_of).collect();
+        let base = campaign(&self.spec, &self.spec.vehicle, &self.spec.dispersions, self.spec.rotor_scale, self.spec.runs, self.threads, &Progress::default())?;
+        let s = success_rate(&rs);
+        let k: f64 = rs.iter().map(|r| r.success).sum();
+        let (sl, sh) = wilson(k, rs.len() as f64);
+        let saved = rs.iter().zip(&base).filter(|(a, b)| a.success > 0.5 && b.success < 0.5).count();
+        let lost = rs.iter().zip(&base).filter(|(a, b)| a.success < 0.5 && b.success > 0.5).count();
+        let unfinished = self.done.iter().filter(|d| !**d).count();
+        Ok(J::obj().set("controller", name).set("name", self.spec.name.clone()).set("task", self.spec.task.clone()).set("runs", self.spec.runs).set("seed", self.spec.seed)
+            .set("success", s).set("success_ci", vec![sl, sh]).set("requirements_met", margin_score(&self.spec, &rs)).set("requirements_total", self.spec.requirements.len())
+            .set("scorecard", scorecard(&self.spec, &rs)).set("failure_modes", failure_modes(&rs)).set("unfinished", unfinished)
+            .set("autopilot_success", success_rate(&base)).set("delta_vs_autopilot", s - success_rate(&base)).set("delta_ci", 1.96 * ((saved + lost) as f64).sqrt() / self.spec.runs as f64).set("saved", saved).set("lost", lost)
+            .set("generator", format!("worldsim {}", env!("CARGO_PKG_VERSION"))))
+    }
 }
 
 /// Серия полётов: номер запуска задаёт seed, поэтому сравнение вариантов идёт на одних и тех же условиях.
