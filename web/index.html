@@ -875,7 +875,8 @@ const robotsTab = {
         this.place(st);
         if (st.done){ await new Promise(r=>setTimeout(r,1800)); if (ep===epoch && my===this.run && !this.paused){ this.seed++; this.start(); } return; }
       } catch(e){ return; }
-      await new Promise(r=>requestAnimationFrame(r));
+      // вровень с отрисовкой, но скрытая вкладка браузера не должна останавливать симуляцию
+      await Promise.race([new Promise(r=>requestAnimationFrame(r)), sleep(50)]);
     }
   },
   update(){},
