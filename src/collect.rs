@@ -99,7 +99,7 @@ pub struct CollectConfig {
     pub camera_every: usize,
     pub params: String,         // параметры реестра: dry_mass=900,gust=2
     pub custom_terrain: Option<std::sync::Arc<crate::env::Terrain>>,
-    pub counterfactuals: usize, // точек ветвления на эпизод: от одного состояния несколько действий с истинным ответом
+    pub counterfactuals: usize, // точек ветвления на 1000 шагов: от одного состояния несколько действий с истинным ответом
 }
 
 /// Ветвлений в точке и шагов в ветви. Ветви длиннее не нужны: при падении эпизод всё равно обрывается.
@@ -251,13 +251,14 @@ fn run_episode(cfg: &CollectConfig, idx: usize) -> Result<Episode, String> {
     let mut state = env.state();
     // точки ветвления заранее: один и тот же seed даёт те же точки при любом числе потоков
     let mut cf_rng = Rng::new(seed ^ 0xCF);
-    let cf_every = if cfg.counterfactuals > 0 { (env.cfg.max_steps / cfg.counterfactuals / 8).max(10) } else { 0 };
-    let mut cf_left = cfg.counterfactuals;
+    // равномерно по всему эпизоду, а не только в начале: самое важное часто происходит у поверхности
+    let cf_every = if cfg.counterfactuals > 0 { (1000 / cfg.counterfactuals).max(10) } else { 0 };
+    let mut cf_next = if cf_every > 0 { 1 + (cf_rng.next_u64() % cf_every as u64) as usize } else { usize::MAX };
     let (act_lo, act_hi) = env.act_bounds();
     loop {
-        if cf_left > 0 && ep.steps > 0 && ep.steps % cf_every == 0 {
+        if ep.steps == cf_next {
+            cf_next += cf_every;
             // копия среды: то же состояние и ГПСЧ; каждая ветвь — своя постоянная команда
-            cf_left -= 1;
             ep.cf_points += 1;
             push(&mut ep.cf_obs, &obs, &mut bad);
             push(&mut ep.cf_params, &env.params(), &mut bad);
@@ -344,6 +345,7 @@ pub fn run(cfg: &CollectConfig) -> Result<CollectStats, String> {
     let mut total: u64 = 0;
     let mut error = None;
     std::thread::scope(|sc| {
+        let rx = rx; // приёмник живёт внутри области: при ошибке он закрывается и воркеры не зависают на полной очереди
         for _ in 0..cfg.threads {
             let (tx, next) = (tx.clone(), &next);
             sc.spawn(move || loop {
@@ -396,6 +398,7 @@ pub fn run(cfg: &CollectConfig) -> Result<CollectStats, String> {
                 want += 1;
             }
         }
+        drop(rx);
     });
     if let Some(e) = error { return Err(e); }
     for f in [fobs, fnext, fact, fstate, fnstate, frew, fterm, ftrunc, fep, fstep, fpar] { f.finish()?; }

@@ -114,17 +114,21 @@ def calibrate(task, world, actions, measured, init, fit, fixed=None, restarts=3,
     p = lo + (hi - lo) * (0.5 + 0.5 * np.sin(best[0]))
     r0 = residual(p)
     # погрешности из линеаризации: показывают, что данные вообще позволяют определить
+    span = hi - lo
     J = np.zeros((len(r0), len(names)))
     for i in range(len(names)):
         d = np.zeros(len(names))
         d[i] = max(abs(p[i]) * 1e-3, (hi[i] - lo[i]) * 1e-4)
         rp, rm = residual(np.minimum(p + d, hi)), residual(np.maximum(p - d, lo))
-        J[:, i] = (rp - rm) / (np.minimum(p + d, hi)[i] - np.maximum(p - d, lo)[i])
+        if rp is None or rm is None:
+            raise ValueError("полёт кончается сразу: проверьте начальные условия и диапазоны подбора")
+        # производная по доле диапазона: иначе число обусловленности отражает единицы измерения, а не данные
+        J[:, i] = (rp - rm) / (np.minimum(p + d, hi)[i] - np.maximum(p - d, lo)[i]) * span[i]
     dof = max(len(r0) - len(names), 1)
     sigma2 = float(np.nansum(r0 ** 2)) / dof
     JJ = J.T @ J
     cond = float(np.linalg.cond(JJ))
-    errs = np.sqrt(np.maximum(np.diag(np.linalg.pinv(JJ)) * sigma2, 0))
+    errs = np.sqrt(np.maximum(np.diag(np.linalg.pinv(JJ)) * sigma2, 0)) * span
     per = {}
     k = 0
     for c in channels:
@@ -148,6 +152,11 @@ def load_csv(path):
     return a, st
 
 
+def align_table(actions, states):
+    """Строка таблицы — состояние до команды этой строки. Replay отдаёт состояние после команды, поэтому сдвигаем на один шаг."""
+    return actions[:-1], {k: v[1:] for k, v in states.items()}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--task", required=True)
@@ -164,6 +173,7 @@ def main():
     init = [st[k][0] for k in ("x", "y", "z", "vx", "vy", "vz")]
     fit = {f.split(":")[0]: (float(f.split(":")[1]), float(f.split(":")[2])) for f in a.fit}
     fixed = {kv.split("=")[0]: float(kv.split("=")[1]) for kv in a.set.split(",") if kv}
+    actions, st = align_table(actions, st)
     r = calibrate(a.task, a.world, actions, st, init, fit, fixed)
     print(json.dumps(r, ensure_ascii=False, indent=2))
     if a.out:

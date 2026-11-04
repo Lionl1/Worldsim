@@ -232,7 +232,8 @@ fn trace(o: &RenderOpts, cam: &[f64; 3], right: &[f64; 3], up: &[f64; 3], sx: f6
                 // тонкий диск: T ∝ (ISCO-поправка) r^(−3/4); Доплер и красное смещение относительно наблюдателя
                 let temp = (r.powf(-3.0) * (1.0 - (o.r_in / r).sqrt()).max(0.0)).powf(0.25) * 6.5;
                 let om = r.powf(-1.5);
-                let bphi = if o.doppler { (-yh * e2_rel(cam, 0) + xh * e2_rel(cam, 1)) * om * r } else { 0.0 };
+                // скорость диска на луч к наблюдателю
+                let bphi = if o.doppler { (-yh * cam[0] + xh * cam[1]) * om * r } else { 0.0 };
                 let g = (1.0 - 3.0 / r).max(0.01).sqrt() / (1.0 - bphi).max(0.05);
                 let bri = (temp * g / 0.72).powi(4);
                 let tc = temp_color(temp * g);
@@ -268,5 +269,3 @@ fn trace(o: &RenderOpts, cam: &[f64; 3], right: &[f64; 3], up: &[f64; 3], sx: f6
     }
     col
 }
-
-fn e2_rel(cam: &[f64; 3], axis: usize) -> f64 { cam[axis] }

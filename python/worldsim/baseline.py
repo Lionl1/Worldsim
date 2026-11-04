@@ -60,7 +60,7 @@ def train(paths, out, epochs=12, cap=400_000, use_context=True, unroll=1, seed=0
             loss.backward()
             opt.step()
             sch.step()
-    torch.save({"state": net.state_dict(), "keep": keep, "ip": ip, "mx": mx, "sx": sx, "my": my, "sy": sy, "ctx": igk, "names": names, "in": X.shape[1], "out": Y.shape[1]}, out)
+    torch.save({"state": net.state_dict(), "keep": keep, "ip": ip, "mx": mx.tolist(), "sx": sx.tolist(), "my": my.tolist(), "sy": sy.tolist(), "ctx": igk, "names": names, "in": X.shape[1], "out": Y.shape[1]}, out)
     return out
 
 
@@ -69,7 +69,10 @@ class Baseline(WorldModel):
         import torch
         from torch import nn
         self.torch = torch
-        c = torch.load(path, weights_only=False)
+        # weights_only: чужой файл модели не может выполнить код при загрузке
+        c = torch.load(path, weights_only=True)
+        for k in ("mx", "sx", "my", "sy"):
+            c[k] = np.asarray(c[k], np.float64)
         self.c, self.name = c, name
         self.net = nn.Sequential(nn.Linear(c["in"], 256), nn.SiLU(), nn.Linear(256, 256), nn.SiLU(), nn.Linear(256, 256), nn.SiLU(), nn.Linear(256, c["out"]))
         self.net.load_state_dict(c["state"])

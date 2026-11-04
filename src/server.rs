@@ -72,7 +72,11 @@ struct State {
     opts: Arc<ServerOpts>,
     active: Arc<std::sync::atomic::AtomicUsize>,
     jobs: Arc<Mutex<Vec<Arc<Job>>>>,
+    heavy: Arc<std::sync::atomic::AtomicUsize>,
 }
+
+/// Сколько тяжёлых синхронных расчётов идёт одновременно: каждый занимает все ядра, а сервер должен отвечать остальным.
+const MAX_HEAVY: usize = 2;
 
 /// Снимает счётчик соединений даже при панике в потоке.
 struct ConnGuard(Arc<std::sync::atomic::AtomicUsize>);
@@ -107,7 +111,7 @@ pub fn serve_opts(opts: ServerOpts) -> Result<(), String> {
         #[cfg(target_os = "windows")]
         { let _ = std::process::Command::new("cmd").args(["/C", "start", &url]).spawn(); }
     }
-    let state = State { sims: Arc::new(Mutex::new(HashMap::new())), next: Arc::new(AtomicU64::new(1)), tick: Arc::new(AtomicU64::new(1)), opts: Arc::new(opts), active: Default::default(), jobs: Default::default() };
+    let state = State { sims: Arc::new(Mutex::new(HashMap::new())), next: Arc::new(AtomicU64::new(1)), tick: Arc::new(AtomicU64::new(1)), opts: Arc::new(opts), active: Default::default(), jobs: Default::default(), heavy: Default::default() };
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
         if state.active.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
@@ -164,7 +168,7 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
         let started = std::time::Instant::now();
         let mut content_len = 0usize;
         let mut close = false;
-        let (mut auth, mut origin, mut host) = (String::new(), String::new(), String::new());
+        let (mut auth, mut origin, mut host, mut fetch_site) = (String::new(), String::new(), String::new(), String::new());
         let mut headers = 0;
         loop {
             let mut h = String::new();
@@ -177,6 +181,7 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
             if hl.starts_with("authorization:") { auth = h["authorization:".len()..].trim().to_string(); }
             if let Some(v) = hl.strip_prefix("origin:") { origin = v.trim().to_string(); }
             if let Some(v) = hl.strip_prefix("host:") { host = v.trim().to_string(); }
+            if let Some(v) = hl.strip_prefix("sec-fetch-site:") { fetch_site = v.trim().to_string(); }
         }
         // тело больше лимита не читаем и не обрезаем: обрезанное описание миссии дало бы другой результат
         if content_len > MAX_BODY {
@@ -202,7 +207,7 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
         }
         let resp = if !(method == "GET" || method == "POST" || method == "HEAD") {
             Resp::err(405, "только GET/POST/HEAD")
-        } else if let Some(r) = guard(&st, &path, &auth, &origin, &host) {
+        } else if let Some(r) = guard(&st, &path, &auth, &origin, &host, &fetch_site) {
             r
         } else if method != "POST" && (path == "/api/mission/run" || path == "/api/jobs/mission" || (path.starts_with("/api/jobs/") && path.ends_with("/cancel"))) {
             // запуск и отмена меняют состояние: случайная ссылка или предзагрузка не должны их вызывать
@@ -210,7 +215,7 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
         } else {
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route(&path, &q, &st))) {
                 Ok(Ok(r)) => r,
-                Ok(Err(e)) => Resp::err(if e.contains("не найден") { 404 } else if e.starts_with("слишком много") { 429 } else { 400 }, &e),
+                Ok(Err(e)) => Resp::err(400, &e),
                 Err(_) => Resp::err(500, "внутренняя ошибка симуляции"),
             }
         };
@@ -224,9 +229,11 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
 }
 
 /// Источник и доступ. None — запрос можно обрабатывать.
-fn guard(st: &State, path: &str, auth: &str, origin: &str, host: &str) -> Option<Resp> {
+fn guard(st: &State, path: &str, auth: &str, origin: &str, host: &str, fetch_site: &str) -> Option<Resp> {
     if path == "/healthz" { return None; }
     if !st.opts.cors {
+        // простой GET, например картинка на чужом сайте, приходит без Origin, но с этим заголовком
+        if fetch_site == "cross-site" || fetch_site == "same-site" { return Some(Resp::err(403, "запрос с другого сайта отклонён; разрешить можно ключом --cors")); }
         // браузер присылает Origin при запросе со страницы: чужому сайту нельзя обращаться к локальному серверу
         if !origin.is_empty() {
             let o = origin.split("://").nth(1).unwrap_or(origin);
@@ -309,8 +316,8 @@ fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
         "/api/jobs/mission" => job_start(q, st)?,
         "/api/jobs" => Resp::json(J::Arr(st.jobs.lock().unwrap_or_else(|e| e.into_inner()).iter().rev().map(|j| job_json(j)).collect())),
         "/api/runs" => Resp::json(crate::store::list_runs(&st.opts.data_dir)),
-        "/api/runs/compare" => Resp::json(crate::store::compare(&st.opts.data_dir, s(q, "a", ""), s(q, "b", ""))?),
-        p if p.starts_with("/api/runs/") => Resp::json(crate::store::load_report(&st.opts.data_dir, &p["/api/runs/".len()..])?),
+        "/api/runs/compare" => match crate::store::compare(&st.opts.data_dir, s(q, "a", ""), s(q, "b", "")) { Ok(c) => Resp::json(c), Err(e) => Resp::err(404, &e) },
+        p if p.starts_with("/api/runs/") => match crate::store::load_report(&st.opts.data_dir, &p["/api/runs/".len()..]) { Ok(r) => Resp::json(r), Err(e) => Resp::err(404, &e) },
         p if p.starts_with("/api/jobs/") => job_route(&p["/api/jobs/".len()..], st)?,
         "/data/stars.json" => data_resp("stars_hyg.json"),
         "/data/exoplanets.json" => data_resp("exoplanets_oec.json"),
@@ -344,17 +351,19 @@ fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
         "/api/mission/run" => {
             // описание приходит телом POST как JSON; handle() кладёт его в spec
             let spec = q.get("spec").ok_or("нет описания миссии")?;
-            let report = crate::mission::run(&crate::mission::MissionSpec::parse(spec)?, std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1))?;
-            let md = crate::mission::markdown(&report);
-            Resp::json(report.set("markdown", md))
+            heavy(st, || {
+                let report = crate::mission::run(&crate::mission::MissionSpec::parse(spec)?, std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1))?;
+                let md = crate::mission::markdown(&report);
+                Ok(Resp::json(report.set("markdown", md)))
+            })?
         }
         "/api/env/schema" => Resp::json(param_schema()),
         "/api/blackhole/props" => Resp::json(bh_props(q)?),
-        "/api/blackhole/render" => bh_render(q)?,
-        p if p.starts_with("/api/lab/") => Resp::json(crate::lab::run(&p["/api/lab/".len()..], q)?),
+        "/api/blackhole/render" => heavy(st, || bh_render(q))?,
+        p if p.starts_with("/api/lab/") => heavy(st, || Ok(Resp::json(crate::lab::run(&p["/api/lab/".len()..], q)?)))?,
         "/api/env/fork" => env_fork(q, st)?,
         "/api/env/close" => env_close(q, st)?,
-        "/api/validate" => Resp::json(J::Arr(validate::all().into_iter().map(|c| J::obj().set("law", c.law).set("test", c.test).set("value", c.value).set("expected", c.expected).set("pass", c.pass)).collect())),
+        "/api/validate" => heavy(st, || Ok(Resp::json(J::Arr(validate::all().into_iter().map(|c| J::obj().set("law", c.law).set("test", c.test).set("value", c.value).set("expected", c.expected).set("pass", c.pass)).collect()))))?,
         _ => Resp::err(404, "нет такого пути"),
     })
 }
@@ -713,6 +722,18 @@ fn env_make(q: &Q, st: &State) -> Result<Resp, String> {
     Ok(Resp::json(meta.set("id", id)))
 }
 
+/// Тяжёлый синхронный расчёт с ограничением числа одновременных.
+fn heavy(st: &State, f: impl FnOnce() -> Result<Resp, String>) -> Result<Resp, String> {
+    if st.heavy.fetch_add(1, Ordering::SeqCst) >= MAX_HEAVY {
+        st.heavy.fetch_sub(1, Ordering::SeqCst);
+        return Ok(Resp::err(429, "сервер занят тяжёлыми расчётами, повторите запрос позже"));
+    }
+    struct Release<'a>(&'a std::sync::atomic::AtomicUsize);
+    impl Drop for Release<'_> { fn drop(&mut self) { self.0.fetch_sub(1, Ordering::SeqCst); } }
+    let _r = Release(&st.heavy);
+    f()
+}
+
 fn job_json(j: &Job) -> J {
     let (done, total) = (j.progress.done.load(Ordering::Relaxed), j.progress.total.load(Ordering::Relaxed));
     let st = j.state.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -731,8 +752,11 @@ fn job_start(q: &Q, st: &State) -> Result<Resp, String> {
     let spec = crate::mission::MissionSpec::parse(&text)?;
     let mut jobs = st.jobs.lock().unwrap_or_else(|e| e.into_inner());
     let running = jobs.iter().filter(|j| matches!(*j.state.lock().unwrap_or_else(|e| e.into_inner()), JobState::Running)).count();
-    if running >= MAX_ACTIVE_JOBS { return Err(format!("слишком много задач: выполняется {running}, дождитесь завершения")); }
-    if jobs.len() >= MAX_KEPT_JOBS { jobs.remove(0); }
+    if running >= MAX_ACTIVE_JOBS { return Ok(Resp::err(429, &format!("слишком много задач: выполняется {running}, дождитесь завершения"))); }
+    // из истории уходит самая старая завершённая задача, выполняющуюся терять нельзя
+    if jobs.len() >= MAX_KEPT_JOBS {
+        if let Some(i) = jobs.iter().position(|j| !matches!(*j.state.lock().unwrap_or_else(|e| e.into_inner()), JobState::Running)) { jobs.remove(i); }
+    }
     let id = format!("{:x}", st.next.fetch_add(1, Ordering::SeqCst));
     let job = Arc::new(Job { id: id.clone(), name: spec.name.clone(), spec: text, progress: Default::default(), state: Mutex::new(JobState::Running) });
     jobs.push(job.clone());
@@ -744,8 +768,6 @@ fn job_start(q: &Q, st: &State) -> Result<Resp, String> {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::mission::run_with(&spec, threads, &job.progress)));
         let next = match result {
             Ok(Ok(r)) => {
-                let md = crate::mission::markdown(&r);
-                let _ = md;
                 match crate::store::save_run(&root, &job.spec, &r.set("spec_sha256", crate::store::sha256(job.spec.as_bytes()))) { Ok(id) => JobState::Done(id), Err(e) => JobState::Failed(e) }
             }
             Ok(Err(_)) if job.progress.cancel.load(Ordering::Relaxed) => JobState::Cancelled,
@@ -759,7 +781,7 @@ fn job_start(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn job_route(rest: &str, st: &State) -> Result<Resp, String> {
     let (id, cancel) = match rest.strip_suffix("/cancel") { Some(x) => (x, true), None => (rest, false) };
-    let job = st.jobs.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|j| j.id == id).cloned().ok_or_else(|| format!("задача {id} не найдена"))?;
+    let Some(job) = st.jobs.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|j| j.id == id).cloned() else { return Ok(Resp::err(404, &format!("задача {id} не найдена"))) };
     if cancel { job.progress.cancel.store(true, Ordering::Relaxed); }
     Ok(Resp::json(job_json(&job)))
 }

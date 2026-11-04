@@ -215,7 +215,7 @@ pub unsafe extern "C" fn ws_mission_step(p: *mut MissionHandle, act: *const f32,
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn ws_mission_report(p: *mut MissionHandle, buf: *mut u8, cap: usize, name: *const c_char) -> usize {
-    let h = unsafe { &*p };
+    let h = unsafe { &mut *p };
     let name = unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned();
     let text = match h.runner.report(&name) { Ok(r) => r.render(), Err(e) => J::obj().set("error", e).render() };
     write_str(&text, buf, cap)

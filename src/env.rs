@@ -292,7 +292,7 @@ pub const PARAMS: &[ParamDef] = &[
     p3("pad_radius", "Сценарий", "Радиус ровной площадки", "м", 2.0, 200.0, ALL, [25.0, 15.0, 8.0], "Здесь рельеф выровнен."),
     p("terrain_scale", "Сценарий", "Высота рельефа", "×", 0.0, 5.0, ALL, 1.0, "0 — ровная поверхность."),
     p("crater_scale", "Сценарий", "Количество кратеров", "×", 0.0, 5.0, ALL, 1.0, ""),
-    p("friction", "Сценарий", "Трение грунта", "μ", 0.0, 2.0, ALL, -1.0, "−1 — значение по типу поверхности."),
+    p("friction", "Сценарий", "Трение грунта", "μ", -1.0, 2.0, ALL, -1.0, "−1 — значение по типу поверхности."),
     p("sun_elev", "Сценарий", "Высота Солнца", "°", -1.0, 90.0, R, -1.0, "−1 — случайная в каждом эпизоде."),
     // Критерии
     p("touch_speed_limit", "Критерии", "Допустимая скорость касания", "м/с", 0.1, 50.0, L, 2.5, ""),
@@ -431,6 +431,21 @@ impl EnvConfig {
 pub fn param_default(task: Task, name: &str) -> Option<f64> { param_def(name).map(|d| d.defaults[task.index()]) }
 
 impl EnvConfig {
+    /// Своя карта должна вмещать сценарий: иначе полёт кончается у края карты, а отчёт винит аппарат.
+    fn check_terrain(&self) -> Result<(), String> {
+        let Some(t) = &self.custom_terrain else { return Ok(()) };
+        let half = t.size / 2.0;
+        let need = match self.task {
+            Task::Lander => self.get("start_offset").unwrap_or(0.0),
+            _ => self.get("goal_dist_max").unwrap_or(0.0),
+        };
+        if need >= half {
+            let k = if self.task == Task::Lander { "start_offset" } else { "goal_dist_max" };
+            return Err(format!("карта {:.0} м мала для сценария: {k} = {need} м, а до края {half:.0} м. Уменьшите {k}", t.size));
+        }
+        Ok(())
+    }
+
     fn apply_gravity(&mut self) -> Result<(), String> {
         // своя гравитация задаётся абсолютно, а мир хранит масштаб
         let g = self.vehicle.iter().find(|(n, _)| n == "gravity").map(|x| x.1).unwrap_or(0.0);
@@ -525,6 +540,7 @@ pub const PARAM_NAMES: &[&str] = &["g", "rho0", "p0_kpa", "t0_k", "friction", "d
 impl Env {
     pub fn new(mut cfg: EnvConfig) -> Result<Env, String> {
         cfg.apply_gravity()?;
+        cfg.check_terrain()?;
         let world = World::build(&cfg.world)?;
         let terrain = Arc::new(Terrain::plane(0.0, 0.8));
         let mut e = Env {
@@ -1272,7 +1288,8 @@ impl Env {
                 let vh_target = Vec3::new(-d.x, -d.y, 0.0) * 0.12;
                 let vh_target = if vh_target.norm() > 15.0 { vh_target.unit() * 15.0 } else { vh_target };
                 // запас по тяге задаёт, с какой скоростью можно снижаться и ещё успеть затормозить
-                let brake = (self.p.t_max / b.mass * self.act_gain[0] - g).max(0.3);
+                // ослабление привода автопилоту неизвестно, как и агенту: считает по паспортной тяге
+                let brake = (self.p.t_max / b.mass - g).max(0.3);
                 let vz_stop = (1.4 * brake * alt.max(0.0)).sqrt();
                 // пока не над площадкой — не снижаемся ниже 40 м: садиться можно только на ровное
                 let vz_target = if off > self.tune.pad * 0.48 && alt < 40.0 { (40.0 - alt) * 0.3 } else { -(1.0 + 0.12 * alt).min(vz_stop + 1.0).min(50.0) };

@@ -54,6 +54,12 @@ class Data(Base):
             return (o / "obs.npy").read_bytes(), (o / "episodes.csv").read_bytes()
         self.assertEqual(run(1, "t1"), run(8, "t8"))
 
+    def test_counterfactuals_cover_whole_episode(self):
+        d = collect(self.tmp / "cf2", episodes=12, extra=("--counterfactuals", "20"))
+        # радиовысотомер у точек ветвления показывает и большую высоту, и подход к поверхности
+        alt = np.asarray(d.cf_obs)[:, d.channel("radar_alt")]
+        self.assertLess(float(np.percentile(alt, 5)), 50.0)
+
     def test_counterfactuals_share_a_start(self):
         d = collect(self.tmp / "cf", episodes=12)
         self.assertGreater(len(d.cf_obs), 0)
@@ -132,6 +138,28 @@ class Qualification(Base):
         a = qualify(FunctionModel(fn, "kin"), {"m": self.ds}, n_starts=60)["worlds"]["m"]
         b = qualify(Persistence(), {"m": self.ds}, n_starts=60)["worlds"]["m"]
         self.assertGreaterEqual(a["accuracy"]["trust_horizon_s"], b["accuracy"]["trust_horizon_s"])
+
+    def test_gates_are_reachable_and_not_gameable(self):
+        # L2 должен быть достижим: истинные траектории проходят, хотя у симулятора |up| − 1 почти ноль
+        from worldsim.qualify import level_physics
+        n = 40
+        true = np.asarray(self.ds.next_obs[:n], np.float32)[:, None, :]
+        mask = np.ones((n, 1), bool)
+        same = np.asarray(self.ds.episode[:n]) == np.asarray(self.ds.episode[0])
+        self.assertTrue(same.all())
+        phys = level_physics(true, true, mask, self.ds)
+        self.assertTrue(all(v["passed"] for v in phys.values()), phys)
+        # модель, которая всегда видит аварию: пропусков нет, а L4 не пройден из-за ложных тревог
+        idx = self.ds.channel("radar_alt"), self.ds.channel("vel_z")
+
+        def alarm(o, a, p):
+            n = o.copy()
+            n[:, idx[0]] = 0.0
+            n[:, idx[1]] = -50.0
+            return n
+        w = qualify(FunctionModel(alarm, "alarm"), {"m": self.ds}, n_starts=20)["worlds"]["m"]
+        self.assertEqual(w["optimism"]["missed_crash_rate"], 0.0)
+        self.assertFalse(w["gates"]["L4"])
 
     def test_nan_model_is_flagged_not_crashing(self):
         bad = FunctionModel(lambda o, a, p: np.full_like(o, np.nan), "nan")
@@ -345,14 +373,57 @@ class ProductGaps(Base):
         s, names = replay("lander", "moon", {**flat, **truth}, init, act)
         self.assertEqual(len(s), T)
         meas = {k: s[:, names.index(k)] + rng.normal(0, e, T) for k, e in (("vz", 0.02), ("mass", 0.05))}
-        r = worldsim.calibrate("lander", "moon", act, meas, init, {"t_max": (5000, 40000), "dry_mass": (300, 2000), "isp": (150, 600)}, flat, restarts=2)
+        r = worldsim.fit_telemetry("lander", "moon", act, meas, init, {"t_max": (5000, 40000), "dry_mass": (300, 2000), "isp": (150, 600)}, flat, restarts=2)
         for k, v in truth.items():
             self.assertLess(abs(r["params"][k] - v) / v, 0.05, (k, r["params"][k]))
         self.assertTrue(r["identifiable"])
         with self.assertRaises(ValueError):
-            worldsim.calibrate("lander", "moon", act, {"vz": meas["vz"][:5]}, init, {"t_max": (5000, 40000)}, flat)
+            worldsim.fit_telemetry("lander", "moon", act, {"vz": meas["vz"][:5]}, init, {"t_max": (5000, 40000)}, flat)
         with self.assertRaises(ValueError):
-            worldsim.calibrate("lander", "moon", act, meas, init, {"warp": (1, 2)}, flat, restarts=1)
+            worldsim.fit_telemetry("lander", "moon", act, meas, init, {"warp": (1, 2)}, flat, restarts=1)
+
+    def test_calibration_csv_is_aligned(self):
+        from worldsim.calibrate import align_table, load_csv, replay
+        T = 200
+        act = np.zeros((T, 4), np.float32)
+        act[:, 0] = 0.4
+        init = [0, 0, 500, 0, 0, -10]
+        flat = {"terrain_scale": 0, "crater_scale": 0, "t_max": 12000}
+        s, names = replay("lander", "moon", flat, init, act)
+        # таблица как в реальной записи: первая строка — начальное состояние, команда этой строки ещё не подействовала
+        p = self.tmp / "flight.csv"
+        with open(p, "w") as f:
+            f.write("act_0,act_1,act_2,act_3,z,vz\n")
+            f.write(f"0.4,0,0,0,{init[2]},{init[5]}\n")
+            for i in range(T - 1):
+                f.write(f"0.4,0,0,0,{s[i, names.index('z')]},{s[i, names.index('vz')]}\n")
+        a, st = align_table(*load_csv(p))
+        sim, _ = replay("lander", "moon", flat, init, a)
+        self.assertLess(np.abs(sim[:, names.index("vz")] - st["vz"]).max(), 1e-3)
+
+    def test_form_values_for_engine_are_normalized(self):
+        # параметр в разделе vehicle не должен молча перекрывать технологию
+        spec = {"task": "drone", "world": "mars", "runs": 12, "vehicle": {"rotor_scale": 8}, "requirements": [{"metric": "success", "op": ">=", "value": 0.5}],
+                "technologies": [{"name": "большие винты", "set_top": {"rotor_scale": 30}}]}
+        c = self.tmp / "s.json"
+        c.write_text(json.dumps(spec), encoding="utf8")
+        out = self.tmp / "norm"
+        subprocess.run([str(BIN), "mission", str(c), "--out", str(out)], check=True, capture_output=True)
+        t = json.loads((out / "report.json").read_text(encoding="utf8"))["technologies"][0]
+        self.assertGreater(t["delta"], 0.3)
+        for bad in ({"task": "rover", "technologies": [{"set": {"motor_force": 500}, "dry_mass_delta": 5}]}, {"task": "lander", "dispersions": {"rover_mass": 0.1}}):
+            c.write_text(json.dumps({"requirements": [{"metric": "success", "op": ">=", "value": 0.5}], **bad}), encoding="utf8")
+            r = subprocess.run([str(BIN), "mission", str(c)], capture_output=True)
+            self.assertNotEqual(r.returncode, 0)
+
+    def test_world_auto_and_small_terrain(self):
+        out = self.tmp / "auto"
+        subprocess.run([str(BIN), "collect", "--task", "rover", "--worlds", "moon:auto:mars", "--episodes", "1", "--max-steps", "5", "--out", str(out)], check=True, capture_output=True)
+        p = self.tmp / "tiny.npy"
+        np.save(p, np.zeros((9, 9)))
+        spec = {"task": "lander", "runs": 1, "requirements": [{"metric": "success", "op": ">=", "value": 0.5}], "terrain": {"file": str(p), "size": 100}}
+        with self.assertRaisesRegex(ValueError, "start_offset"):
+            worldsim.MissionRunner(spec)
 
     def test_real_terrain_from_file(self):
         n = 81
@@ -442,6 +513,9 @@ class Security(unittest.TestCase):
         ok = {"Authorization": "Bearer secret-token"}
         self.assertEqual(self.raw(headers={**ok, "Origin": "https://evil.example"})[0], 403)
         self.assertEqual(self.raw(headers={**ok, "Origin": f"http://localhost:{self.PORT}"})[0], 200)
+        # картинка на чужом сайте: Origin нет, но браузер присылает Sec-Fetch-Site
+        self.assertEqual(self.raw(headers={**ok, "Sec-Fetch-Site": "cross-site"})[0], 403)
+        self.assertEqual(self.raw(headers={**ok, "Sec-Fetch-Site": "same-origin"})[0], 200)
         self.assertNotIn("Access-Control-Allow-Origin", self.raw(headers=ok)[1])
 
     def test_limits(self):

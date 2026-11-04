@@ -15,6 +15,8 @@ FROM debian:stable-slim
 RUN useradd --system --create-home --uid 10001 worldsim && mkdir -p /data && chown worldsim /data
 COPY --from=build /src/target/release/worldsim /usr/local/bin/worldsim
 COPY missions /opt/worldsim/missions
+# каталоги звёзд и экзопланет в образ не входят: смонтируйте их в /opt/worldsim/data, см. README
+WORKDIR /opt/worldsim
 USER worldsim
 ENV WORLDSIM_DATA=/data
 VOLUME /data

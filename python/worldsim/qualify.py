@@ -112,6 +112,15 @@ def _law_series(x, ds):
     return laws
 
 
+def _law_tolerance(law, ds):
+    """Какое нарушение ещё допустимо за шаг или в норме."""
+    if law.startswith("|up|") or law.startswith("cos²"):
+        return 0.02
+    if "кинематика" in law:
+        return 0.02
+    return 1e-4
+
+
 def level_physics(pred, true, mask, ds):
     # float64: квадраты разошедшихся предсказаний не должны переполнять расчёт
     pl, tl = _law_series(pred.astype(np.float64), ds), _law_series(true.astype(np.float64), ds)
@@ -120,7 +129,9 @@ def level_physics(pred, true, mask, ds):
         m = mask[-pl[k].shape[0]:]
         # медиана: одна разошедшаяся траектория не должна скрывать типичное поведение; долю расхождений показываем отдельно
         mp, tp = float(np.median(pl[k][m])), float(np.median(tl[k][m]))
-        out[k] = {"model": mp, "simulator": tp, "ratio": mp / max(tp, 1e-6)}
+        # допуск нужен, потому что у симулятора некоторые законы выполняются почти идеально: сравнивать с нулём нельзя
+        limit = max(10 * tp, _law_tolerance(k, ds))
+        out[k] = {"model": mp, "simulator": tp, "limit": limit, "passed": bool(mp <= limit)}
     return out
 
 
@@ -199,9 +210,10 @@ def _grade(acc, phys, action, opt, min_horizon_s):
     """Простые прозрачные правила: важен не балл, а какая ступень не пройдена и почему."""
     gates = {
         "L1": acc["trust_horizon_s"] >= min_horizon_s,
-        "L2": all(v["ratio"] < 10 for v in phys.values()) if phys else False,
+        "L2": all(v["passed"] for v in phys.values()) if phys else False,
         "L3": ("worst" in action) and action["worst"] >= 0.5,
-        "L4": opt.get("missed_crash_rate") is not None and opt["missed_crash_rate"] <= 0.2,
+        # и пропуски, и ложные тревоги: модель, которая всегда предсказывает аварию, бесполезна
+        "L4": opt.get("missed_crash_rate") is not None and opt["missed_crash_rate"] <= 0.2 and (opt.get("false_alarm_rate") or 0.0) <= 0.3,
     }
     return gates
 
@@ -246,8 +258,8 @@ def to_markdown(r):
         a, o = w["accuracy"], w["optimism"]
         s += [f"\n## {n}\n", f"Мир: {', '.join(w['world'])}. Данные: {w['transitions']} переходов, шум {w['noise']}, отпечаток `{w['fingerprint']}`.\n",
               f"**Горизонт доверия {a['trust_horizon_s']:.2f} с**, ограничивает канал `{a['limited_by']}`. Разошлось к концу предсказания: {_fmt(a['diverged_share'], 2)}.\n", "### Законы физики в воображении\n",
-              "| Закон | Модель | Симулятор | Во сколько раз хуже |", "|---|---|---|---|"]
-        s += [f"| {k} | {v['model']:.5f} | {v['simulator']:.5f} | {v['ratio']:.1f} |" for k, v in w["physics"].items()]
+              "| Закон | Модель | Симулятор | Допуск | Итог |", "|---|---|---|---|---|"]
+        s += [f"| {k} | {v['model']:.5f} | {v['simulator']:.5f} | {v['limit']:.5f} | {mark(v['passed'])} |" for k, v in w["physics"].items()]
         ac = w["action"]
         s.append("\n### Отклик на действие\n")
         if "skipped" in ac:

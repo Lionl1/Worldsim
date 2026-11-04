@@ -33,7 +33,9 @@ impl WorldSpec {
     /// `mars` или `mars:earth:moon` (физика:атмосфера:поверхность).
     pub fn parse(s: &str) -> Self {
         let p: Vec<&str> = s.split(':').collect();
-        WorldSpec { physics: p[0].into(), atmosphere: p.get(1).map(|x| x.to_string()), surface: p.get(2).map(|x| x.to_string()), gravity_scale: 1.0, distance_au: None }
+        // auto значит «как у тела»: так пишут и форма, и meta.json
+        let opt = |x: Option<&&str>| x.filter(|v| !v.is_empty() && **v != "auto").map(|v| v.to_string());
+        WorldSpec { physics: p[0].into(), atmosphere: opt(p.get(1)), surface: opt(p.get(2)), gravity_scale: 1.0, distance_au: None }
     }
 }
 

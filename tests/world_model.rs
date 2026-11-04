@@ -55,6 +55,23 @@ fn mission_result_does_not_depend_on_threads() {
 }
 
 #[test]
+fn job_free_mission_rejects_nonnumeric_terrain() {
+    let bad = spec(r#","terrain":{"n":3,"size":900,"heights":[0,0,0,0,"x",0,0,0,0]}"#);
+    assert!(MissionSpec::parse(&bad).is_err());
+    let hole = spec(r#","terrain":{"n":3,"size":900,"heights":[0,0,0,0,null,0,0,0,0]}"#);
+    assert!(MissionSpec::parse(&hole).is_ok());
+    let file = spec(r#","terrain":{"file":"/etc/hosts","size":900}"#);
+    assert!(MissionSpec::parse(&file).is_err());
+}
+
+#[test]
+fn rover_navigation_noise_changes_the_outcome_only_through_sensors() {
+    let text = |noise: f64| format!(r#"{{"task":"rover","world":"moon","runs":30,"seed":4,"dispersions":{{"nav_noise":{noise}}},"requirements":[{{"metric":"touch_offset","percentile":50,"op":"<=","value":1000}}]}}"#);
+    let mean = |n: f64| { let r = mission::run(&MissionSpec::parse(&text(n)).unwrap(), 4).unwrap(); r.get("scorecard").unwrap().as_arr().unwrap()[0].get("value").unwrap().as_f64().unwrap() };
+    assert_ne!(mean(0.0), mean(40.0));
+}
+
+#[test]
 fn wilson_interval_is_sane() {
     let (l, h) = wilson(50.0, 100.0);
     assert!((l - 0.404).abs() < 0.01 && (h - 0.596).abs() < 0.01);

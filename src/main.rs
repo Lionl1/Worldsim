@@ -41,7 +41,7 @@ const HELP: &str = "worldsim — физические модели миров
   collect   --task lander|drone|rover --worlds moon,mars:earth:moon --episodes 1000 --out dir
             [--policies smooth,hold,auto_noise] [--noise 1] [--randomize] [--frame-skip 4] [--max-steps N]
             [--gust 2] [--lag 0.05] [--fault 0.2] [--rotor-scale 1] [--threads N] [--seed 42]
-            [--terrain 33] [--camera 64 --camera-every 5] [--counterfactuals 3] [--set throttle_min=0.1,gyro_bias=0.01]
+            [--terrain 33] [--camera 64 --camera-every 5] [--counterfactuals 3 (на 1000 шагов)] [--set throttle_min=0.1,gyro_bias=0.01]
             [--terrain-file site.asc] [--terrain-size 2000]  рельеф реальной площадки (.asc, .csv, .npy)
             переходы для обучения world model: .npy + meta.json (см. README)
 
