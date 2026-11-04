@@ -198,6 +198,19 @@ class Server(unittest.TestCase):
         self.assertEqual(len(r["traj_obs"]), 5)
         self.assertEqual(r["traj_obs"][-1], r["obs"])
 
+    def test_schema_and_params(self):
+        schema = self.c.get("/api/env/schema")
+        names = {d["name"] for d in schema}
+        self.assertIn("throttle_min", names)
+        e = self.c.make("lander", "moon", params="isp=320,gust=0")
+        self.assertEqual(e.state()["params"][e.state()["param_names"].index("isp")], 320)
+        with self.assertRaises(RuntimeError):
+            self.c.make("lander", "moon", params="warp=1")
+        v = worldsim.VectorEnv("lander", "moon", n=2, params={"isp": 333})
+        self.assertAlmostEqual(float(v.params()[0, v.spec["param_names"].index("isp")]), 333, places=2)
+        with self.assertRaises(ValueError):
+            worldsim.VectorEnv("lander", "moon", params={"warp": 1})
+
     def test_cameras(self):
         e = self.c.make("rover", "mars")
         self.assertEqual(e.camera(8, 6, "rgb").shape, (6, 8, 3))

@@ -22,9 +22,6 @@ pub const G0: f64 = 9.80665;
 const LEG_K: f64 = 6.0e4;   // жёсткость ноги, Н/м
 const LEG_C: f64 = 6.0e3;   // демпфирование ноги, Н·с/м
 const LEG_CT: f64 = 2.0e3;  // вязкое приближение трения покоя, Н·с/м
-pub const ROVER_TIP_LAT: f64 = 1.0;   // колея/2h = 1.2 м / (2·0.6 м)
-pub const ROVER_TIP_LONG: f64 = 1.33; // база/2h = 1.6 м / (2·0.6 м)
-const ROVER_V_MAX: f64 = 2.5;         // скорость холостого хода моторов, м/с
 
 // ================================================================ рельеф
 
@@ -59,7 +56,11 @@ fn value_noise(x: f64, y: f64, seed: u64) -> f64 {
 
 impl Terrain {
     /// Процедурный рельеф под тип поверхности мира: кратеры на безвоздушных телах, холмы на Земле.
-    pub fn generate(w: &World, seed: u64, size: f64, n: usize, pad_radius: f64) -> Terrain {
+    pub fn generate(w: &World, seed: u64, size: f64, n: usize, pad_radius: f64) -> Terrain { Self::generate_tuned(w, seed, size, n, pad_radius, 1.0, 1.0, -1.0) }
+
+    /// `amp_scale` и `crater_scale` масштабируют рельеф, `friction` ≥ 0 заменяет трение поверхности.
+    #[allow(clippy::too_many_arguments)]
+    pub fn generate_tuned(w: &World, seed: u64, size: f64, n: usize, pad_radius: f64, amp_scale: f64, crater_scale: f64, friction_override: f64) -> Terrain {
         let surf = w.surface.name.as_str();
         let airless = w.atmosphere.is_none();
         let (amp, craters, friction) = match surf {
@@ -68,6 +69,8 @@ impl Terrain {
             "venus" => (12.0, 4, 0.6),
             _ => (15.0, if airless { 20 } else { 0 }, 0.8),
         };
+        let (amp, craters) = (amp * amp_scale, (craters as f64 * crater_scale) as usize);
+        let friction = if friction_override >= 0.0 { friction_override } else { friction };
         let mut h = vec![0.0; n * n];
         let cell = size / (n - 1) as f64;
         for j in 0..n {
@@ -88,7 +91,7 @@ impl Terrain {
         for _ in 0..craters {
             let (cx, cy) = (rng.uniform(-size / 2.0, size / 2.0), rng.uniform(-size / 2.0, size / 2.0));
             let r = rng.log_uniform(6.0, size / 8.0);
-            let depth = 0.2 * r;
+            let depth = 0.2 * r * amp_scale.min(1.0);
             for j in 0..n {
                 for i in 0..n {
                     let (x, y) = (i as f64 * cell - size / 2.0, j as f64 * cell - size / 2.0);
@@ -233,8 +236,139 @@ pub struct EnvConfig {
     pub vehicle: Vec<(String, f64)>, // переопределение параметров аппарата, см. VEHICLE_PARAMS
 }
 
-/// Что можно задать в описании аппарата.
-pub const VEHICLE_PARAMS: &[&str] = &["dry_mass", "fuel", "isp", "t_max", "torque_max", "drag_cd", "drag_area", "rover_mass", "motor_force", "panel_area", "battery_kj"];
+const L: u8 = 1;
+const D: u8 = 2;
+const R: u8 = 4;
+const ALL: u8 = 7;
+
+/// Один настраиваемый параметр. Интерфейс, API, CLI, миссии и Python берут всё отсюда,
+/// поэтому новый параметр достаточно добавить в `PARAMS` и использовать в `Tune`.
+#[derive(Clone, Copy, Debug)]
+pub struct ParamDef {
+    pub name: &'static str, pub group: &'static str, pub label: &'static str, pub unit: &'static str,
+    pub min: f64, pub max: f64, pub tasks: u8, pub defaults: [f64; 3], pub help: &'static str,
+}
+const fn p(name: &'static str, group: &'static str, label: &'static str, unit: &'static str, min: f64, max: f64, tasks: u8, d: f64, help: &'static str) -> ParamDef {
+    ParamDef { name, group, label, unit, min, max, tasks, defaults: [d, d, d], help }
+}
+const fn p3(name: &'static str, group: &'static str, label: &'static str, unit: &'static str, min: f64, max: f64, tasks: u8, defaults: [f64; 3], help: &'static str) -> ParamDef {
+    ParamDef { name, group, label, unit, min, max, tasks, defaults, help }
+}
+
+pub const PARAMS: &[ParamDef] = &[
+    // Аппарат
+    p("dry_mass", "Аппарат", "Сухая масса", "кг", 50.0, 50_000.0, L, 1000.0, "Масса без топлива."),
+    p("fuel", "Аппарат", "Запас топлива", "кг", 1.0, 50_000.0, L, 450.0, "Масса топлива на старте эпизода."),
+    p("isp", "Аппарат", "Удельный импульс", "с", 50.0, 1000.0, L, 300.0, "Чем выше, тем меньше расход на ту же тягу."),
+    p("t_max", "Аппарат", "Максимальная тяга", "Н", 100.0, 1e6, L, 22_000.0, "Тяга основного двигателя на полном газе."),
+    p("throttle_min", "Аппарат", "Минимальный газ", "доля", 0.0, 0.9, L, 0.0, "Двигатель нельзя задросселировать ниже: включён либо от этой доли и выше, либо выключен."),
+    p("thrust_misalign", "Аппарат", "Перекос тяги", "°", 0.0, 10.0, L, 0.0, "Отклонение оси двигателя от оси аппарата."),
+    p("cg_offset", "Аппарат", "Смещение центра масс", "м", 0.0, 0.5, L, 0.0, "Тяга создаёт паразитный момент, его парируют двигатели ориентации."),
+    p("torque_max", "Аппарат", "Момент ориентации", "Н·м", 10.0, 1e5, L, 3000.0, "Максимальный момент двигателей ориентации."),
+    p("drag_cd", "Аппарат", "Коэффициент сопротивления", "", 0.1, 3.0, L, 1.0, ""),
+    p("drag_area", "Аппарат", "Площадь сопротивления", "м²", 0.1, 100.0, L, 4.0, ""),
+    p("drone_mass", "Аппарат", "Масса дрона", "кг", 0.1, 50.0, D, 1.5, ""),
+    p("thrust_to_weight", "Аппарат", "Тяговооружённость на Земле", "", 1.1, 10.0, D, 2.5, "Запас тяги винтов на уровне моря при стандартной площади."),
+    p("battery_kj", "Аппарат", "Батарея", "кДж", 1.0, 1e5, D, 150.0, ""),
+    p("rotor_scale", "Аппарат", "Площадь винтов", "×", 0.1, 500.0, D, 1.0, "В разреженной атмосфере нужно больше: на Марсе около 16."),
+    p("rover_mass", "Аппарат", "Масса ровера", "кг", 10.0, 5000.0, R, 180.0, ""),
+    p("motor_force", "Аппарат", "Сила моторов", "Н", 10.0, 50_000.0, R, 900.0, "Суммарная сила на колёсах при трогании."),
+    p("rover_vmax", "Аппарат", "Скорость холостого хода", "м/с", 0.1, 20.0, R, 2.5, "На этой скорости сила моторов падает до нуля."),
+    p("cg_height", "Аппарат", "Высота центра масс", "м", 0.1, 3.0, R, 0.6, "Чем выше, тем легче опрокинуться."),
+    p("rolling_resistance", "Аппарат", "Сопротивление качению", "", 0.0, 0.5, R, 0.05, ""),
+    p("panel_area", "Аппарат", "Площадь солнечной панели", "м²", 0.0, 50.0, R, 1.5, ""),
+    p("battery_kwh", "Аппарат", "Батарея", "кВт·ч", 0.01, 100.0, R, 0.6, ""),
+    // Сценарий
+    p3("start_alt_min", "Сценарий", "Высота старта, от", "м", 1.0, 20_000.0, L | D, [300.0, 8.0, 0.0], ""),
+    p3("start_alt_max", "Сценарий", "Высота старта, до", "м", 1.0, 20_000.0, L | D, [700.0, 30.0, 0.0], ""),
+    p("start_offset", "Сценарий", "Смещение от площадки, до", "м", 0.0, 450.0, L, 200.0, "По каждой горизонтальной оси."),
+    p("start_vh", "Сценарий", "Горизонтальная скорость, до", "м/с", 0.0, 200.0, L, 15.0, "По каждой оси."),
+    p("start_vz_min", "Сценарий", "Скорость снижения, от", "м/с", 0.0, 500.0, L, 10.0, ""),
+    p("start_vz_max", "Сценарий", "Скорость снижения, до", "м/с", 0.0, 500.0, L, 35.0, ""),
+    p("start_tilt", "Сценарий", "Начальный наклон, до", "°", 0.0, 60.0, L, 8.6, ""),
+    p3("goal_dist_min", "Сценарий", "Расстояние до цели, от", "м", 3.0, 280.0, D | R, [0.0, 20.0, 80.0], ""),
+    p3("goal_dist_max", "Сценарий", "Расстояние до цели, до", "м", 3.0, 280.0, D | R, [0.0, 60.0, 220.0], ""),
+    p3("pad_radius", "Сценарий", "Радиус ровной площадки", "м", 2.0, 200.0, ALL, [25.0, 15.0, 8.0], "Здесь рельеф выровнен."),
+    p("terrain_scale", "Сценарий", "Высота рельефа", "×", 0.0, 5.0, ALL, 1.0, "0 — ровная поверхность."),
+    p("crater_scale", "Сценарий", "Количество кратеров", "×", 0.0, 5.0, ALL, 1.0, ""),
+    p("friction", "Сценарий", "Трение грунта", "μ", 0.0, 2.0, ALL, -1.0, "−1 — значение по типу поверхности."),
+    p("sun_elev", "Сценарий", "Высота Солнца", "°", -1.0, 90.0, R, -1.0, "−1 — случайная в каждом эпизоде."),
+    // Критерии
+    p("touch_speed_limit", "Критерии", "Допустимая скорость касания", "м/с", 0.1, 50.0, L, 2.5, ""),
+    p("touch_tilt_limit", "Критерии", "Допустимый наклон при касании", "°", 1.0, 60.0, L, 15.0, ""),
+    p("touch_slope_limit", "Критерии", "Допустимый уклон площадки", "°", 1.0, 60.0, L, 12.0, ""),
+    p("impact_limit", "Критерии", "Допустимая скорость удара", "м/с", 0.1, 50.0, D, 3.0, ""),
+    p3("reward_success", "Критерии", "Награда за успех", "", 0.0, 1e4, ALL, [100.0, 100.0, 100.0], ""),
+    p3("reward_crash", "Критерии", "Штраф за аварию", "", 0.0, 1e4, ALL, [100.0, 100.0, 50.0], ""),
+    // Среда
+    p("gravity", "Среда", "Гравитация, своя", "м/с²", 0.0, 50.0, ALL, 0.0, "0 — как у выбранного мира."),
+    p("air_scale", "Среда", "Плотность атмосферы", "×", 0.0, 100.0, ALL, 1.0, "Множитель плотности и давления выбранной атмосферы."),
+    p("wind_x", "Среда", "Постоянный ветер на восток", "м/с", -100.0, 100.0, L | D, 0.0, ""),
+    p("wind_y", "Среда", "Постоянный ветер на север", "м/с", -100.0, 100.0, L | D, 0.0, ""),
+    p("gust", "Среда", "Порывы ветра, СКО", "м/с", 0.0, 50.0, L | D, 0.0, "Случайный процесс с постоянной времени 2 с."),
+    p("solar_scale", "Среда", "Освещённость", "×", 0.0, 10.0, R, 1.0, "Множитель инсоляции для солнечной панели."),
+    // Сенсоры
+    p("noise", "Сенсоры", "Общий шум", "×", 0.0, 100.0, ALL, 1.0, "0 — идеальные сенсоры."),
+    p("noise_pos", "Сенсоры", "Шум положения", "×", 0.0, 100.0, ALL, 1.0, "GPS или относительная навигация."),
+    p("noise_vel", "Сенсоры", "Шум скорости", "×", 0.0, 100.0, ALL, 1.0, ""),
+    p("noise_att", "Сенсоры", "Шум ориентации", "×", 0.0, 100.0, ALL, 1.0, ""),
+    p("noise_gyro", "Сенсоры", "Шум гироскопа", "×", 0.0, 100.0, ALL, 1.0, ""),
+    p("noise_accel", "Сенсоры", "Шум акселерометра", "×", 0.0, 100.0, L | D, 1.0, ""),
+    p("noise_range", "Сенсоры", "Шум высотомера и лидара", "×", 0.0, 100.0, ALL, 1.0, ""),
+    p("gyro_bias", "Сенсоры", "Смещение гироскопа, СКО", "рад/с", 0.0, 1.0, ALL, 0.0, "Постоянно в течение эпизода и скрыто от агента."),
+    p("accel_bias", "Сенсоры", "Смещение акселерометра, СКО", "м/с²", 0.0, 5.0, L | D, 0.0, "Постоянно в течение эпизода и скрыто от агента."),
+    p("sensor_dropout", "Сенсоры", "Пропуски показаний", "доля", 0.0, 0.9, ALL, 0.0, "С этой вероятностью канал повторяет прошлое значение."),
+    p("obs_delay", "Сенсоры", "Задержка наблюдений", "шагов", 0.0, 200.0, ALL, 0.0, "Связь или обработка: агент видит прошлое."),
+    // Управление
+    p("frame_skip", "Управление", "Шагов физики на действие", "", 1.0, 100.0, ALL, 4.0, "Определяет частоту управления."),
+    p3("physics_dt", "Управление", "Шаг физики", "с", 0.0005, 0.05, ALL, [0.005, 0.005, 0.025], "Меньше — точнее и медленнее."),
+    p3("max_steps", "Управление", "Лимит шагов", "", 1.0, 1e7, ALL, [5000.0, 2500.0, 4000.0], ""),
+    p("actuator_lag", "Управление", "Задержка приводов", "с", 0.0, 10.0, ALL, 0.0, "Постоянная времени первого порядка."),
+    p("action_noise", "Управление", "Шум исполнения", "доля", 0.0, 1.0, ALL, 0.0, "Случайная ошибка команды относительно диапазона."),
+    p("fault_prob", "Управление", "Вероятность отказа привода", "", 0.0, 1.0, ALL, 0.0, "В эпизоде один привод ослаблен, агент этого не видит."),
+];
+
+pub fn param_def(name: &str) -> Option<&'static ParamDef> { PARAMS.iter().find(|d| d.name == name) }
+
+impl Task {
+    fn bit(self) -> u8 { match self { Task::Lander => L, Task::Drone => D, Task::Rover => R } }
+    fn index(self) -> usize { match self { Task::Lander => 0, Task::Drone => 1, Task::Rover => 2 } }
+    pub fn name(self) -> &'static str { match self { Task::Lander => "lander", Task::Drone => "drone", Task::Rover => "rover" } }
+}
+
+/// Параметры, уже разобранные к началу эпизода: в цикле физики нельзя искать строки.
+#[derive(Clone, Debug)]
+struct Tune {
+    throttle_min: f64, misalign: f64, cg_offset: f64, drone_mass: f64, t2w: f64, rover_vmax: f64, tip_lat: f64, tip_long: f64, battery_rover: f64,
+    alt: (f64, f64), offset: f64, vh: f64, vz: (f64, f64), tilt: f64, goal: (f64, f64), pad: f64, terrain: f64, craters: f64, friction: f64, sun: f64,
+    lim_v: f64, lim_tilt: f64, lim_slope: f64, impact: f64, rew_ok: f64, rew_bad: f64, air: f64, wind: Vec3, solar: f64,
+    n_pos: f64, n_vel: f64, n_att: f64, n_gyro: f64, n_acc: f64, n_rng: f64, gyro_bias: f64, accel_bias: f64, dropout: f64, delay: usize, dt: f64, action_noise: f64,
+}
+
+impl Tune {
+    fn zero() -> Tune {
+        Tune { throttle_min: 0.0, misalign: 0.0, cg_offset: 0.0, drone_mass: 1.5, t2w: 2.5, rover_vmax: 2.5, tip_lat: 1.0, tip_long: 1.33, battery_rover: 2.16e6,
+            alt: (0.0, 0.0), offset: 0.0, vh: 0.0, vz: (0.0, 0.0), tilt: 0.0, goal: (0.0, 0.0), pad: 25.0, terrain: 1.0, craters: 1.0, friction: -1.0, sun: -1.0,
+            lim_v: 2.5, lim_tilt: 15.0, lim_slope: 12.0, impact: 3.0, rew_ok: 100.0, rew_bad: 100.0, air: 1.0, wind: Vec3::ZERO, solar: 1.0,
+            n_pos: 1.0, n_vel: 1.0, n_att: 1.0, n_gyro: 1.0, n_acc: 1.0, n_rng: 1.0, gyro_bias: 0.0, accel_bias: 0.0, dropout: 0.0, delay: 0, dt: 0.005, action_noise: 0.0 }
+    }
+    fn resolve(cfg: &EnvConfig) -> Tune {
+        let i = cfg.task.index();
+        let v = |k: &str| -> f64 {
+            cfg.vehicle.iter().find(|(n, _)| n == k).map(|x| x.1).unwrap_or_else(|| param_def(k).map(|d| d.defaults[i]).unwrap_or(0.0))
+        };
+        let h = v("cg_height");
+        let ordered = |a: f64, b: f64| (a.min(b), a.max(b));
+        Tune { throttle_min: v("throttle_min"), misalign: v("thrust_misalign").to_radians(), cg_offset: v("cg_offset"), drone_mass: v("drone_mass"), t2w: v("thrust_to_weight"),
+            rover_vmax: v("rover_vmax"), tip_lat: 0.6 / h, tip_long: 0.8 / h, battery_rover: v("battery_kwh") * 3.6e6,
+            alt: ordered(v("start_alt_min"), v("start_alt_max")), offset: v("start_offset"), vh: v("start_vh"), vz: ordered(v("start_vz_min"), v("start_vz_max")), tilt: v("start_tilt").to_radians(),
+            goal: ordered(v("goal_dist_min"), v("goal_dist_max")), pad: v("pad_radius"), terrain: v("terrain_scale"), craters: v("crater_scale"), friction: v("friction"), sun: v("sun_elev"),
+            lim_v: v("touch_speed_limit"), lim_tilt: v("touch_tilt_limit"), lim_slope: v("touch_slope_limit"), impact: v("impact_limit"), rew_ok: v("reward_success"), rew_bad: v("reward_crash"),
+            air: v("air_scale"), wind: Vec3::new(v("wind_x"), v("wind_y"), 0.0), solar: v("solar_scale"),
+            n_pos: v("noise_pos"), n_vel: v("noise_vel"), n_att: v("noise_att"), n_gyro: v("noise_gyro"), n_acc: v("noise_accel"), n_rng: v("noise_range"),
+            gyro_bias: v("gyro_bias"), accel_bias: v("accel_bias"), dropout: v("sensor_dropout"), delay: v("obs_delay") as usize, dt: v("physics_dt"), action_noise: v("action_noise") }
+    }
+}
 
 impl EnvConfig {
     pub fn new(task: &str, physics: &str) -> Result<EnvConfig, String> {
@@ -247,6 +381,65 @@ impl EnvConfig {
         Ok(EnvConfig { task, world: WorldSpec::preset(physics), randomize: false, noise: 1.0, frame_skip: 4,
             max_steps: match task { Task::Lander => 5000, Task::Drone => 2500, Task::Rover => 4000 }, rotor_scale: 1.0,
             worlds: vec![], gust: 0.0, actuator_lag: 0.0, fault_prob: 0.0, vehicle: vec![] })
+    }
+
+    /// Задать параметр из реестра с проверкой диапазона и применимости к задаче.
+    pub fn set(&mut self, name: &str, value: f64) -> Result<(), String> {
+        let d = param_def(name).ok_or_else(|| {
+            let mut near: Vec<&str> = PARAMS.iter().filter(|d| d.tasks & self.task.bit() != 0).map(|d| d.name).collect();
+            near.sort();
+            format!("неизвестный параметр '{name}'. Для {}: {}", self.task.name(), near.join(", "))
+        })?;
+        if d.tasks & self.task.bit() == 0 { return Err(format!("параметр '{name}' не применим к задаче {}", self.task.name())); }
+        if !value.is_finite() || value < d.min || value > d.max { return Err(format!("{name} = {value} вне диапазона [{}, {}] {}", d.min, d.max, d.unit)); }
+        match name {
+            "noise" => self.noise = value,
+            "rotor_scale" => self.rotor_scale = value,
+            "gust" => self.gust = value,
+            "actuator_lag" => self.actuator_lag = value,
+            "fault_prob" => self.fault_prob = value,
+            "frame_skip" => self.frame_skip = value as usize,
+            "max_steps" => self.max_steps = value as usize,
+            _ => { self.vehicle.retain(|(n, _)| n != name); self.vehicle.push((name.to_string(), value)); }
+        }
+        Ok(())
+    }
+
+    /// Список вида `dry_mass=900,gust=2` из CLI, API и Python.
+    pub fn set_list(&mut self, list: &str) -> Result<(), String> {
+        for item in list.split(',').map(|x| x.trim()).filter(|x| !x.is_empty()) {
+            let (k, v) = item.split_once('=').or_else(|| item.split_once(':')).ok_or(format!("'{item}': нужен вид имя=значение"))?;
+            let x: f64 = v.trim().parse().map_err(|_| format!("{}: ожидалось число, получено '{v}'", k.trim()))?;
+            self.set(k.trim(), x)?;
+        }
+        Ok(())
+    }
+
+    /// Текущее значение параметра с учётом значения по умолчанию для задачи.
+    pub fn get(&self, name: &str) -> Option<f64> {
+        let d = param_def(name)?;
+        Some(match name {
+            "noise" => self.noise, "rotor_scale" => self.rotor_scale, "gust" => self.gust, "actuator_lag" => self.actuator_lag,
+            "fault_prob" => self.fault_prob, "frame_skip" => self.frame_skip as f64, "max_steps" => self.max_steps as f64,
+            _ => self.vehicle.iter().find(|(n, _)| n == name).map(|x| x.1).unwrap_or(d.defaults[self.task.index()]),
+        })
+    }
+}
+
+/// Значение параметра по умолчанию для задачи.
+pub fn param_default(task: Task, name: &str) -> Option<f64> { param_def(name).map(|d| d.defaults[task.index()]) }
+
+impl EnvConfig {
+    fn apply_gravity(&mut self) -> Result<(), String> {
+        // своя гравитация задаётся абсолютно, а мир хранит масштаб
+        let g = self.vehicle.iter().find(|(n, _)| n == "gravity").map(|x| x.1).unwrap_or(0.0);
+        if g > 0.0 {
+            let scale = |spec: &mut WorldSpec| -> Result<(), String> { let now = World::build(spec)?.g_surface(); spec.gravity_scale *= g / now; Ok(()) };
+            scale(&mut self.world)?;
+            for w in &mut self.worlds { scale(w)?; }
+            self.vehicle.retain(|(n, _)| n != "gravity");
+        }
+        Ok(())
     }
 }
 
@@ -317,14 +510,20 @@ pub struct Env {
     touch_msg: String,
     touch_bonus: f64,
     touched: bool,
+    tune: Tune,
+    obs_queue: std::collections::VecDeque<Vec<f64>>,
+    held: Vec<f64>,
+    gyro_b: Vec3,
+    accel_b: Vec3,
 }
 
 /// Имена скрытых параметров эпизода (см. `Env::params`): то, что модель мира должна вывести сама.
 pub const PARAM_NAMES: &[&str] = &["g", "rho0", "p0_kpa", "t0_k", "friction", "dry_mass", "fuel_mass", "isp", "t_max", "torque_max", "rotor_area", "rover_mass",
-    "wind_x", "wind_y", "gust", "actuator_lag", "fault_actuator", "fault_gain", "world_index", "goal_x", "goal_y", "goal_z", "control_dt"];
+    "wind_x", "wind_y", "gust", "actuator_lag", "fault_actuator", "fault_gain", "world_index", "goal_x", "goal_y", "goal_z", "control_dt", "pad_radius", "gyro_bias_x", "gyro_bias_y", "gyro_bias_z"];
 
 impl Env {
-    pub fn new(cfg: EnvConfig) -> Result<Env, String> {
+    pub fn new(mut cfg: EnvConfig) -> Result<Env, String> {
+        cfg.apply_gravity()?;
         let world = World::build(&cfg.world)?;
         let terrain = Arc::new(Terrain::plane(0.0, 0.8));
         let mut e = Env {
@@ -336,6 +535,7 @@ impl Env {
             rng: Rng::new(0), battery: 0.0, heading: 0.0, speed: 0.0, yaw_rate: 0.0, sun_elev: 0.5, prev_shaping: 0.0, hover_time: 0.0, cfg,
             world_index: 0, act_state: [0.0; 4], act_gain: [1.0; 4], fault: None, gust_v: Vec3::ZERO, dyn_rng: Rng::new(0),
             in_contact: false, settle_t: 0.0, ground_t: 0.0, touch_msg: String::new(), touch_bonus: 0.0, touched: false,
+            tune: Tune::zero(), obs_queue: Default::default(), held: vec![], gyro_b: Vec3::ZERO, accel_b: Vec3::ZERO,
         };
         for spec in &e.cfg.worlds { World::build(spec)?; }
         e.reset(1);
@@ -385,13 +585,14 @@ impl Env {
     fn g(&self) -> f64 { self.world.g_at(self.body.pos.z.max(0.0)) }
     fn air(&self, z: f64) -> (f64, f64, f64) {
         match &self.world.atmosphere {
-            Some(a) => { let s = a.at(z.max(0.0)); (s.density, s.pressure, s.temperature) }
+            Some(a) => { let s = a.at(z.max(0.0)); (s.density * self.tune.air, s.pressure * self.tune.air, s.temperature) }
             None => (0.0, 0.0, self.world.mean_surface_temperature()),
         }
     }
 
     pub fn reset(&mut self, seed: u64) -> Vec<f64> {
         self.seed = seed;
+        self.tune = Tune::resolve(&self.cfg);
         self.rng = Rng::new(seed);
         // рандомизация мира: множитель g ±20%, расстояние до звезды
         self.world = self.base_world.clone();
@@ -411,7 +612,7 @@ impl Env {
         self.done = false;
         self.ep_return = 0.0;
         self.info = StepInfo::default();
-        self.dt = if self.cfg.task == Task::Rover { 0.025 } else { 0.005 };
+        self.dt = self.tune.dt;
         self.hover_time = 0.0;
         self.in_contact = false;
         self.touched = false;
@@ -424,9 +625,9 @@ impl Env {
         self.fault = None;
         self.gust_v = Vec3::ZERO;
         self.dyn_rng = Rng::new(seed ^ 0xD15C);
-        let pad = match self.cfg.task { Task::Lander => 25.0, Task::Rover => 8.0, Task::Drone => 15.0 };
+        let pad = self.tune.pad;
         let size = match self.cfg.task { Task::Rover => 600.0, _ => 1200.0 };
-        self.terrain = Arc::new(Terrain::generate(&self.world, seed, size, 161, pad));
+        self.terrain = Arc::new(Terrain::generate_tuned(&self.world, seed, size, 161, pad, self.tune.terrain, self.tune.craters, self.tune.friction));
         let r = |rng: &mut Rng, s: f64| if s > 0.0 { rng.uniform(1.0 - s, 1.0 + s) } else { 1.0 };
         let rs = if self.cfg.randomize { 1.0 } else { 0.0 };
         self.p = Params {
@@ -438,41 +639,44 @@ impl Env {
         self.apply_vehicle();
         let (rho, _, _) = self.air(0.0);
         self.wind = if rho > 0.0 && self.cfg.randomize { Vec3::new(self.rng.normal(), self.rng.normal(), 0.0) * 4.0 } else { Vec3::ZERO };
+        if rho > 0.0 { self.wind += self.tune.wind; }
         let h0 = self.terrain.height(0.0, 0.0);
         match self.cfg.task {
             Task::Lander => {
                 let mut rng = Rng::new(seed ^ 77);
-                let alt = rng.uniform(300.0, 700.0);
-                let off = Vec3::new(rng.uniform(-200.0, 200.0), rng.uniform(-200.0, 200.0), 0.0);
-                let tilt = Quat::from_axis_angle(Vec3::new(rng.normal(), rng.normal(), 0.0), rng.uniform(0.0, 0.15));
+                let t = self.tune.clone();
+                let alt = rng.uniform(t.alt.0, t.alt.1);
+                let off = Vec3::new(rng.uniform(-t.offset, t.offset), rng.uniform(-t.offset, t.offset), 0.0);
+                let tilt = Quat::from_axis_angle(Vec3::new(rng.normal(), rng.normal(), 0.0), rng.uniform(0.0, t.tilt));
                 let m = self.p.dry_mass + self.p.fuel;
-                self.body = Body { pos: Vec3::new(off.x, off.y, h0 + alt), vel: Vec3::new(rng.uniform(-15.0, 15.0), rng.uniform(-15.0, 15.0), rng.uniform(-35.0, -10.0)),
+                self.body = Body { pos: Vec3::new(off.x, off.y, h0 + alt), vel: Vec3::new(rng.uniform(-t.vh, t.vh), rng.uniform(-t.vh, t.vh), -rng.uniform(t.vz.0, t.vz.1)),
                     q: tilt, w: Vec3::new(rng.normal(), rng.normal(), rng.normal()) * 0.02, mass: m,
                     inertia: Vec3::new(m * (3.0 * 1.5f64.powi(2) + 3.0f64.powi(2)) / 12.0, m * (3.0 * 1.5f64.powi(2) + 3.0f64.powi(2)) / 12.0, m * 1.5f64.powi(2) / 2.0) };
                 self.goal = Vec3::new(0.0, 0.0, h0);
             }
             Task::Drone => {
                 let mut rng = Rng::new(seed ^ 99);
-                let m = 1.5;
+                let m = self.tune.drone_mass;
                 let ang = rng.uniform(0.0, 2.0 * PI);
-                let d = rng.uniform(20.0, 60.0);
+                let d = rng.uniform(self.tune.goal.0, self.tune.goal.1);
                 let (gx, gy) = (d * ang.cos(), d * ang.sin());
                 self.goal = Vec3::new(gx, gy, self.terrain.height(gx, gy) + rng.uniform(5.0, 20.0));
                 // старт в воздухе: иначе без автопилота эпизод кончается за доли секунды и данных нет
-                self.body = Body { pos: Vec3::new(0.0, 0.0, h0 + rng.uniform(8.0, 30.0)), vel: Vec3::ZERO, q: Quat::ID, w: Vec3::ZERO, mass: m, inertia: Vec3::new(0.02, 0.02, 0.04) };
+                self.body = Body { pos: Vec3::new(0.0, 0.0, h0 + rng.uniform(self.tune.alt.0, self.tune.alt.1)), vel: Vec3::ZERO, q: Quat::ID, w: Vec3::ZERO, mass: m, inertia: Vec3::new(0.02, 0.02, 0.04) * (m / 1.5) };
                 self.battery = self.p.battery_j;
             }
             Task::Rover => {
                 let mut rng = Rng::new(seed ^ 55);
                 let ang = rng.uniform(0.0, 2.0 * PI);
-                let d = rng.uniform(80.0, 220.0);
+                let d = rng.uniform(self.tune.goal.0, self.tune.goal.1);
                 let (gx, gy) = (d * ang.cos(), d * ang.sin());
                 self.goal = Vec3::new(gx, gy, self.terrain.height(gx, gy));
                 self.heading = rng.uniform(-PI, PI);
                 self.speed = 0.0;
                 self.yaw_rate = 0.0;
                 self.sun_elev = rng.uniform(0.15, 1.2);
-                self.battery = 0.6 * 3.6e6; // 0.6 кВт·ч
+                if self.tune.sun >= 0.0 { self.sun_elev = self.tune.sun.to_radians(); }
+                self.battery = self.tune.battery_rover;
                 self.body = Body { pos: Vec3::new(0.0, 0.0, h0), vel: Vec3::ZERO, q: Quat::ID, w: Vec3::ZERO, mass: self.p.rover_mass, inertia: Vec3::new(1.0, 1.0, 40.0) };
             }
         }
@@ -483,8 +687,13 @@ impl Env {
             self.act_gain[i] = g;
             self.fault = Some((i, g));
         }
+        let (gb, ab) = (self.tune.gyro_bias, self.tune.accel_bias);
+        self.gyro_b = Vec3::new(self.dyn_rng.normal(), self.dyn_rng.normal(), self.dyn_rng.normal()) * gb;
+        self.accel_b = Vec3::new(self.dyn_rng.normal(), self.dyn_rng.normal(), self.dyn_rng.normal()) * ab;
         self.prev_shaping = self.shaping();
         self.last_action = vec![0.0; n_act];
+        self.held.clear();
+        self.obs_queue.clear();
         self.last_obs = self.observe();
         self.last_obs.clone()
     }
@@ -495,6 +704,7 @@ impl Env {
 
     fn observe(&mut self) -> Vec<f64> {
         let b = self.body.clone();
+        let t = self.tune.clone();
         let (rho, p, temp) = self.air(b.pos.z);
         self.last_lidar.clear();
         match self.cfg.task {
@@ -507,12 +717,12 @@ impl Env {
                 let rel = if self.cfg.task == Task::Lander { b.pos - self.goal } else { self.goal - b.pos };
                 let mut hits = vec![if radar < 2000.0 { 1.0 } else { 0.0 }];
                 let mut o = vec![
-                    rel.x + self.n(1.0), rel.y + self.n(1.0), rel.z + self.n(1.0),
-                    b.vel.x + self.n(0.1), b.vel.y + self.n(0.1), b.vel.z + self.n(0.1),
-                    up_b.x + self.n(0.005), up_b.y + self.n(0.005), up_b.z + self.n(0.005),
-                    b.w.x + self.n(0.005), b.w.y + self.n(0.005), b.w.z + self.n(0.005),
-                    radar + self.n(0.3),
-                    acc.x + self.n(0.05), acc.y + self.n(0.05), acc.z + self.n(0.05),
+                    rel.x + self.n(1.0 * t.n_pos), rel.y + self.n(1.0 * t.n_pos), rel.z + self.n(1.0 * t.n_pos),
+                    b.vel.x + self.n(0.1 * t.n_vel), b.vel.y + self.n(0.1 * t.n_vel), b.vel.z + self.n(0.1 * t.n_vel),
+                    up_b.x + self.n(0.005 * t.n_att), up_b.y + self.n(0.005 * t.n_att), up_b.z + self.n(0.005 * t.n_att),
+                    b.w.x + self.gyro_b.x + self.n(0.005 * t.n_gyro), b.w.y + self.gyro_b.y + self.n(0.005 * t.n_gyro), b.w.z + self.gyro_b.z + self.n(0.005 * t.n_gyro),
+                    radar + self.n(0.3 * t.n_rng),
+                    acc.x + self.accel_b.x + self.n(0.05 * t.n_acc), acc.y + self.accel_b.y + self.n(0.05 * t.n_acc), acc.z + self.accel_b.z + self.n(0.05 * t.n_acc),
                 ];
                 if self.cfg.task == Task::Lander {
                     o.push((b.mass - self.p.dry_mass) / self.p.fuel);
@@ -524,7 +734,7 @@ impl Env {
                         let d = b.q.rotate(dir_b);
                         let r = self.terrain.raycast(b.pos, d, 1000.0);
                         self.last_lidar.push((b.pos, b.pos + d.unit() * r));
-                        o.push(r + self.n(0.2));
+                        o.push(r + self.n(0.2 * t.n_rng));
                         hits.push(if r < 1000.0 { 1.0 } else { 0.0 });
                     }
                 } else {
@@ -542,9 +752,9 @@ impl Env {
                 let pitch = (gx * c + gy * s).atan();
                 let roll = (-gx * s + gy * c).atan();
                 let mut o = vec![
-                    rel.x + self.n(0.5), rel.y + self.n(0.5), c + self.n(0.01), s + self.n(0.01),
-                    self.speed + self.n(0.02), self.yaw_rate + self.n(0.005), pitch + self.n(0.005), roll + self.n(0.005),
-                    self.battery / (0.6 * 3.6e6), self.sun_elev, temp + self.n(0.5), p / 1e3,
+                    rel.x + self.n(0.5 * t.n_pos), rel.y + self.n(0.5 * t.n_pos), c + self.n(0.01 * t.n_att), s + self.n(0.01 * t.n_att),
+                    self.speed + self.n(0.02 * t.n_vel), self.yaw_rate + self.gyro_b.z + self.n(0.005 * t.n_gyro), pitch + self.n(0.005 * t.n_att), roll + self.n(0.005 * t.n_att),
+                    self.battery / t.battery_rover, self.sun_elev, temp + self.n(0.5), p / 1e3,
                 ];
                 let eye = b.pos + Vec3::new(0.0, 0.0, 1.0);
                 let mut hits = Vec::with_capacity(16);
@@ -553,7 +763,7 @@ impl Env {
                     let d = Vec3::new(a.cos(), a.sin(), -0.06);
                     let r = self.terrain.raycast(eye, d, 40.0);
                     self.last_lidar.push((eye, eye + d.unit() * r));
-                    o.push(r + self.n(0.05));
+                    o.push(r + self.n(0.05 * t.n_rng));
                     hits.push(if r < 40.0 { 1.0 } else { 0.0 });
                 }
                 o.extend(hits);
@@ -649,18 +859,24 @@ impl Env {
         match self.cfg.task {
             Task::Lander => {
                 let fuel_left = b.mass - self.p.dry_mass;
-                let thr = if fuel_left > 0.0 { a.first().copied().unwrap_or(0.0).clamp(0.0, 1.0) * self.p.t_max } else { 0.0 };
-                f += b.q.rotate(Vec3::new(0.0, 0.0, thr));
+                let cmd = a.first().copied().unwrap_or(0.0).clamp(0.0, 1.0);
+                // двигатель либо выключен, либо работает не ниже минимального газа
+                let cmd = if cmd > 1e-3 { cmd.max(self.tune.throttle_min) } else { 0.0 };
+                let thr = if fuel_left > 0.0 { cmd * self.p.t_max } else { 0.0 };
+                let axis = Vec3::new(self.tune.misalign.sin(), 0.0, self.tune.misalign.cos());
+                f += b.q.rotate(axis * thr);
                 mdot = thr / (self.p.isp * G0); // Циолковский: ṁ = T / (Isp·g₀)
                 let rcs = |k: usize| a.get(k).copied().unwrap_or(0.0).clamp(-1.0, 1.0);
                 tq = Vec3::new(rcs(1), rcs(2), rcs(3)) * self.p.torque_max;
+                // центр масс не на оси двигателя: тяга создаёт постоянный момент
+                tq += Vec3::new(self.tune.cg_offset, 0.0, 0.0).cross(axis * thr);
                 f += v_rel * (-0.5 * rho * self.p.cd * self.p.area * v_rel.norm());
                 f += Vec3::new(0.0, 0.0, rho * self.p.volume * g); // Архимед
             }
             Task::Drone => {
                 // импульсная теория: T_max ∝ ρ·A (при фикс. окружной скорости лопасти), P_инд = T^{3/2}/√(2ρA)
                 let a_rot = self.p.rotor_area / 4.0;
-                let t_max_each = 2.5 * 1.5 * G0 / 4.0 * (rho / 1.225) * (a_rot / (PI * 0.12f64.powi(2)));
+                let t_max_each = self.tune.t2w * self.tune.drone_mass * G0 / 4.0 * (rho / 1.225) * (a_rot / (PI * 0.12f64.powi(2)));
                 let powered = self.battery > 0.0;
                 let mut ts = [0.0; 4];
                 for i in 0..4 {
@@ -721,6 +937,7 @@ impl Env {
                 "motor_force" => p.motor_force = *v,
                 "panel_area" => p.panel_area = *v,
                 "battery_kj" => p.battery_j = *v * 1e3,
+                "rolling_resistance" => p.crr = *v,
                 _ => {}
             }
         }
@@ -798,7 +1015,7 @@ impl Env {
                 for k in 0..2 {
                     let cmd = if powered { a.get(k).copied().unwrap_or(0.0).clamp(-1.0, 1.0) } else { 0.0 };
                     // характеристика мотора: сила падает с ростом скорости до нуля на v_max (противо-ЭДС)
-                    let along = if cmd * self.speed > 0.0 { (1.0 - self.speed.abs() / ROVER_V_MAX).max(0.0) } else { 1.0 };
+                    let along = if cmd * self.speed > 0.0 { (1.0 - self.speed.abs() / self.tune.rover_vmax).max(0.0) } else { 1.0 };
                     // сцепление: |F| ≤ μ·N/2 (закон Кулона), иначе колёса буксуют
                     side[k] = (cmd * along * self.p.motor_force / 2.0).clamp(-self.terrain.friction * n_force / 2.0, self.terrain.friction * n_force / 2.0);
                 }
@@ -818,9 +1035,9 @@ impl Env {
                 self.body.pos.z = self.terrain.height(self.body.pos.x, self.body.pos.y);
                 self.body.vel = Vec3::new(ground_v * c, ground_v * s, 0.0);
                 let p_mech: f64 = side.iter().map(|f| (f * self.speed).abs()).sum::<f64>() / 0.75 + 15.0;
-                let insol = self.world.insolation() * self.sun_elev.sin() * if rho > 0.0 { 0.75 } else { 1.0 };
+                let insol = self.tune.solar * self.world.insolation() * self.sun_elev.sin() * if rho > 0.0 { 0.75 } else { 1.0 };
                 let p_solar = self.p.panel_area * 0.25 * insol;
-                self.battery = (self.battery + (p_solar - p_mech) * dt).clamp(0.0, 0.6 * 3.6e6);
+                self.battery = (self.battery + (p_solar - p_mech) * dt).clamp(0.0, self.tune.battery_rover);
                 self.info.energy_used += p_mech * dt;
             }
         }
@@ -844,7 +1061,10 @@ impl Env {
     pub fn step(&mut self, action: &[f64]) -> (Vec<f64>, f64, bool, bool) {
         if self.done { return (self.last_obs.clone(), 0.0, true, false); }
         let (lo, hi) = self.act_bounds();
-        let a: Vec<f64> = action.iter().enumerate().map(|(i, x)| if x.is_finite() { x.clamp(lo[i], hi[i]) } else { 0.0 }).collect();
+        let mut a: Vec<f64> = action.iter().enumerate().map(|(i, x)| if x.is_finite() { x.clamp(lo[i], hi[i]) } else { 0.0 }).collect();
+        if self.tune.action_noise > 0.0 {
+            for i in 0..a.len() { a[i] = (a[i] + self.tune.action_noise * (hi[i] - lo[i]) * self.dyn_rng.normal()).clamp(lo[i], hi[i]); }
+        }
         self.last_action = a.clone();
         let fuel0 = self.info.fuel_used;
         let en0 = self.info.energy_used;
@@ -876,14 +1096,14 @@ impl Env {
                     reward += 0.5;
                     self.hover_time += self.control_dt();
                     if self.hover_time > 3.0 && !terminated {
-                        reward += 100.0; terminated = true; self.info.success = true;
+                        reward += self.tune.rew_ok; terminated = true; self.info.success = true;
                         self.info.reason = format!("зависание у цели 3 с, израсходовано {:.1} кДж", self.info.energy_used / 1e3);
                     }
                 } else { self.hover_time = 0.0; }
                 if self.battery <= 0.0 && !terminated { self.info.reason = "батарея разряжена".into(); }
                 if self.in_contact { self.ground_t += self.control_dt(); } else { self.ground_t = 0.0; }
                 if self.ground_t > 3.0 && !terminated {
-                    reward -= 20.0; terminated = true; self.info.crashed = true;
+                    reward -= 0.2 * self.tune.rew_bad; terminated = true; self.info.crashed = true;
                     self.info.reason = "не взлетел: 3 с на земле".into();
                 }
             }
@@ -891,7 +1111,7 @@ impl Env {
                 reward -= 2e-5 * (self.info.energy_used - en0);
                 let d = Vec3::new(self.goal.x - self.body.pos.x, self.goal.y - self.body.pos.y, 0.0).norm();
                 self.info.touch_offset = d;
-                if d < 3.0 { reward += 100.0; terminated = true; self.info.success = true; self.info.reason = "цель достигнута".into(); }
+                if d < 3.0 { reward += self.tune.rew_ok; terminated = true; self.info.success = true; self.info.reason = "цель достигнута".into(); }
                 let (gx, gy) = self.terrain.gradient(self.body.pos.x, self.body.pos.y);
                 let (c, s) = (self.heading.cos(), self.heading.sin());
                 let cos_t = 1.0 / (1.0 + gx * gx + gy * gy).sqrt();
@@ -899,8 +1119,8 @@ impl Env {
                 // опрокидывание: тангенс наклона + инерция против запаса устойчивости (колея/2h, база/2h)
                 let lateral = -gx * s + gy * c + self.speed * self.yaw_rate / g_n;
                 let longitudinal = gx * c + gy * s + (self.speed - speed0) / self.control_dt() / g_n;
-                if !terminated && (lateral.abs() > ROVER_TIP_LAT || longitudinal.abs() > ROVER_TIP_LONG) {
-                    reward -= 50.0; terminated = true; self.info.crashed = true; self.info.reason = "опрокинулся на склоне".into();
+                if !terminated && (lateral.abs() > self.tune.tip_lat || longitudinal.abs() > self.tune.tip_long) {
+                    reward -= self.tune.rew_bad; terminated = true; self.info.crashed = true; self.info.reason = "опрокинулся на склоне".into();
                 }
                 if self.battery <= 0.0 && self.sun_elev < 0.05 { terminated = true; self.info.reason = "батарея разряжена".into(); }
             }
@@ -915,8 +1135,23 @@ impl Env {
         if truncated { self.info.reason = "лимит времени".into(); }
         self.done = terminated || truncated;
         self.ep_return += reward;
-        self.last_obs = self.observe();
-        (self.last_obs.clone(), reward, terminated, truncated)
+        let raw = self.observe();
+        (self.delayed(raw), reward, terminated, truncated)
+    }
+
+    /// Пропуски показаний и задержка: агент может видеть устаревшее.
+    fn delayed(&mut self, mut raw: Vec<f64>) -> Vec<f64> {
+        if self.tune.dropout > 0.0 && self.held.len() == raw.len() {
+            for i in 0..raw.len() { if self.dyn_rng.f64() < self.tune.dropout { raw[i] = self.held[i]; } }
+        }
+        self.held = raw.clone();
+        let out = if self.tune.delay > 0 {
+            self.obs_queue.push_back(raw);
+            if self.obs_queue.len() > self.tune.delay + 1 { self.obs_queue.pop_front(); }
+            self.obs_queue.front().cloned().unwrap_or_default()
+        } else { raw };
+        self.last_obs = out.clone();
+        out
     }
 
     /// Контакт с поверхностью: (награда, сообщение, успех), если эпизод на этом кончился.
@@ -930,17 +1165,17 @@ impl Env {
                 if touching && !self.in_contact {
                     let (gx, gy) = self.terrain.gradient(b.pos.x, b.pos.y);
                     let slope = (gx * gx + gy * gy).sqrt().atan().to_degrees();
-                    if !(v < 2.5 && tilt < 15.0 && slope < 12.0) {
+                    if !(v < self.tune.lim_v && tilt < self.tune.lim_tilt && slope < self.tune.lim_slope) {
                         if !self.touched {
                             self.info.touch_speed = v;
                             self.info.touch_tilt = tilt;
                             self.info.touch_offset = ((b.pos.x - self.goal.x).powi(2) + (b.pos.y - self.goal.y).powi(2)).sqrt();
                         }
-                        return Some((-100.0, format!("крушение: {v:.1} м/с, наклон {tilt:.0}°, склон {slope:.0}°"), false));
+                        return Some((-self.tune.rew_bad, format!("крушение: {v:.1} м/с, наклон {tilt:.0}°, склон {slope:.0}°"), false));
                     }
                     if !self.touched {
                         let off = ((b.pos.x - self.goal.x).powi(2) + (b.pos.y - self.goal.y).powi(2)).sqrt();
-                        self.touch_bonus = if off < 25.0 { 100.0 } else { 40.0 };
+                        self.touch_bonus = self.tune.rew_ok * if off < self.tune.pad { 1.0 } else { 0.4 };
                         self.touch_msg = format!("мягкая посадка: {v:.2} м/с, наклон {tilt:.1}°, {off:.0} м от центра площадки");
                         self.info.touch_speed = v;
                         self.info.touch_tilt = tilt;
@@ -950,7 +1185,7 @@ impl Env {
                 }
                 self.in_contact = touching;
                 if !touching { self.settle_t = 0.0; return None; }
-                if tilt > 35.0 { return Some((-100.0, format!("опрокинулся после касания: наклон {tilt:.0}°"), false)); }
+                if tilt > 35.0 { return Some((-self.tune.rew_bad, format!("опрокинулся после касания: наклон {tilt:.0}°"), false)); }
                 if v < 0.2 && self.body.w.norm() < 0.15 { self.settle_t += self.dt; } else { self.settle_t = 0.0; }
                 if self.settle_t > 0.5 { return Some((self.touch_bonus, self.touch_msg.clone(), true)); }
                 None
@@ -960,9 +1195,9 @@ impl Env {
                 let ground = self.terrain.height(b.pos.x, b.pos.y) + 0.05;
                 if b.pos.z > ground { self.in_contact = false; return None; }
                 let v = b.vel.norm();
-                if !self.in_contact && v > 3.0 { return Some((-100.0, format!("удар о землю на {v:.1} м/с"), false)); }
+                if !self.in_contact && v > self.tune.impact { return Some((-self.tune.rew_bad, format!("удар о землю на {v:.1} м/с"), false)); }
                 let tilt = b.q.rotate(Vec3::new(0.0, 0.0, 1.0)).z.clamp(-1.0, 1.0).acos().to_degrees();
-                if tilt > 60.0 { return Some((-100.0, format!("опрокинулся на земле: наклон {tilt:.0}°"), false)); }
+                if tilt > 60.0 { return Some((-self.tune.rew_bad, format!("опрокинулся на земле: наклон {tilt:.0}°"), false)); }
                 // неупругий контакт: дрон стоит на земле и может снова взлететь
                 self.in_contact = true;
                 let b = &mut self.body;
@@ -1006,7 +1241,7 @@ impl Env {
                 format!("Мир: {wname}, T = {t:.0} К. Цель в {:.0} м (на восток {:.0}, на север {:.0}), курс {:.0}°. Скорость {:.2} м/с, батарея {:.0}%, \
 Солнце на высоте {:.0}°. Лидар вперёд: {:.1} м. Действия: left, right −1…1.",
                     (d.x * d.x + d.y * d.y).sqrt(), d.x, d.y, self.heading.to_degrees().rem_euclid(360.0), self.speed,
-                    100.0 * self.battery / (0.6 * 3.6e6), self.sun_elev.to_degrees(), ahead)
+                    100.0 * self.battery / self.tune.battery_rover, self.sun_elev.to_degrees(), ahead)
             }
         }
     }
@@ -1036,7 +1271,7 @@ impl Env {
                 let brake = (self.p.t_max / b.mass * self.act_gain[0] - g).max(0.3);
                 let vz_stop = (1.4 * brake * alt.max(0.0)).sqrt();
                 // пока не над площадкой — не снижаемся ниже 40 м: садиться можно только на ровное
-                let vz_target = if off > 12.0 && alt < 40.0 { (40.0 - alt) * 0.3 } else { -(1.0 + 0.12 * alt).min(vz_stop + 1.0).min(50.0) };
+                let vz_target = if off > self.tune.pad * 0.48 && alt < 40.0 { (40.0 - alt) * 0.3 } else { -(1.0 + 0.12 * alt).min(vz_stop + 1.0).min(50.0) };
                 let acc_des = Vec3::new((vh_target.x - b.vel.x) * 0.4, (vh_target.y - b.vel.y) * 0.4, (vz_target - b.vel.z) * 1.2 + g);
                 let want_up = acc_des.unit();
                 let up_w = b.q.rotate(Vec3::new(0.0, 0.0, 1.0));
@@ -1058,7 +1293,7 @@ impl Env {
                 let up_w = b.q.rotate(Vec3::new(0.0, 0.0, 1.0));
                 let err_b = b.q.inv_rotate(up_w.cross(want_up));
                 let a_rot = self.p.rotor_area / 4.0;
-                let tmax = 2.5 * 1.5 * G0 / 4.0 * (rho / 1.225) * (a_rot / (PI * 0.12f64.powi(2)));
+                let tmax = self.tune.t2w * self.tune.drone_mass * G0 / 4.0 * (rho / 1.225) * (a_rot / (PI * 0.12f64.powi(2)));
                 if tmax <= 0.0 { return vec![0.0; 4]; }
                 let base = acc_des.norm() * b.mass / 4.0 / tmax;
                 let tx = 0.6 * err_b.x - 0.15 * b.w.x;
@@ -1135,7 +1370,7 @@ impl Env {
         self.prev_shaping = self.shaping();
     }
     pub fn velocity(&self) -> Vec3 { if self.cfg.task == Task::Rover { self.body.vel } else { self.body.vel } }
-    pub fn battery_frac(&self) -> f64 { match self.cfg.task { Task::Drone => self.battery / self.p.battery_j, Task::Rover => self.battery / (0.6 * 3.6e6), _ => (self.body.mass - self.p.dry_mass) / self.p.fuel } }
+    pub fn battery_frac(&self) -> f64 { match self.cfg.task { Task::Drone => self.battery / self.p.battery_j, Task::Rover => self.battery / self.tune.battery_rover, _ => (self.body.mass - self.p.dry_mass) / self.p.fuel } }
     pub fn isp(&self) -> f64 { self.p.isp }
     pub fn dry_mass(&self) -> f64 { self.p.dry_mass }
     pub fn wind(&self) -> Vec3 { self.wind }
@@ -1177,6 +1412,6 @@ impl Env {
         let (rho, pr, t) = self.air(0.0);
         let (fa, fg) = self.fault.map(|(i, g)| (i as f64, g)).unwrap_or((-1.0, 1.0));
         vec![self.world.g_at(0.0), rho, pr / 1e3, t, self.terrain.friction, p.dry_mass, p.fuel, p.isp, p.t_max, p.torque_max, p.rotor_area, p.rover_mass,
-            self.wind.x, self.wind.y, self.cfg.gust, self.cfg.actuator_lag, fa, fg, self.world_index as f64, self.goal.x, self.goal.y, self.goal.z, self.control_dt()]
+            self.wind.x, self.wind.y, self.cfg.gust, self.cfg.actuator_lag, fa, fg, self.world_index as f64, self.goal.x, self.goal.y, self.goal.z, self.control_dt(), self.tune.pad, self.gyro_b.x, self.gyro_b.y, self.gyro_b.z]
     }
 }

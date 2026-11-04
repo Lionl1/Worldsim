@@ -9,7 +9,7 @@
 //! а не замена высокоточным инструментам и испытаниям.
 
 use crate::collect::episode_seed;
-use crate::env::{Env, EnvConfig, Task, VEHICLE_PARAMS};
+use crate::env::{param_def, param_default, Env, EnvConfig, Task};
 use crate::json::J;
 use crate::rng::Rng;
 use crate::vec3::Vec3;
@@ -18,7 +18,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 const METRICS: &[&str] = &["success", "crashed", "touch_speed", "touch_tilt", "touch_offset", "fuel_used", "energy_used_kj", "duration_s"];
-const DISPERSIONS: &[&str] = &["gravity", "dry_mass", "isp", "t_max", "torque_max", "rover_mass", "motor_force", "nav_noise", "gust", "actuator_lag", "fault"];
+/// Разбросы с особым смыслом; любой другой параметр реестра можно разбросать относительно.
+const SPECIAL_DISPERSIONS: &[&str] = &["gravity", "nav_noise", "gust", "actuator_lag", "fault"];
+const RELATIVE_FIRST: &[&str] = &["dry_mass", "isp", "t_max", "torque_max", "rover_mass", "motor_force"];
 const MAX_RUNS: usize = 20_000;
 
 #[derive(Clone, Debug)]
@@ -47,21 +49,25 @@ impl MissionSpec {
         let j = J::parse(text)?;
         let st = |k: &str, d: &str| j.get(k).and_then(|x| x.as_str()).unwrap_or(d).to_string();
         let task = st("task", "lander");
-        EnvConfig::new(&task, "earth")?;
+        let mut check = EnvConfig::new(&task, "earth")?;
+        let task_kind = check.task;
         let world = WorldSpec::parse(&st("world", "moon"));
         World::build(&world)?;
         let runs = j.get("runs").and_then(|x| x.as_f64()).unwrap_or(200.0);
         if !(1.0..=MAX_RUNS as f64).contains(&runs) { return Err(format!("runs: нужно от 1 до {MAX_RUNS}")); }
         let rotor_scale = j.get("rotor_scale").and_then(|x| x.as_f64()).unwrap_or(1.0);
         if rotor_scale <= 0.0 { return Err("rotor_scale должен быть больше нуля".into()); }
-        let vehicle = pairs(j.get("vehicle"), "vehicle")?;
-        for (k, v) in &vehicle {
-            if !VEHICLE_PARAMS.contains(&k.as_str()) { return Err(format!("vehicle.{k}: неизвестный параметр, доступны {VEHICLE_PARAMS:?}")); }
-            if *v <= 0.0 { return Err(format!("vehicle.{k}: должно быть больше нуля")); }
-        }
+        // параметры можно разложить по смысловым разделам, для движка это один список
+        let mut vehicle = pairs(j.get("vehicle"), "vehicle")?;
+        for section in ["scenario", "environment", "sensors", "control", "criteria", "params"] { vehicle.extend(pairs(j.get(section), section)?); }
+        for (k, v) in &vehicle { check.set(k, *v).map_err(|e| format!("параметры миссии: {e}"))?; }
         let dispersions = pairs(j.get("dispersions"), "dispersions")?;
         for (k, v) in &dispersions {
-            if !DISPERSIONS.contains(&k.as_str()) { return Err(format!("dispersions.{k}: неизвестный разброс, доступны {DISPERSIONS:?}")); }
+            if !SPECIAL_DISPERSIONS.contains(&k.as_str()) {
+                let d = param_def(k).ok_or(format!("dispersions.{k}: неизвестный параметр"))?;
+                if param_default(task_kind, k).unwrap_or(0.0) == 0.0 && !vehicle.iter().any(|(n, _)| n == k) { return Err(format!("dispersions.{k}: у параметра нет ненулевого значения, от которого считать разброс")); }
+                let _ = d;
+            }
             if *v < 0.0 { return Err(format!("dispersions.{k}: не может быть отрицательным")); }
         }
         let mut requirements = vec![];
@@ -85,8 +91,9 @@ impl MissionSpec {
                 name: t.get("name").and_then(|x| x.as_str()).map(|s| s.to_string()).unwrap_or(format!("Технология {}", i + 1)),
                 set: pairs(t.get("set"), "technologies.set")?, set_dispersion: pairs(t.get("set_dispersion"), "technologies.set_dispersion")?,
                 set_top: pairs(t.get("set_top"), "technologies.set_top")?, dry_mass_delta: t.get("dry_mass_delta").and_then(|x| x.as_f64()).unwrap_or(0.0) };
-            for (k, _) in &tech.set { if !VEHICLE_PARAMS.contains(&k.as_str()) { return Err(format!("technologies[{i}].set.{k}: неизвестный параметр")); } }
-            for (k, _) in &tech.set_dispersion { if !DISPERSIONS.contains(&k.as_str()) { return Err(format!("technologies[{i}].set_dispersion.{k}: неизвестный разброс")); } }
+            let mut c = check.clone();
+            for (k, v) in &tech.set { c.set(k, *v).map_err(|e| format!("technologies[{i}].set: {e}"))?; }
+            for (k, _) in &tech.set_dispersion { if !SPECIAL_DISPERSIONS.contains(&k.as_str()) && param_def(k).is_none() { return Err(format!("technologies[{i}].set_dispersion.{k}: неизвестный параметр")); } }
             for (k, _) in &tech.set_top { if k != "rotor_scale" { return Err(format!("technologies[{i}].set_top.{k}: доступен только rotor_scale")); } }
             technologies.push(tech);
         }
@@ -95,10 +102,9 @@ impl MissionSpec {
     }
 }
 
-/// Значение параметра аппарата по умолчанию (в среде), чтобы разброс считать от него.
-fn nominal(k: &str, spec: &[(String, f64)]) -> f64 {
-    spec.iter().find(|(n, _)| n == k).map(|(_, v)| *v).unwrap_or(match k {
-        "dry_mass" => 1000.0, "isp" => 300.0, "t_max" => 22000.0, "torque_max" => 3000.0, "rover_mass" => 180.0, "motor_force" => 900.0, _ => 1.0 })
+/// Значение параметра: заданное в миссии или значение по умолчанию; от него считается разброс.
+fn nominal(task: Task, k: &str, spec: &[(String, f64)]) -> f64 {
+    spec.iter().find(|(n, _)| n == k).map(|(_, v)| *v).or(param_default(task, k)).unwrap_or(1.0)
 }
 
 #[derive(Clone, Debug, Default)]
@@ -146,16 +152,19 @@ fn fly(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor
     cfg.gust = disp(d, "gust");
     cfg.actuator_lag = disp(d, "actuator_lag");
     cfg.fault_prob = disp(d, "fault").min(1.0);
+    let task = cfg.task;
     let mut veh = vehicle.to_vec();
-    for k in ["dry_mass", "isp", "t_max", "torque_max", "rover_mass", "motor_force"] {
+    let extras = d.iter().map(|x| x.0.as_str()).filter(|k| !RELATIVE_FIRST.contains(k) && !SPECIAL_DISPERSIONS.contains(k));
+    for k in RELATIVE_FIRST.iter().copied().chain(extras) {
         let s = disp(d, k);
         if s > 0.0 {
-            let v = nominal(k, vehicle) * (1.0 + s * n3()).max(0.05);
+            let def = param_def(k).ok_or(format!("неизвестный параметр {k}"))?;
+            let v = (nominal(task, k, vehicle) * (1.0 + s * n3()).max(0.05)).clamp(def.min, def.max);
             veh.retain(|(n, _)| n != k);
             veh.push((k.to_string(), v));
         }
     }
-    cfg.vehicle = veh;
+    for (k, v) in &veh { cfg.set(k, *v)?; }
     let mut env = Env::new(cfg)?;
     env.reset(seed);
     // оценка навигации: шумный GPS и скорость сглажены фильтром; идеальные сенсоры дают нулевую ошибку
@@ -282,7 +291,7 @@ pub fn run(spec: &MissionSpec, threads: usize) -> Result<J, String> {
         let mut veh = spec.vehicle.clone();
         for (k, v) in &t.set { veh.retain(|(n, _)| n != k); veh.push((k.clone(), *v)); }
         if t.dry_mass_delta != 0.0 {
-            let dm = t.set.iter().find(|(n, _)| n == "dry_mass").map(|x| x.1).unwrap_or(nominal("dry_mass", &veh)) + t.dry_mass_delta;
+            let dm = t.set.iter().find(|(n, _)| n == "dry_mass").map(|x| x.1).unwrap_or(nominal(EnvConfig::new(&spec.task, "earth")?.task, "dry_mass", &veh)) + t.dry_mass_delta;
             veh.retain(|(n, _)| n != "dry_mass");
             veh.push(("dry_mass".into(), dm));
         }

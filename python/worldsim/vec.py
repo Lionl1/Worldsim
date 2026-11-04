@@ -27,7 +27,7 @@ def _load():
     lib = C.CDLL(_find_lib())
     F, P, B = C.POINTER(C.c_float), C.c_void_p, C.POINTER(C.c_ubyte)
     lib.ws_vec_new.restype = P
-    lib.ws_vec_new.argtypes = [C.c_char_p, C.c_char_p, C.c_size_t, C.c_uint64, C.c_double, C.c_bool, C.c_size_t, C.c_size_t, C.c_double, C.c_double, C.c_double, C.c_double, C.c_size_t]
+    lib.ws_vec_new.argtypes = [C.c_char_p, C.c_char_p, C.c_size_t, C.c_uint64, C.c_double, C.c_bool, C.c_size_t, C.c_size_t, C.c_double, C.c_double, C.c_double, C.c_double, C.c_size_t, C.c_char_p]
     lib.ws_vec_free.argtypes = [P]
     lib.ws_vec_spec.restype = C.c_size_t
     lib.ws_vec_spec.argtypes = [P, C.c_char_p, C.c_size_t]
@@ -44,9 +44,10 @@ _F = C.POINTER(C.c_float)
 
 
 class VectorEnv:
-    def __init__(self, task="lander", worlds="moon", n=16, seed=1, noise=1.0, randomize=False, frame_skip=0, max_steps=0, rotor_scale=1.0, gust=0.0, lag=0.0, fault=0.0, threads=1):
+    def __init__(self, task="lander", worlds="moon", n=16, seed=1, noise=1.0, randomize=False, frame_skip=0, max_steps=0, rotor_scale=1.0, gust=0.0, lag=0.0, fault=0.0, threads=1, params=None):
+        """`params`: параметры реестра, например {"throttle_min": 0.1, "gyro_bias": 0.01}."""
         self.lib = _load()
-        self._p = self.lib.ws_vec_new(task.encode(), worlds.encode(), n, seed, noise, randomize, frame_skip, max_steps, rotor_scale, gust, lag, fault, threads)
+        self._p = self.lib.ws_vec_new(task.encode(), worlds.encode(), n, seed, noise, randomize, frame_skip, max_steps, rotor_scale, gust, lag, fault, threads, ",".join(f"{k}={v}" for k, v in (params or {}).items()).encode())
         if not self._p:
             buf = C.create_string_buffer(2048)
             k = self.lib.ws_last_error(buf, 2048)

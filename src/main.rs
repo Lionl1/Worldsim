@@ -6,6 +6,7 @@ use std::process::ExitCode;
 use worldsim::ballistics::{self, Launch, Options, Projectile};
 use worldsim::collect;
 use worldsim::constants::{AU, DAY, YEAR};
+use worldsim::env::{param_default, EnvConfig, Task};
 use worldsim::datagen::{self, DatasetConfig};
 use worldsim::magneto::{self, ParticleLaunch};
 use worldsim::mission;
@@ -31,12 +32,13 @@ const HELP: &str = "worldsim — физические модели миров
             --worlds earth,moon,mars --out data/ --seed 42 [--points 100] [--noise 0.01] [--strict]
   serve     [--port 8080] [--no-open]   3D-интерфейс в браузере (все модели)
   validate                      прогнать проверку всех законов
+  params    [--task lander|drone|rover]  все настраиваемые параметры: имя, единицы, диапазон, значение по умолчанию
   mission   файл.json [--out папка] [--threads N]
             Mission Lab: карта требований, главные факторы, ценность технологий (см. missions/)
   collect   --task lander|drone|rover --worlds moon,mars:earth:moon --episodes 1000 --out dir
             [--policies smooth,hold,auto_noise] [--noise 1] [--randomize] [--frame-skip 4] [--max-steps N]
             [--gust 2] [--lag 0.05] [--fault 0.2] [--rotor-scale 1] [--threads N] [--seed 42]
-            [--terrain 33] [--camera 64 --camera-every 5] [--counterfactuals 3]
+            [--terrain 33] [--camera 64 --camera-every 5] [--counterfactuals 3] [--set throttle_min=0.1,gyro_bias=0.01]
             переходы для обучения world model: .npy + meta.json (см. README)
 
 МИР (для любой команды)
@@ -100,7 +102,8 @@ fn allowed_flags(cmd: &str) -> Option<&'static [&'static str]> {
         "dataset" => &["task", "n", "worlds", "out", "seed", "points", "noise", "strict"],
         "serve" => &["port", "no-open"],
         "mission" => &["out", "threads"],
-        "collect" => &["task", "worlds", "episodes", "policies", "noise", "randomize", "frame-skip", "max-steps", "gust", "lag", "fault", "rotor-scale", "threads", "seed", "terrain", "camera", "camera-every", "counterfactuals", "out"],
+        "params" => &["task"],
+        "collect" => &["task", "worlds", "episodes", "policies", "noise", "randomize", "frame-skip", "max-steps", "gust", "lag", "fault", "rotor-scale", "threads", "seed", "terrain", "camera", "camera-every", "counterfactuals", "set", "out"],
         _ => return None,
     })
 }
@@ -114,6 +117,9 @@ fn check_flags(cmd: &str, kv: &HashMap<String, String>) -> Result<(), String> {
     if let Some(k) = bad.first() { return Err(format!("неизвестный ключ --{k} для команды '{cmd}'. worldsim --help")); }
     Ok(())
 }
+
+fn task_bit(t: Task) -> u8 { match t { Task::Lander => 1, Task::Drone => 2, Task::Rover => 4 } }
+fn task_index(t: Task) -> usize { match t { Task::Lander => 0, Task::Drone => 1, Task::Rover => 2 } }
 
 fn out_file(kv: &HashMap<String, String>) -> Result<Option<BufWriter<File>>, String> {
     kv.get("out").map(|p| File::create(p).map(BufWriter::new).map_err(|e| format!("{p}: {e}"))).transpose()
@@ -235,6 +241,14 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
             if port.fract() != 0.0 || !(1.0..=65535.0).contains(&port) { return Err(format!("--port: нужен порт от 1 до 65535, получено {port}")); }
             worldsim::server::serve(port as u16, !flag(kv, "no-open"))?
         }
+        "params" => {
+            let task = EnvConfig::new(kv.get("task").map(|s| s.as_str()).unwrap_or("lander"), "earth")?.task;
+            let mut group = "";
+            for d in worldsim::env::PARAMS.iter().filter(|d| param_default(task, d.name).is_some() && d.tasks & task_bit(task) != 0) {
+                if d.group != group { group = d.group; println!("\n{group}"); }
+                println!("  {:<20} {:<34} {:>9} {:<6} [{}, {}]", d.name, d.label, d.defaults[task_index(task)], d.unit, d.min, d.max);
+            }
+        }
         "mission" => {
             let path = pos.first().ok_or("укажите файл миссии: worldsim mission missions/lunar_lander.json --out report")?;
             let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -268,6 +282,7 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
                 camera_n: num(kv, "camera", 0.0)? as usize,
                 camera_every: num(kv, "camera-every", 1.0)? as usize,
                 counterfactuals: num(kv, "counterfactuals", 0.0)? as usize,
+                params: kv.get("set").cloned().unwrap_or_default(),
             };
             let st = collect::run(&cfg)?;
             println!("{}: {} эпизодов, {} переходов, успешных {:.1}%, {:.0} шагов/с → {}/", cfg.task, st.episodes, st.transitions,

@@ -158,3 +158,70 @@ fn lander_contact_is_observed_before_episode_ends() {
     assert!(e.info.success, "{}", e.info.reason);
     assert!(in_contact_steps > 10); // модель видит сам контакт, а не только конец эпизода
 }
+
+#[test]
+fn every_parameter_works_at_both_limits() {
+    use worldsim::env::PARAMS;
+    for task in ["lander", "drone", "rover"] {
+        for d in PARAMS {
+            let probe = EnvConfig::new(task, "mars").unwrap();
+            if probe.clone().set(d.name, d.min).is_err() { continue; } // не применим к этой задаче
+            for v in [d.min, d.max] {
+                let mut c = EnvConfig::new(task, "mars").unwrap();
+                c.set(d.name, v).unwrap();
+                if d.name == "max_steps" { c.max_steps = c.max_steps.min(300); }
+                let mut e = Env::new(c).unwrap_or_else(|x| panic!("{task} {} = {v}: {x}", d.name));
+                for seed in 0..2 {
+                    let o = e.reset(seed);
+                    assert!(o.iter().all(|x| x.is_finite()), "{task} {} = {v}: reset {o:?}", d.name);
+                    for _ in 0..150 {
+                        let a = e.autopilot();
+                        assert!(a.iter().all(|x| x.is_finite()), "{task} {} = {v}: действие {a:?}", d.name);
+                        let (o, r, t, c) = e.step(&a);
+                        assert!(o.iter().all(|x| x.is_finite()) && r.is_finite(), "{task} {} = {v}: шаг {o:?} {r}", d.name);
+                        if t || c { break; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn parameters_reject_bad_values_and_names() {
+    let mut c = EnvConfig::new("lander", "moon").unwrap();
+    assert!(c.set("isp", -1.0).is_err());
+    assert!(c.set("isp", f64::NAN).is_err());
+    assert!(c.set("warp_drive", 1.0).is_err());
+    assert!(c.set("rover_mass", 100.0).is_err()); // не та задача
+    assert!(c.set_list("isp=320,throttle_min=0.2").is_ok());
+    assert_eq!(c.get("isp"), Some(320.0));
+    assert!(c.set_list("isp").is_err());
+    assert!(c.set_list("isp=abc").is_err());
+}
+
+#[test]
+fn new_parameters_change_behaviour() {
+    let run = |list: &str| {
+        let mut c = EnvConfig::new("lander", "moon").unwrap();
+        c.noise = 0.0;
+        c.set_list(list).unwrap();
+        let mut e = Env::new(c).unwrap();
+        e.reset(3);
+        let h = e.terrain.height(0.0, 0.0);
+        e.set_state(worldsim::vec3::Vec3::new(0.0, 0.0, h + 300.0), worldsim::vec3::Vec3::ZERO);
+        let mut o = vec![];
+        for _ in 0..30 { o = e.step(&[0.5, 0.0, 0.0, 0.0]).0; }
+        o
+    };
+    let base = run("");
+    assert_eq!(base, run(""));
+    // смещение центра масс закручивает, перекос тяги сдвигает, минимальный газ не даёт работать ниже порога
+    assert!((run("cg_offset=0.2")[10] - base[10]).abs() > 1e-3);
+    assert!((run("thrust_misalign=5")[3] - base[3]).abs() > 1e-3);
+    assert!((run("throttle_min=0.8")[5] - base[5]).abs() > 1e-3);
+    assert!((run("gravity=5")[5] - base[5]).abs() > 1e-3);
+    // смещение гироскопа видно в наблюдении, а задержка отдаёт прошлое значение
+    assert!((run("gyro_bias=0.2")[9] - base[9]).abs() > 1e-3);
+    assert!((run("obs_delay=10")[5] - base[5]).abs() > 1e-3);
+}

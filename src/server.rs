@@ -228,6 +228,7 @@ fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
             let md = crate::mission::markdown(&report);
             Resp::json(report.set("markdown", md))
         }
+        "/api/env/schema" => Resp::json(param_schema()),
         "/api/env/fork" => env_fork(q, st)?,
         "/api/env/close" => env_close(q, st)?,
         "/api/validate" => Resp::json(J::Arr(validate::all().into_iter().map(|c| J::obj().set("law", c.law).set("test", c.test).set("value", c.value).set("expected", c.expected).set("pass", c.pass)).collect())),
@@ -575,6 +576,7 @@ fn env_make(q: &Q, st: &State) -> Result<Resp, String> {
     cfg.gust = f(q, "gust", 0.0);
     cfg.actuator_lag = f(q, "lag", 0.0);
     cfg.fault_prob = f(q, "fault", 0.0);
+    if let Some(p) = q.get("params") { cfg.set_list(p)?; }
     if let Some(w) = q.get("worlds").filter(|v| !v.is_empty()) { cfg.worlds = w.split(',').map(|x| WorldSpec::parse(x.trim())).collect(); }
     let mut env = Env::new(cfg)?;
     let obs = env.reset(f(q, "seed", 1.0) as u64);
@@ -586,6 +588,15 @@ fn env_make(q: &Q, st: &State) -> Result<Resp, String> {
         .set("obs", obs).set("text", env.describe());
     let id = store(st, Sim::Env(Box::new(env)));
     Ok(Resp::json(meta.set("id", id)))
+}
+
+/// Описание всех параметров для интерфейса и клиентов: форму можно построить без знания о конкретных полях.
+fn param_schema() -> J {
+    J::Arr(crate::env::PARAMS.iter().map(|d| {
+        let tasks: Vec<String> = [(1u8, "lander"), (2, "drone"), (4, "rover")].iter().filter(|(b, _)| d.tasks & b != 0).map(|(_, n)| n.to_string()).collect();
+        J::obj().set("name", d.name).set("group", d.group).set("label", d.label).set("unit", d.unit).set("min", d.min).set("max", d.max)
+            .set("tasks", tasks).set("defaults", J::obj().set("lander", d.defaults[0]).set("drone", d.defaults[1]).set("rover", d.defaults[2])).set("help", d.help)
+    }).collect())
 }
 
 fn str_list(v: &[&str]) -> J { J::Arr(v.iter().map(|x| J::from(*x)).collect()) }

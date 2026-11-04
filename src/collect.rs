@@ -97,6 +97,7 @@ pub struct CollectConfig {
     pub terrain_n: usize,
     pub camera_n: usize,
     pub camera_every: usize,
+    pub params: String,         // параметры реестра: dry_mass=900,gust=2
     pub counterfactuals: usize, // точек ветвления на эпизод: от одного состояния несколько действий с истинным ответом
 }
 
@@ -109,7 +110,7 @@ impl CollectConfig {
         CollectConfig { task: task.into(), worlds: worlds.iter().map(|w| WorldSpec::parse(w)).collect(),
             policies: vec![Policy::Smooth, Policy::Hold, Policy::AutoNoise], episodes, seed: 42, noise: 1.0, randomize: true,
             frame_skip: None, max_steps: None, rotor_scale: 1.0, gust: 0.0, lag: 0.0, fault: 0.0, threads: 1, out_dir: out_dir.into(),
-            terrain_n: 0, camera_n: 0, camera_every: 1, counterfactuals: 0 }
+            terrain_n: 0, camera_n: 0, camera_every: 1, counterfactuals: 0, params: String::new() }
     }
 
     fn env_config(&self, world: usize) -> Result<EnvConfig, String> {
@@ -121,6 +122,7 @@ impl CollectConfig {
         c.gust = self.gust;
         c.actuator_lag = self.lag;
         c.fault_prob = self.fault;
+        c.set_list(&self.params)?;
         if let Some(k) = self.frame_skip { c.frame_skip = k; }
         if let Some(m) = self.max_steps { c.max_steps = m; }
         Ok(c)
@@ -140,7 +142,7 @@ impl CollectConfig {
         }
         if !self.rotor_scale.is_finite() || self.rotor_scale <= 0.0 { return Err("--rotor-scale должен быть больше нуля".into()); }
         for w in &self.worlds { World::build(w)?; }
-        EnvConfig::new(&self.task, "earth").map(|_| ())
+        self.env_config(0).map(|_| ())
     }
 }
 
@@ -417,7 +419,7 @@ pub fn run(cfg: &CollectConfig) -> Result<CollectStats, String> {
         .set("frame_skip", probe.cfg.frame_skip).set("max_steps", probe.cfg.max_steps)
         .set("rotor_scale", cfg.rotor_scale).set("gust", cfg.gust).set("actuator_lag", cfg.lag).set("fault_prob", cfg.fault)
         .set("terrain_n", cfg.terrain_n).set("camera_n", cfg.camera_n).set("camera_every", cfg.camera_every)
-        .set("counterfactuals", cfg.counterfactuals).set("cf_branches", CF_BRANCHES).set("cf_horizon", CF_HORIZON);
+        .set("params", cfg.params.clone()).set("counterfactuals", cfg.counterfactuals).set("cf_branches", CF_BRANCHES).set("cf_horizon", CF_HORIZON);
     fs::write(file("meta.json"), meta.render()).map_err(|e| e.to_string())?;
     Ok(stats)
 }

@@ -27,7 +27,7 @@ fn write_str(s: &str, buf: *mut u8, cap: usize) -> usize {
 pub extern "C" fn ws_last_error(buf: *mut u8, cap: usize) -> usize { LAST_ERROR.with(|l| write_str(&l.borrow(), buf, cap)) }
 
 #[allow(clippy::too_many_arguments)]
-fn build(task: &str, worlds: &str, n: usize, seed: u64, noise: f64, randomize: bool, frame_skip: usize, max_steps: usize, rotor_scale: f64, gust: f64, lag: f64, fault: f64, threads: usize) -> Result<VecEnv, String> {
+fn build(task: &str, worlds: &str, n: usize, seed: u64, noise: f64, randomize: bool, frame_skip: usize, max_steps: usize, rotor_scale: f64, gust: f64, lag: f64, fault: f64, threads: usize, params: &str) -> Result<VecEnv, String> {
     if n == 0 { return Err("нужна хотя бы одна среда".into()); }
     let specs: Vec<WorldSpec> = worlds.split(',').map(|w| WorldSpec::parse(w.trim())).collect();
     let mut cfg = EnvConfig::new(task, "earth")?;
@@ -41,6 +41,7 @@ fn build(task: &str, worlds: &str, n: usize, seed: u64, noise: f64, randomize: b
     cfg.fault_prob = fault;
     if frame_skip > 0 { cfg.frame_skip = frame_skip; }
     if max_steps > 0 { cfg.max_steps = max_steps; }
+    cfg.set_list(params)?;
     let proto = Env::new(cfg)?;
     let (nobs, nact, nstate) = (proto.obs_names().len(), proto.act_names().len(), proto.state_names().len());
     Ok(VecEnv { envs: vec![proto; n], seed, episodes: vec![0; n], threads: threads.max(1), nobs, nact, nstate })
@@ -49,9 +50,9 @@ fn build(task: &str, worlds: &str, n: usize, seed: u64, noise: f64, randomize: b
 /// Возвращает указатель или null; причину даёт `ws_last_error`.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
-pub extern "C" fn ws_vec_new(task: *const c_char, worlds: *const c_char, n: usize, seed: u64, noise: f64, randomize: bool, frame_skip: usize, max_steps: usize, rotor_scale: f64, gust: f64, lag: f64, fault: f64, threads: usize) -> *mut VecEnv {
+pub extern "C" fn ws_vec_new(task: *const c_char, worlds: *const c_char, n: usize, seed: u64, noise: f64, randomize: bool, frame_skip: usize, max_steps: usize, rotor_scale: f64, gust: f64, lag: f64, fault: f64, threads: usize, params: *const c_char) -> *mut VecEnv {
     let text = |p: *const c_char| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned();
-    match build(&text(task), &text(worlds), n, seed, noise, randomize, frame_skip, max_steps, rotor_scale, gust, lag, fault, threads) {
+    match build(&text(task), &text(worlds), n, seed, noise, randomize, frame_skip, max_steps, rotor_scale, gust, lag, fault, threads, &text(params)) {
         Ok(v) => Box::into_raw(Box::new(v)),
         Err(e) => { set_error(e); std::ptr::null_mut() }
     }
