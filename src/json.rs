@@ -1,4 +1,4 @@
-//! Минимальный построитель JSON (без зависимостей).
+//! Minimal JSON builder (no dependencies).
 
 use std::fmt::Write;
 
@@ -23,13 +23,13 @@ impl J {
     pub fn as_arr(&self) -> Option<&[J]> { if let J::Arr(x) = self { Some(x) } else { None } }
     pub fn as_obj(&self) -> Option<&[(String, J)]> { if let J::Obj(x) = self { Some(x) } else { None } }
 
-    /// Разбор JSON (описание миссии): без зависимостей, ошибки — с позицией.
+    /// JSON parser (mission descriptions): no dependencies, errors include the position.
     pub fn parse(s: &str) -> Result<J, String> {
         let b = s.as_bytes();
         let mut i = 0;
         let v = parse_value(b, &mut i, 0)?;
         skip_ws(b, &mut i);
-        if i != b.len() { return Err(format!("JSON: лишний текст на позиции {i}")); }
+        if i != b.len() { return Err(format!("JSON: extra text at position {i}")); }
         Ok(v)
     }
     pub fn set(mut self, k: &str, v: impl Into<J>) -> J {
@@ -94,11 +94,11 @@ impl<T: Into<J>> From<Option<T>> for J { fn from(v: Option<T>) -> J { v.map(Into
 fn skip_ws(b: &[u8], i: &mut usize) { while *i < b.len() && (b[*i] as char).is_ascii_whitespace() { *i += 1; } }
 
 fn parse_value(b: &[u8], i: &mut usize, depth: usize) -> Result<J, String> {
-    if depth > 64 { return Err("JSON: слишком большая вложенность".into()); }
+    if depth > 64 { return Err("JSON: nesting too deep".into()); }
     skip_ws(b, i);
-    let err = |i: usize, m: &str| format!("JSON: {m} на позиции {i}");
+    let err = |i: usize, m: &str| format!("JSON: {m} at position {i}");
     match b.get(*i) {
-        None => Err(err(*i, "неожиданный конец")),
+        None => Err(err(*i, "unexpected end")),
         Some(b'{') => {
             *i += 1;
             let mut out = Vec::new();
@@ -106,13 +106,13 @@ fn parse_value(b: &[u8], i: &mut usize, depth: usize) -> Result<J, String> {
             if b.get(*i) == Some(&b'}') { *i += 1; return Ok(J::Obj(out)); }
             loop {
                 skip_ws(b, i);
-                let J::Str(k) = parse_value(b, i, depth + 1)? else { return Err(err(*i, "ключ должен быть строкой")); };
+                let J::Str(k) = parse_value(b, i, depth + 1)? else { return Err(err(*i, "key must be a string")); };
                 skip_ws(b, i);
-                if b.get(*i) != Some(&b':') { return Err(err(*i, "ожидалось ':'")); }
+                if b.get(*i) != Some(&b':') { return Err(err(*i, "expected ':'")); }
                 *i += 1;
                 out.push((k, parse_value(b, i, depth + 1)?));
                 skip_ws(b, i);
-                match b.get(*i) { Some(b',') => *i += 1, Some(b'}') => { *i += 1; return Ok(J::Obj(out)); } _ => return Err(err(*i, "ожидалось ',' или '}'")) }
+                match b.get(*i) { Some(b',') => *i += 1, Some(b'}') => { *i += 1; return Ok(J::Obj(out)); } _ => return Err(err(*i, "expected ',' or '}'")) }
             }
         }
         Some(b'[') => {
@@ -123,7 +123,7 @@ fn parse_value(b: &[u8], i: &mut usize, depth: usize) -> Result<J, String> {
             loop {
                 out.push(parse_value(b, i, depth + 1)?);
                 skip_ws(b, i);
-                match b.get(*i) { Some(b',') => *i += 1, Some(b']') => { *i += 1; return Ok(J::Arr(out)); } _ => return Err(err(*i, "ожидалось ',' или ']'")) }
+                match b.get(*i) { Some(b',') => *i += 1, Some(b']') => { *i += 1; return Ok(J::Arr(out)); } _ => return Err(err(*i, "expected ',' or ']'")) }
             }
         }
         Some(b'"') => {
@@ -131,7 +131,7 @@ fn parse_value(b: &[u8], i: &mut usize, depth: usize) -> Result<J, String> {
             let mut out = Vec::new();
             loop {
                 match b.get(*i) {
-                    None => return Err(err(*i, "незакрытая строка")),
+                    None => return Err(err(*i, "unterminated string")),
                     Some(b'"') => { *i += 1; break; }
                     Some(b'\\') => {
                         *i += 1;
@@ -140,20 +140,20 @@ fn parse_value(b: &[u8], i: &mut usize, depth: usize) -> Result<J, String> {
                             Some(b'n') => out.push(b'\n'), Some(b't') => out.push(b'\t'), Some(b'r') => out.push(b'\r'),
                             Some(b'b') => out.push(8), Some(b'f') => out.push(12),
                             Some(b'u') => {
-                                let h = b.get(*i + 1..*i + 5).and_then(|x| std::str::from_utf8(x).ok()).and_then(|x| u32::from_str_radix(x, 16).ok()).ok_or_else(|| err(*i, "плохой \\u"))?;
+                                let h = b.get(*i + 1..*i + 5).and_then(|x| std::str::from_utf8(x).ok()).and_then(|x| u32::from_str_radix(x, 16).ok()).ok_or_else(|| err(*i, "bad \\u"))?;
                                 let c = char::from_u32(h).unwrap_or('\u{FFFD}');
                                 let mut t = [0u8; 4];
                                 out.extend_from_slice(c.encode_utf8(&mut t).as_bytes());
                                 *i += 4;
                             }
-                            _ => return Err(err(*i, "плохая escape-последовательность")),
+                            _ => return Err(err(*i, "bad escape sequence")),
                         }
                         *i += 1;
                     }
                     Some(c) => { out.push(*c); *i += 1; }
                 }
             }
-            String::from_utf8(out).map(J::Str).map_err(|_| err(*i, "не UTF-8"))
+            String::from_utf8(out).map(J::Str).map_err(|_| err(*i, "not UTF-8"))
         }
         Some(b't') if b[*i..].starts_with(b"true") => { *i += 4; Ok(J::Bool(true)) }
         Some(b'f') if b[*i..].starts_with(b"false") => { *i += 5; Ok(J::Bool(false)) }
@@ -161,7 +161,7 @@ fn parse_value(b: &[u8], i: &mut usize, depth: usize) -> Result<J, String> {
         Some(_) => {
             let st = *i;
             while *i < b.len() && matches!(b[*i], b'0'..=b'9' | b'-' | b'+' | b'.' | b'e' | b'E') { *i += 1; }
-            std::str::from_utf8(&b[st..*i]).ok().and_then(|x| x.parse().ok()).map(J::Num).ok_or_else(|| err(st, "ожидалось значение"))
+            std::str::from_utf8(&b[st..*i]).ok().and_then(|x| x.parse().ok()).map(J::Num).ok_or_else(|| err(st, "expected a value"))
         }
     }
 }

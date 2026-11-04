@@ -1,6 +1,6 @@
-//! Задача N тел: закон всемирного тяготения + опционально 1PN-поправка ОТО (Шварцшильд)
-//! от центрального тела. Интеграторы: симплектические leapfrog (2-й порядок) и Йошида (4-й),
-//! которые сохраняют фазовый объём и не дают векового дрейфа энергии.
+//! N-body problem: law of universal gravitation + optional 1PN GR correction (Schwarzschild)
+//! from the central body. Integrators: symplectic leapfrog (2nd order) and Yoshida (4th),
+//! which preserve phase volume and show no secular energy drift.
 
 use crate::constants::C;
 use crate::orbit::elements_to_state;
@@ -22,14 +22,14 @@ pub enum Integrator { Leapfrog, Yoshida4 }
 pub struct NBody {
     pub bodies: Vec<Body>,
     pub t: f64,
-    /// Индекс тела, от которого считается 1PN-поправка ОТО (обычно Солнце).
+    /// Index of the body used for the 1PN GR correction (usually the Sun).
     pub relativity_center: Option<usize>,
     pub integrator: Integrator,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Invariants {
-    pub energy: f64,           // G·E  (в единицах GM, чтобы не терять точность на G)
+    pub energy: f64,           // G·E  (in GM units, to avoid losing precision on G)
     pub momentum: Vec3,        // G·P
     pub angular_momentum: Vec3,// G·L
     pub center_of_mass: Vec3,
@@ -40,23 +40,23 @@ impl NBody {
         NBody { bodies, t: 0.0, relativity_center: None, integrator: Integrator::Yoshida4 }
     }
 
-    /// Солнечная система (или её часть) из пресетов по элементам J2000.
+    /// Solar system (or part of it) from presets using elements J2000.
     pub fn from_presets(names: &[&str]) -> Result<Self, String> {
         let mut presets_v = Vec::new();
         for n in names { presets_v.push(presets::physics(n)?); }
         let idx = |n: &str| presets_v.iter().position(|p| p.name == n);
         let mut bodies: Vec<Body> = presets_v.iter().map(|p| Body { name: p.name.clone(), gm: p.gm, r: Vec3::ZERO, v: Vec3::ZERO }).collect();
-        // сначала тела вокруг корня, потом спутники (уровни иерархии)
+        // first bodies around the root, then moons (hierarchy levels)
         for pass in 0..3 {
             for (k, p) in presets_v.iter().enumerate() {
                 let Some(o) = &p.orbit else { continue };
                 let parent = match idx(&o.parent) {
                     Some(j) => j,
-                    None => continue, // родителя нет в системе — тело остаётся в начале координат
+                    None => continue, // the parent is not in the system: the body stays at the origin
                 };
                 let depth = depth_of(&presets_v, k);
                 if depth != pass + 1 { continue; }
-                // спутники родителя, присутствующие в системе, тоже вносят массу в барицентр
+                // moons of the parent present in the system also add mass to the barycenter
                 let moons_gm: f64 = presets_v.iter().filter(|q| q.orbit.as_ref().map(|oo| oo.parent == p.name).unwrap_or(false)).map(|q| q.gm).sum();
                 let mu = presets_v[parent].gm + p.gm + moons_gm;
                 let (r, v) = elements_to_state(mu, o.a, o.e, o.i, o.node, o.long_peri - o.node, o.mean_long - o.long_peri);
@@ -64,7 +64,7 @@ impl NBody {
                 bodies[k].v = bodies[parent].v + v;
                 let _ = moons_gm;
             }
-            // спутники этого уровня: сдвигаем родителя так, чтобы барицентр пары остался на месте
+            // moons at this level: shift the parent so the barycenter of the pair stays in place
             for (k, p) in presets_v.iter().enumerate() {
                 let Some(o) = &p.orbit else { continue };
                 let Some(parent) = idx(&o.parent) else { continue };
@@ -89,11 +89,11 @@ impl NBody {
     pub fn index(&self, name: &str) -> Option<usize> { self.bodies.iter().position(|b| b.name == name) }
 
     pub fn enable_relativity(&mut self, center: &str) -> Result<(), String> {
-        self.relativity_center = Some(self.index(center).ok_or(format!("нет тела {center}"))?);
+        self.relativity_center = Some(self.index(center).ok_or(format!("no body {center}"))?);
         Ok(())
     }
 
-    /// Перевод в систему центра масс (полный импульс = 0).
+    /// Convert to the center-of-mass frame (total momentum = 0).
     pub fn to_barycentric(&mut self) {
         let m: f64 = self.bodies.iter().map(|b| b.gm).sum();
         let rc = self.bodies.iter().fold(Vec3::ZERO, |a, b| a + b.r * b.gm) / m;
@@ -175,7 +175,7 @@ impl NBody {
         Invariants { energy: e, momentum: p, angular_momentum: l, center_of_mass: cm / m }
     }
 
-    /// Характерный масштаб импульса для относительных ошибок.
+    /// Characteristic momentum scale for relative errors.
     pub fn momentum_scale(&self) -> f64 { self.bodies.iter().map(|b| b.gm * b.v.norm()).sum::<f64>().max(1e-300) }
 }
 

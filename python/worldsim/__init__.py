@@ -1,4 +1,4 @@
-"""worldsim: физическая «реальность» для обучения и квалификации world models."""
+"""worldsim: physical “reality” for training and qualification world models."""
 from .client import Client, RemoteEnv
 from .data import Dataset
 from .mission import MissionRunner
@@ -9,7 +9,7 @@ from .vec import VectorEnv
 
 
 def fit_telemetry(*args, **kwargs):
-    """Калибровка по записи полёта, см. worldsim.calibrate. Импорт отложен, чтобы `python -m worldsim.calibrate` работал чисто."""
+    """Calibration from a flight recording, see worldsim.calibrate. The import is deferred so that `python -m worldsim.calibrate` runs cleanly."""
     from .calibrate import calibrate
     return calibrate(*args, **kwargs)
 

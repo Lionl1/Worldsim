@@ -1,10 +1,10 @@
-//! Сбор переходов для обучения world model: `worldsim collect`.
+//! Transition collection for training world model: `worldsim collect`.
 //!
-//! Эпизоды считаются параллельно, но результат не зависит от числа потоков: у каждого эпизода свой seed,
-//! а запись идёт строго по порядку. Формат — `.npy` (читается numpy без зависимостей) + `meta.json`.
+//! Episodes run in parallel, but the result does not depend on thread count: each episode has its own seed,
+//! and writing is strictly in order. Format — `.npy` (readable by numpy without dependencies) + `meta.json`.
 //!
-//! Файлы: `obs`, `next_obs`, `act`, `state`, `next_state` (T×…), `reward`, `terminated`, `truncated`, `episode`, `step`,
-//! `params` (эпизод × параметр), `episodes.csv`, необязательно `terrain` и `rgb` + `rgb_index`.
+//! Files: `obs`, `next_obs`, `act`, `state`, `next_state` (T×…), `reward`, `terminated`, `truncated`, `episode`, `step`,
+//! `params` (episode × parameter), `episodes.csv`, optional `terrain` and `rgb` + `rgb_index`.
 
 use crate::env::{Env, EnvConfig, PARAM_NAMES};
 use crate::json::J;
@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 
-/// Чем выбирать действия. Автопилот один дал бы только «хорошие» траектории, случайные — только падения.
+/// How actions are chosen. The autopilot alone would give only good trajectories, random actions only crashes.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Policy { Iid, Smooth, Hold, Auto, AutoNoise }
 
@@ -28,12 +28,12 @@ impl Policy {
     pub fn parse_list(s: &str) -> Result<Vec<Policy>, String> {
         s.split(',').map(|p| match p.trim() {
             "iid" => Ok(Policy::Iid), "smooth" => Ok(Policy::Smooth), "hold" => Ok(Policy::Hold), "auto" => Ok(Policy::Auto), "auto_noise" => Ok(Policy::AutoNoise),
-            x => Err(format!("неизвестная политика '{x}': iid, smooth, hold, auto, auto_noise")),
+            x => Err(format!("unknown policy '{x}': iid, smooth, hold, auto, auto_noise")),
         }).collect()
     }
 }
 
-/// Состояние политики внутри эпизода.
+/// Policy state within an episode.
 pub struct Actor { pub policy: Policy, rng: Rng, cur: Vec<f64>, hold_left: usize }
 
 impl Actor {
@@ -46,7 +46,7 @@ impl Actor {
         let r = &mut self.rng;
         match self.policy {
             Policy::Iid => lo.iter().zip(&hi).map(|(l, h)| r.uniform(*l, *h)).collect(),
-            // медленный случайный процесс: приводы двигаются плавно, как у настоящего оператора
+            // slow random process: actuators move smoothly, like a real operator
             Policy::Smooth => {
                 for i in 0..lo.len() {
                     let (m, s) = ((lo[i] + hi[i]) / 2.0, (hi[i] - lo[i]) / 2.0);
@@ -54,7 +54,7 @@ impl Actor {
                 }
                 self.cur.clone()
             }
-            // команда держится 10–100 шагов: видно отклик на ступеньку
+            // a command is held for 10–100 steps: shows the step response
             Policy::Hold => {
                 if self.hold_left == 0 {
                     self.cur = lo.iter().zip(&hi).map(|(l, h)| r.uniform(*l, *h)).collect();
@@ -64,7 +64,7 @@ impl Actor {
                 self.cur.clone()
             }
             Policy::Auto => env.autopilot(),
-            // автопилот с помехами: доходит до контакта с поверхностью, но не идеален
+            // autopilot with disturbances: reaches surface contact, but is not perfect
             Policy::AutoNoise => {
                 let a = env.autopilot();
                 let burst = r.f64() < 0.3;
@@ -97,12 +97,12 @@ pub struct CollectConfig {
     pub terrain_n: usize,
     pub camera_n: usize,
     pub camera_every: usize,
-    pub params: String,         // параметры реестра: dry_mass=900,gust=2
+    pub params: String,         // registry parameters: dry_mass=900,gust=2
     pub custom_terrain: Option<std::sync::Arc<crate::env::Terrain>>,
-    pub counterfactuals: usize, // точек ветвления на 1000 шагов: от одного состояния несколько действий с истинным ответом
+    pub counterfactuals: usize, // branch points per 1000 steps: several actions from one state with the true response
 }
 
-/// Ветвлений в точке и шагов в ветви. Ветви длиннее не нужны: при падении эпизод всё равно обрывается.
+/// Branches per point and steps per branch. Longer branches are not needed: a crash ends the episode anyway.
 pub const CF_BRANCHES: usize = 4;
 pub const CF_HORIZON: usize = 25;
 
@@ -131,18 +131,18 @@ impl CollectConfig {
     }
 
     fn validate(&self) -> Result<(), String> {
-        if self.episodes == 0 { return Err("--episodes: нужен хотя бы один эпизод".into()); }
-        if self.worlds.is_empty() { return Err("--worlds: нужен хотя бы один мир".into()); }
-        if self.policies.is_empty() { return Err("--policies: нужна хотя бы одна политика".into()); }
-        if self.threads == 0 { return Err("--threads: нужен хотя бы один поток".into()); }
-        if self.frame_skip == Some(0) { return Err("--frame-skip: нужен хотя бы один шаг физики".into()); }
-        if self.max_steps == Some(0) { return Err("--max-steps: нужен хотя бы один шаг".into()); }
-        if self.camera_every == 0 { return Err("--camera-every: нужно целое ≥ 1".into()); }
-        if self.terrain_n == 1 || self.camera_n > 1024 { return Err("--terrain: нужно ≥ 2; --camera: не больше 1024".into()); }
+        if self.episodes == 0 { return Err("--episodes: at least one episode is required".into()); }
+        if self.worlds.is_empty() { return Err("--worlds: at least one world is required".into()); }
+        if self.policies.is_empty() { return Err("--policies: at least one policy is required".into()); }
+        if self.threads == 0 { return Err("--threads: at least one thread is required".into()); }
+        if self.frame_skip == Some(0) { return Err("--frame-skip: at least one physics step is required".into()); }
+        if self.max_steps == Some(0) { return Err("--max-steps: at least one step is required".into()); }
+        if self.camera_every == 0 { return Err("--camera-every: an integer is required ≥ 1".into()); }
+        if self.terrain_n == 1 || self.camera_n > 1024 { return Err("--terrain: must be ≥ 2; --camera: at most 1024".into()); }
         for (name, x, lo, hi) in [("noise", self.noise, 0.0, 100.0), ("gust", self.gust, 0.0, 100.0), ("lag", self.lag, 0.0, 10.0), ("fault", self.fault, 0.0, 1.0)] {
-            if !x.is_finite() || x < lo || x > hi { return Err(format!("--{name} = {x} вне диапазона [{lo}, {hi}]")); }
+            if !x.is_finite() || x < lo || x > hi { return Err(format!("--{name} = {x} out of range [{lo}, {hi}]")); }
         }
-        if !self.rotor_scale.is_finite() || self.rotor_scale <= 0.0 { return Err("--rotor-scale должен быть больше нуля".into()); }
+        if !self.rotor_scale.is_finite() || self.rotor_scale <= 0.0 { return Err("--rotor-scale must be greater than zero".into()); }
         for w in &self.worlds { World::build(w)?; }
         self.env_config(0).map(|_| ())
     }
@@ -150,15 +150,15 @@ impl CollectConfig {
 
 pub struct CollectStats { pub episodes: usize, pub transitions: usize, pub successes: usize, pub non_finite: usize, pub seconds: f64 }
 
-/// Смешивание seed и номера эпизода (SplitMix64): соседние эпизоды не коррелируют.
+/// Mixing seed and episode number (SplitMix64): neighboring episodes do not correlate.
 pub fn episode_seed(seed: u64, ep: u64) -> u64 {
     let mut z = seed.wrapping_add(ep.wrapping_add(1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    (z ^ (z >> 31)) >> 12 // без старших бит: seed переживает путь через f64 в JSON
+    (z ^ (z >> 31)) >> 12 // without high bits: the seed survives the trip through f64 in JSON
 }
 
-/// Запись `.npy` потоком: длина заранее неизвестна, поэтому заголовок переписывается в конце.
+/// Writing `.npy` as a stream: the length is unknown in advance, so the header is rewritten at the end.
 struct Npy { f: BufWriter<File>, descr: &'static str, tail: Vec<usize>, rows: usize }
 
 const NPY_HEADER: usize = 128;
@@ -191,7 +191,7 @@ impl Npy {
 }
 
 fn write_f32(n: &mut Npy, v: &[f32], rows: usize) -> Result<(), String> {
-    // на little-endian это просто байты массива; так запись не тратит время на преобразование
+    // on little-endian this is just the array bytes; writing spends no time on conversion
     let mut buf = Vec::with_capacity(v.len() * 4);
     for x in v { buf.extend_from_slice(&x.to_le_bytes()); }
     n.f.write_all(&buf).map_err(|e| e.to_string())?;
@@ -249,16 +249,16 @@ fn run_episode(cfg: &CollectConfig, idx: usize) -> Result<Episode, String> {
         }}
     }
     let mut state = env.state();
-    // точки ветвления заранее: один и тот же seed даёт те же точки при любом числе потоков
+    // branch points are fixed in advance: the same seed gives the same points with any thread count
     let mut cf_rng = Rng::new(seed ^ 0xCF);
-    // равномерно по всему эпизоду, а не только в начале: самое важное часто происходит у поверхности
+    // evenly across the episode, not only at the start: the most important moments are often near the surface
     let cf_every = if cfg.counterfactuals > 0 { (1000 / cfg.counterfactuals).max(10) } else { 0 };
     let mut cf_next = if cf_every > 0 { 1 + (cf_rng.next_u64() % cf_every as u64) as usize } else { usize::MAX };
     let (act_lo, act_hi) = env.act_bounds();
     loop {
         if ep.steps == cf_next {
             cf_next += cf_every;
-            // копия среды: то же состояние и ГПСЧ; каждая ветвь — своя постоянная команда
+            // copy of the environment: same state and RNG; each branch is its own constant command
             ep.cf_points += 1;
             push(&mut ep.cf_obs, &obs, &mut bad);
             push(&mut ep.cf_params, &env.params(), &mut bad);
@@ -345,7 +345,7 @@ pub fn run(cfg: &CollectConfig) -> Result<CollectStats, String> {
     let mut total: u64 = 0;
     let mut error = None;
     std::thread::scope(|sc| {
-        let rx = rx; // приёмник живёт внутри области: при ошибке он закрывается и воркеры не зависают на полной очереди
+        let rx = rx; // the receiver lives inside the scope: on error it closes, so workers do not hang on a full queue
         for _ in 0..cfg.threads {
             let (tx, next) = (tx.clone(), &next);
             sc.spawn(move || loop {
@@ -355,7 +355,7 @@ pub fn run(cfg: &CollectConfig) -> Result<CollectStats, String> {
             });
         }
         drop(tx);
-        // воркеры заканчивают эпизоды в разном порядке — пишем строго по номерам
+        // workers finish episodes in different order, so writing is strictly by number
         let mut pending: BTreeMap<usize, Episode> = BTreeMap::new();
         let mut want = 0;
         for res in rx.iter() {

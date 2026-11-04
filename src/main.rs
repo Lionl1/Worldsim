@@ -16,52 +16,52 @@ use worldsim::thermal::{self, ThermalOptions};
 use worldsim::validate;
 use worldsim::world::{World, WorldSpec};
 
-const HELP: &str = "worldsim — физические модели миров
+const HELP: &str = "worldsim — physical models of worlds
 
-ИСПОЛЬЗОВАНИЕ: worldsim <команда> [--ключ значение ...]
+USAGE: worldsim <command> [--key value ...]
 
-КОМАНДЫ
-  presets                       список пресетов физики / атмосферы / поверхности
-  info      [мир]               параметры мира и производные величины
-  throw     [мир] --speed 300 --elev 45 --az 90 --lat 0 --radius 0.05 --density 7800
+COMMANDS
+  presets                       list physics / atmosphere / surface presets
+  info      [world]               world parameters and derived quantities
+  throw     [world] --speed 300 --elev 45 --az 90 --lat 0 --radius 0.05 --density 7800
             [--no-drag] [--no-rotation] [--no-j2] [--out traj.csv]
-  thermal   [мир] --lat 0 --dec 0 --days 15 [--out temp.csv]
-  particle  [мир] --species proton --mev 1 --L 3 --pitch 40 --time 20 [--out p.csv]
+  thermal   [world] --lat 0 --dec 0 --days 15 [--out temp.csv]
+  particle  [world] --species proton --mev 1 --L 3 --pitch 40 --time 20 [--out p.csv]
   system    --bodies sun,earth,moon,mars --years 1 --dt-hours 1 [--gr] [--leapfrog] [--out sys.csv]
   dataset   --task projectile|orbit|thermal|particle|system --n 1000
             --worlds earth,moon,mars --out data/ --seed 42 [--points 100] [--noise 0.01] [--strict]
   serve     [--host 127.0.0.1] [--port 8080] [--no-open] [--token T] [--data-dir runs] [--cors] [--log] [--insecure]
-            интерфейс и API. На внешнем адресе нужен токен (--token или WORLDSIM_TOKEN)
-  health    [--port 8080]               проверка живости сервера, код выхода 0 или 1
-  version                               версия
-  validate                      прогнать проверку всех законов
-  params    [--task lander|drone|rover]  все настраиваемые параметры: имя, единицы, диапазон, значение по умолчанию
-  mission   файл.json [--out папка] [--threads N]
-            Mission Lab: карта требований, главные факторы, ценность технологий (см. missions/)
+            interface and API. An external address needs a token (--token or WORLDSIM_TOKEN)
+  health    [--port 8080]               server liveness check, exit code 0 or 1
+  version                               version
+  validate                      run all law checks
+  params    [--task lander|drone|rover]  all configurable parameters: name, units, range, default value
+  mission   file.json [--out dir] [--threads N]
+            Mission Lab: requirements scorecard, main drivers, value of technologies (see missions/)
   collect   --task lander|drone|rover --worlds moon,mars:earth:moon --episodes 1000 --out dir
             [--policies smooth,hold,auto_noise] [--noise 1] [--randomize] [--frame-skip 4] [--max-steps N]
             [--gust 2] [--lag 0.05] [--fault 0.2] [--rotor-scale 1] [--threads N] [--seed 42]
-            [--terrain 33] [--camera 64 --camera-every 5] [--counterfactuals 3 (на 1000 шагов)] [--set throttle_min=0.1,gyro_bias=0.01]
-            [--terrain-file site.asc] [--terrain-size 2000]  рельеф реальной площадки (.asc, .csv, .npy)
-            переходы для обучения world model: .npy + meta.json (см. README)
+            [--terrain 33] [--camera 64 --camera-every 5] [--counterfactuals 3 (per 1000 steps)] [--set throttle_min=0.1,gyro_bias=0.01]
+            [--terrain-file site.asc] [--terrain-size 2000]  terrain of a real site (.asc, .csv, .npy)
+            transitions for world model training: .npy + meta.json (see README)
 
-МИР (для любой команды)
-  --world mars                  всё от Марса
-  --physics mars --atmosphere earth --surface moon   смешать пресеты
-  --gravity-scale 1.5           масштаб GM;  --distance-au 1.2  расстояние до звезды
-  В dataset: --worlds earth,moon,mars:earth:moon  (physics:atmosphere:surface)
+WORLD (for any command)
+  --world mars                  everything from Mars
+  --physics mars --atmosphere earth --surface moon   mix presets
+  --gravity-scale 1.5           GM scale;  --distance-au 1.2  distance to the star
+  In dataset: --worlds earth,moon,mars:earth:moon  (physics:atmosphere:surface)
 ";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(|a| a == "-h" || a == "--help").unwrap_or(false) { print!("{HELP}"); return ExitCode::SUCCESS; }
-    // без аргументов — сразу запускаем интерфейс
+    // no arguments: start the interface right away
     let args = if args.is_empty() { vec!["serve".to_string()] } else { args };
     let cmd = args[0].clone();
     let (pos, kv) = parse(&args[1..]);
     match run(&cmd, &pos, &kv) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(e) => { eprintln!("ошибка: {e}"); ExitCode::FAILURE }
+        Err(e) => { eprintln!("error: {e}"); ExitCode::FAILURE }
     }
 }
 
@@ -79,7 +79,7 @@ fn parse(a: &[String]) -> (Vec<String>, HashMap<String, String>) {
 }
 
 fn num(kv: &HashMap<String, String>, k: &str, d: f64) -> Result<f64, String> {
-    kv.get(k).map(|v| v.parse::<f64>().map_err(|_| format!("--{k}: ожидалось число, получено '{v}'"))).unwrap_or(Ok(d))
+    kv.get(k).map(|v| v.parse::<f64>().map_err(|_| format!("--{k}: expected a number, got '{v}'"))).unwrap_or(Ok(d))
 }
 fn flag(kv: &HashMap<String, String>, k: &str) -> bool { kv.contains_key(k) }
 
@@ -94,7 +94,7 @@ fn world_spec(pos: &[String], kv: &HashMap<String, String>) -> Result<WorldSpec,
     })
 }
 
-/// Какие ключи понимает команда: опечатка не должна молча считаться значением по умолчанию.
+/// Which keys a command understands: a typo must not silently become the default value.
 fn allowed_flags(cmd: &str) -> Option<&'static [&'static str]> {
     Some(match cmd {
         "presets" | "validate" => &[],
@@ -120,7 +120,7 @@ fn check_flags(cmd: &str, kv: &HashMap<String, String>) -> Result<(), String> {
     const WORLD: &[&str] = &["world", "physics", "atmosphere", "surface", "gravity-scale", "distance-au"];
     let mut bad: Vec<&str> = kv.keys().map(|k| k.as_str()).filter(|k| !allowed.contains(k) && !(takes_world && WORLD.contains(k))).collect();
     bad.sort();
-    if let Some(k) = bad.first() { return Err(format!("неизвестный ключ --{k} для команды '{cmd}'. worldsim --help")); }
+    if let Some(k) = bad.first() { return Err(format!("unknown key --{k} for command '{cmd}'. worldsim --help")); }
     Ok(())
 }
 
@@ -135,15 +135,15 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
     check_flags(cmd, kv)?;
     match cmd {
         "presets" => {
-            println!("физика:     {}", presets::PHYSICS_NAMES.join(", "));
-            println!("атмосфера:  {}", presets::ATMOSPHERE_NAMES.join(", "));
-            println!("поверхность:{}", presets::SURFACE_NAMES.join(", "));
+            println!("physics:     {}", presets::PHYSICS_NAMES.join(", "));
+            println!("atmosphere:  {}", presets::ATMOSPHERE_NAMES.join(", "));
+            println!("surface:{}", presets::SURFACE_NAMES.join(", "));
         }
         "info" => info(&World::build(&world_spec(pos, kv)?)?)?,
         "throw" => {
             let w = World::build(&world_spec(pos, kv)?)?;
-            if num(kv, "speed", 300.0)? < 0.0 { return Err("--speed: скорость не может быть отрицательной, направление задают --elev и --az".into()); }
-            if num(kv, "radius", 0.05)? <= 0.0 || num(kv, "density", 7800.0)? <= 0.0 { return Err("--radius и --density должны быть больше нуля".into()); }
+            if num(kv, "speed", 300.0)? < 0.0 { return Err("--speed: speed cannot be negative, direction comes from --elev and --az".into()); }
+            if num(kv, "radius", 0.05)? <= 0.0 || num(kv, "density", 7800.0)? <= 0.0 { return Err("--radius and --density must be greater than zero".into()); }
             let p = Projectile::sphere(num(kv, "radius", 0.05)?, num(kv, "density", 7800.0)?);
             let p = Projectile { cd: num(kv, "cd", p.cd)?, ..p };
             let l = Launch { lat: num(kv, "lat", 0.0)?, lon: num(kv, "lon", 0.0)?, altitude: num(kv, "alt", 0.0)?,
@@ -152,13 +152,13 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
                 buoyancy: !flag(kv, "no-drag"), sample_dt: num(kv, "sample-dt", 0.1)?, max_time: num(kv, "max-time", 1e5)?, ..Default::default() };
             let r = ballistics::simulate(&w, p, l, o);
             println!("{}", w.name());
-            println!("снаряд: масса {:.3} кг, сечение {:.4} м², Cd {}", p.mass, p.area, p.cd);
-            println!("время полёта      {:.3} с{}", r.flight_time, if r.landed { "" } else { " (не приземлился)" });
-            println!("дальность         {:.3} м", r.downrange);
-            println!("макс. высота      {:.3} м", r.max_altitude);
-            println!("скорость удара    {:.3} м/с", r.impact_speed);
-            println!("рассеяно в тепло  {:.3e} Дж", r.dissipated_energy);
-            println!("ошибка баланса энергии {:.2e}", r.energy_error);
+            println!("projectile: mass {:.3} kg, cross-section {:.4} m², Cd {}", p.mass, p.area, p.cd);
+            println!("flight time      {:.3} s{}", r.flight_time, if r.landed { "" } else { " (did not land)" });
+            println!("range         {:.3} m", r.downrange);
+            println!("max altitude      {:.3} m", r.max_altitude);
+            println!("impact speed    {:.3} m/s", r.impact_speed);
+            println!("dissipated as heat  {:.3e} J", r.dissipated_energy);
+            println!("energy balance error {:.2e}", r.energy_error);
             if let Some(mut f) = out_file(kv)? {
                 writeln!(f, "t,lat,lon,altitude,downrange,speed,mach,x,y,z,vx,vy,vz").map_err(|e| e.to_string())?;
                 for s in &r.samples {
@@ -172,12 +172,12 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
             let r = thermal::simulate(&w, ThermalOptions { latitude: num(kv, "lat", 0.0)?, declination: num(kv, "dec", 0.0)?,
                 spinup_days: num(kv, "days", 15.0)? as usize, ..Default::default() });
             println!("{}", w.name());
-            println!("широта {}°, скин-слой {:.3} м", num(kv, "lat", 0.0)?, r.skin_depth);
-            println!("T поверхности: min {:.1} К, max {:.1} К, среднее {:.1} К", r.t_min, r.t_max, r.t_mean);
-            println!("невязка энергобаланса {:.2e}", r.energy_residual);
+            println!("latitude {}°, skin layer {:.3} m", num(kv, "lat", 0.0)?, r.skin_depth);
+            println!("T surface: min {:.1} K, max {:.1} K, mean {:.1} K", r.t_min, r.t_max, r.t_mean);
+            println!("energy balance residual {:.2e}", r.energy_residual);
             for h in [0usize, 3, 6, 9, 12, 15, 18, 21] {
                 let i = h * r.surface_t.len() / 24;
-                println!("  {:>2}:00  {:7.1} К", h, r.surface_t[i.min(r.surface_t.len() - 1)]);
+                println!("  {:>2}:00  {:7.1} K", h, r.surface_t[i.min(r.surface_t.len() - 1)]);
             }
             if let Some(mut f) = out_file(kv)? {
                 writeln!(f, "local_time_h,surface_T").map_err(|e| e.to_string())?;
@@ -186,12 +186,12 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
         }
         "particle" => {
             let w = World::build(&world_spec(pos, kv)?)?;
-            if w.physics.dipole_moment <= 0.0 { return Err(format!("у {} нет глобального магнитного поля — частицы не захватываются", w.physics.name)); }
+            if w.physics.dipole_moment <= 0.0 { return Err(format!("at {} has no global magnetic field: particles are not trapped", w.physics.name)); }
             let sp = magneto::species(kv.get("species").map(|s| s.as_str()).unwrap_or("proton"))?;
             let r = magneto::simulate(&w, sp, ParticleLaunch { l_shell: num(kv, "L", 3.0)?, energy_mev: num(kv, "mev", 1.0)?, pitch_angle: num(kv, "pitch", 40.0)? },
                 num(kv, "time", 20.0)?, 2000);
-            println!("зеркальная широта: симуляция {:.2}°, теория {:.2}°", r.max_abs_lat, r.mirror_lat_theory);
-            println!("дрейф по долготе {:.2}°, |ΔE/E| = {:.2e}, захвачена: {}", r.drift_longitude, r.energy_drift, r.trapped);
+            println!("mirror latitude: simulation {:.2}°, theory {:.2}°", r.max_abs_lat, r.mirror_lat_theory);
+            println!("longitude drift {:.2}°, |ΔE/E| = {:.2e}, trapped: {}", r.drift_longitude, r.energy_drift, r.trapped);
             if let Some(mut f) = out_file(kv)? {
                 writeln!(f, "t,x,y,z").map_err(|e| e.to_string())?;
                 for (t, p) in r.t.iter().zip(&r.pos) { writeln!(f, "{t},{},{},{}", p.x, p.y, p.z).map_err(|e| e.to_string())?; }
@@ -223,10 +223,10 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
                 }
             }
             let i1 = s.invariants();
-            println!("тел: {}, шагов: {steps}, t = {:.3} лет", s.bodies.len(), s.t / YEAR);
+            println!("bodies: {}, steps: {steps}, t = {:.3} yr", s.bodies.len(), s.t / YEAR);
             println!("max |ΔE/E| = {max_de:.2e}");
             println!("|ΔL|/|L|   = {:.2e}", (i1.angular_momentum - i0.angular_momentum).norm() / i0.angular_momentum.norm());
-            for b in &s.bodies { println!("  {:8} r = {:.4} а.е.", b.name, b.r.norm() / AU); }
+            for b in &s.bodies { println!("  {:8} r = {:.4} AU", b.name, b.r.norm() / AU); }
         }
         "dataset" => {
             let worlds: Vec<WorldSpec> = kv.get("worlds").cloned().unwrap_or("earth,moon,mars".into()).split(',').map(|s| WorldSpec::parse(s.trim())).collect();
@@ -239,17 +239,17 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
             };
             let t0 = std::time::Instant::now();
             let st = datagen::generate(&cfg)?;
-            println!("задача {}: создано {} сэмплов, валидных {} ({:.1}%), max ошибка {:.2e}, {:.1} с → {}/",
+            println!("task {}: created {} samples, valid {} ({:.1}%), max error {:.2e}, {:.1} s → {}/",
                 cfg.task, st.generated, st.valid, 100.0 * st.valid as f64 / st.generated.max(1) as f64, st.max_error, t0.elapsed().as_secs_f64(), cfg.out_dir);
         }
         "serve" => {
             let port = num(kv, "port", 8080.0)?;
-            if port.fract() != 0.0 || !(1.0..=65535.0).contains(&port) { return Err(format!("--port: нужен порт от 1 до 65535, получено {port}")); }
+            if port.fract() != 0.0 || !(1.0..=65535.0).contains(&port) { return Err(format!("--port: need a port from 1 to 65535, got {port}")); }
             worldsim::server::serve_opts(worldsim::server::ServerOpts {
                 host: kv.get("host").cloned().unwrap_or("127.0.0.1".into()),
                 port: port as u16,
                 open: !flag(kv, "no-open"),
-                // токен в командной строке виден в списке процессов, поэтому переменная окружения предпочтительнее
+                // a token on the command line is visible in the process list, so the environment variable is preferred
                 token: kv.get("token").cloned().or(std::env::var("WORLDSIM_TOKEN").ok()).filter(|t| !t.is_empty()),
                 data_dir: kv.get("data-dir").cloned().or(std::env::var("WORLDSIM_DATA").ok()).unwrap_or("runs".into()).into(),
                 cors: flag(kv, "cors"),
@@ -260,11 +260,11 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
         "health" => {
             use std::io::{Read, Write as _};
             let port = num(kv, "port", 8080.0)? as u16;
-            let mut c = std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|e| format!("порт {port}: {e}"))?;
+            let mut c = std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
             c.write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").map_err(|e| e.to_string())?;
             let mut r = String::new();
             c.read_to_string(&mut r).map_err(|e| e.to_string())?;
-            if !r.starts_with("HTTP/1.1 200") { return Err(format!("сервер ответил: {}", r.lines().next().unwrap_or(""))); }
+            if !r.starts_with("HTTP/1.1 200") { return Err(format!("server replied: {}", r.lines().next().unwrap_or(""))); }
             println!("ok");
         }
         "version" => println!("worldsim {}", env!("CARGO_PKG_VERSION")),
@@ -277,7 +277,7 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
             }
         }
         "mission" => {
-            let path = pos.first().ok_or("укажите файл миссии: worldsim mission missions/lunar_lander.json --out report")?;
+            let path = pos.first().ok_or("specify the mission file: worldsim mission missions/lunar_lander.json --out report")?;
             let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
             let threads = num(kv, "threads", std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1) as f64)? as usize;
             let report = mission::run(&mission::MissionSpec::parse_local(&text)?, threads)?.set("spec_sha256", worldsim::store::sha256(text.as_bytes()));
@@ -305,7 +305,7 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
                 lag: num(kv, "lag", 0.0)?,
                 fault: num(kv, "fault", 0.0)?,
                 threads: num(kv, "threads", std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1) as f64)? as usize,
-                out_dir: kv.get("out").cloned().ok_or("--out: укажите папку для данных")?,
+                out_dir: kv.get("out").cloned().ok_or("--out: specify the data folder")?,
                 terrain_n: num(kv, "terrain", 0.0)? as usize,
                 camera_n: num(kv, "camera", 0.0)? as usize,
                 camera_every: num(kv, "camera-every", 1.0)? as usize,
@@ -314,21 +314,21 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
                 custom_terrain: kv.get("terrain-file").map(|p| worldsim::dem::load(p, kv.get("terrain-size").and_then(|v| v.parse().ok()), 0.6).map(std::sync::Arc::new)).transpose()?,
             };
             let st = collect::run(&cfg)?;
-            println!("{}: {} эпизодов, {} переходов, успешных {:.1}%, {:.0} шагов/с → {}/", cfg.task, st.episodes, st.transitions,
+            println!("{}: {} episodes, {} transitions, successful {:.1}%, {:.0} steps/s → {}/", cfg.task, st.episodes, st.transitions,
                 100.0 * st.successes as f64 / st.episodes.max(1) as f64, st.transitions as f64 / st.seconds.max(1e-9), cfg.out_dir);
-            if st.non_finite > 0 { return Err(format!("найдено {} нечисловых значений", st.non_finite)); }
+            if st.non_finite > 0 { return Err(format!("found {} non-numeric values", st.non_finite)); }
         }
         "validate" => {
             let t0 = std::time::Instant::now();
             let checks = validate::all();
             let ok = checks.iter().filter(|c| c.pass).count();
             for c in &checks {
-                println!("{} {:<38} {:<58} {:>18}  ожидалось {}", if c.pass { "✔" } else { "✘" }, c.law, c.test, c.value, c.expected);
+                println!("{} {:<38} {:<58} {:>18}  expected {}", if c.pass { "✔" } else { "✘" }, c.law, c.test, c.value, c.expected);
             }
-            println!("\nпройдено {ok}/{} за {:.1} с", checks.len(), t0.elapsed().as_secs_f64());
-            if ok != checks.len() { return Err("есть непройденные проверки".into()); }
+            println!("\npassed {ok}/{} in {:.1} s", checks.len(), t0.elapsed().as_secs_f64());
+            if ok != checks.len() { return Err("some checks failed".into()); }
         }
-        _ => return Err(format!("неизвестная команда '{cmd}'. worldsim --help")),
+        _ => return Err(format!("unknown command '{cmd}'. worldsim --help")),
     }
     Ok(())
 }
@@ -336,36 +336,36 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
 fn info(w: &World) -> Result<(), String> {
     let p = &w.physics;
     println!("{}", w.name());
-    println!("— физика —");
-    println!("  масса            {:.4e} кг", p.gm / worldsim::constants::G);
-    println!("  радиус           {:.1} км", p.radius / 1e3);
-    println!("  g у поверхности  {:.4} м/с²", w.g_surface());
-    println!("  2-я косм. скор.  {:.3} км/с", w.escape_velocity() / 1e3);
-    println!("  1-я косм. скор.  {:.3} км/с", w.circular_velocity(0.0) / 1e3);
-    println!("  сутки (синод.)   {:.3} ч", p.solar_day / 3600.0);
+    println!("— physics —");
+    println!("  mass            {:.4e} kg", p.gm / worldsim::constants::G);
+    println!("  radius           {:.1} km", p.radius / 1e3);
+    println!("  g at surface  {:.4} m/s²", w.g_surface());
+    println!("  escape velocity  {:.3} km/s", w.escape_velocity() / 1e3);
+    println!("  orbital velocity  {:.3} km/s", w.circular_velocity(0.0) / 1e3);
+    println!("  solar day (synodic.)   {:.3} h", p.solar_day / 3600.0);
     println!("  J2               {:.3e}", p.j2);
-    println!("  магн. диполь     {:.2e} А·м²", p.dipole_moment);
-    println!("  до звезды        {:.4} а.е., инсоляция {:.1} Вт/м²", w.star_distance / AU, w.insolation());
-    println!("  T равновесная    {:.1} К", w.equilibrium_temperature());
+    println!("  magnetic dipole     {:.2e} A·m²", p.dipole_moment);
+    println!("  to the star        {:.4} AU, insolation {:.1} W/m²", w.star_distance / AU, w.insolation());
+    println!("  T equilibrium    {:.1} K", w.equilibrium_temperature());
     match &w.atmosphere {
-        None => println!("— атмосфера — нет (вакуум)"),
+        None => println!("— atmosphere: none (vacuum)"),
         Some(a) => {
-            println!("— атмосфера ({}) —", a.preset.name);
-            println!("  состав           {}", a.preset.composition.iter().map(|(g, x)| format!("{g} {:.3}%", x * 100.0)).collect::<Vec<_>>().join(", "));
-            println!("  M = {:.2} г/моль, γ = {:.3}, τ_IR = {:.3}", a.molar_mass * 1e3, a.gamma, w.greenhouse_tau());
-            println!("  шкала высот      {:.2} км", a.scale_height(w.g_surface()) / 1e3);
-            println!("  {:>8} {:>10} {:>12} {:>12} {:>9}", "h, км", "T, К", "P, Па", "ρ, кг/м³", "c, м/с");
+            println!("— atmosphere ({}) —", a.preset.name);
+            println!("  composition           {}", a.preset.composition.iter().map(|(g, x)| format!("{g} {:.3}%", x * 100.0)).collect::<Vec<_>>().join(", "));
+            println!("  M = {:.2} g/mol, γ = {:.3}, τ_IR = {:.3}", a.molar_mass * 1e3, a.gamma, w.greenhouse_tau());
+            println!("  scale height      {:.2} km", a.scale_height(w.g_surface()) / 1e3);
+            println!("  {:>8} {:>10} {:>12} {:>12} {:>9}", "h, km", "T, K", "P, Pa", "ρ, kg/m³", "c, m/s");
             for h in [0.0, 1.0, 5.0, 10.0, 20.0, 50.0, 100.0] {
                 let s = a.at(h * 1e3);
                 println!("  {:>8.0} {:>10.1} {:>12.4e} {:>12.4e} {:>9.1}", h, s.temperature, s.pressure, s.density, s.sound_speed);
             }
         }
     }
-    println!("  T поверхности (средн.) {:.1} К", w.mean_surface_temperature());
+    println!("  T surface (mean.) {:.1} K", w.mean_surface_temperature());
     let s = &w.surface;
-    println!("— поверхность ({}) — {}", s.name, s.description);
-    println!("  оксиды, масс.%   {}", presets::normalized(&s.oxides_wt).iter().map(|(o, x)| format!("{o} {:.1}", x * 100.0)).collect::<Vec<_>>().join(", "));
-    println!("  элементы, масс.% {}", presets::oxides_to_elements(&s.oxides_wt)?.iter().map(|(e, x)| format!("{e} {:.1}", x * 100.0)).collect::<Vec<_>>().join(", "));
-    println!("  теплоинерция {:.0}, теплопроводность {:.4} Вт/(м·К)", s.thermal_inertia, s.conductivity());
+    println!("— surface ({}) — {}", s.name, s.description);
+    println!("  oxides, mass.%   {}", presets::normalized(&s.oxides_wt).iter().map(|(o, x)| format!("{o} {:.1}", x * 100.0)).collect::<Vec<_>>().join(", "));
+    println!("  elements, mass.% {}", presets::oxides_to_elements(&s.oxides_wt)?.iter().map(|(e, x)| format!("{e} {:.1}", x * 100.0)).collect::<Vec<_>>().join(", "));
+    println!("  thermal inertia {:.0}, thermal conductivity {:.4} W/(m·K)", s.thermal_inertia, s.conductivity());
     Ok(())
 }

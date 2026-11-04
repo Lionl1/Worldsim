@@ -1,4 +1,4 @@
-"""Чтение данных `worldsim collect`: большие массивы не загружаются в память целиком."""
+"""Reading data `worldsim collect`: large arrays are not loaded into memory whole."""
 import csv
 import hashlib
 import json
@@ -12,7 +12,7 @@ class Dataset:
         self.path = Path(path)
         meta = self.path / "meta.json"
         if not meta.exists():
-            raise FileNotFoundError(f"{meta}: это не папка worldsim collect")
+            raise FileNotFoundError(f"{meta}: this is not a worldsim collect folder")
         self.meta = json.loads(meta.read_text(encoding="utf8"))
         load = lambda n: np.load(self.path / f"{n}.npy", mmap_mode="r")
         self.obs, self.next_obs, self.act = load("obs"), load("next_obs"), load("act")
@@ -42,7 +42,7 @@ class Dataset:
             return list(csv.DictReader(f))
 
     def fingerprint(self):
-        """Отпечаток данных для отчёта: воспроизводимость и прослеживаемость."""
+        """Data fingerprint for the report: reproducibility and traceability."""
         h = hashlib.sha256()
         for n in ("meta.json", "episodes.csv"):
             h.update((self.path / n).read_bytes())

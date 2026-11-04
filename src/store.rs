@@ -1,12 +1,12 @@
-//! Хранение запусков Mission Lab на диске: воспроизводимость и сравнение версий проекта.
-//! Папка запуска: `spec.json`, `report.json`, `report.md`, `manifest.json`. Запуск нельзя случайно перезаписать: id содержит время и отпечаток.
+//! Storing Mission Lab runs on disk: reproducibility and comparison of project versions.
+//! Run folder: `spec.json`, `report.json`, `report.md`, `manifest.json`. A run cannot be overwritten by accident: the id contains the time and a fingerprint.
 
 use crate::json::J;
 use crate::mission;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// SHA-256 (FIPS 180-4) без внешних зависимостей: отпечаток описания миссии в отчёте.
+/// SHA-256 (FIPS 180-4) no external dependencies: mission description fingerprint in the report.
 pub fn sha256(data: &[u8]) -> String {
     const K: [u32; 64] = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -43,13 +43,13 @@ pub fn sha256(data: &[u8]) -> String {
 
 fn now() -> u64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) }
 
-/// id запуска безопасен для пути: только цифры, a–f и дефис. Всё остальное — попытка выйти из папки.
+/// id run id is safe for paths: only digits, a–f and hyphen. Anything else is an attempt to leave the folder.
 fn run_dir(root: &Path, id: &str) -> Result<PathBuf, String> {
-    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c) || c == '-') { return Err(format!("плохой id запуска: {id}")); }
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c) || c == '-') { return Err(format!("bad run id: {id}")); }
     Ok(root.join(id))
 }
 
-/// Сохранить запуск и вернуть его id.
+/// Save a run and return its id.
 pub fn save_run(root: &Path, spec_text: &str, report: &J) -> Result<String, String> {
     let io = |e: std::io::Error| format!("{}: {e}", root.display());
     let sha = sha256(spec_text.as_bytes());
@@ -65,7 +65,7 @@ pub fn save_run(root: &Path, spec_text: &str, report: &J) -> Result<String, Stri
     fs::write(dir.join("spec.json"), spec_text).map_err(io)?;
     fs::write(dir.join("report.json"), report.render()).map_err(io)?;
     fs::write(dir.join("report.md"), mission::markdown(report)).map_err(io)?;
-    // манифест пишем последним: неполный запуск в списке не появится
+    // the manifest is written last: an incomplete run does not appear in the list
     fs::write(dir.join("manifest.json"), manifest.render()).map_err(io)?;
     Ok(id)
 }
@@ -84,12 +84,12 @@ pub fn list_runs(root: &Path) -> J {
 }
 
 pub fn load_report(root: &Path, id: &str) -> Result<J, String> {
-    let t = fs::read_to_string(run_dir(root, id)?.join("report.json")).map_err(|_| format!("запуск {id} не найден"))?;
+    let t = fs::read_to_string(run_dir(root, id)?.join("report.json")).map_err(|_| format!("run {id} not found"))?;
     J::parse(&t)
 }
 
 pub fn load_spec(root: &Path, id: &str) -> Result<J, String> {
-    let t = fs::read_to_string(run_dir(root, id)?.join("spec.json")).map_err(|_| format!("запуск {id} не найден"))?;
+    let t = fs::read_to_string(run_dir(root, id)?.join("spec.json")).map_err(|_| format!("run {id} not found"))?;
     J::parse(&t)
 }
 
@@ -100,7 +100,7 @@ fn flatten(prefix: &str, j: &J, out: &mut Vec<(String, String)>) {
     }
 }
 
-/// Что поменялось между двумя запусками: успех, требования и строки описания миссии.
+/// What changed between two runs: success, requirements and mission description lines.
 pub fn compare(root: &Path, a: &str, b: &str) -> Result<J, String> {
     let (ra, rb) = (load_report(root, a)?, load_report(root, b)?);
     let n = |r: &J, k: &str| r.get(k).and_then(|x| x.as_f64()).unwrap_or(f64::NAN);
@@ -111,7 +111,7 @@ pub fn compare(root: &Path, a: &str, b: &str) -> Result<J, String> {
         let id = txt(q, "id");
         let other = sb.iter().find(|x| txt(x, "id") == id);
         J::obj().set("id", id).set("text", txt(q, "text")).set("a", n(q, "value")).set("a_verdict", txt(q, "verdict"))
-            .set("b", other.map(|x| J::from(n(x, "value"))).unwrap_or(J::Null)).set("b_verdict", other.map(|x| txt(x, "verdict")).unwrap_or("нет в запуске".into()))
+            .set("b", other.map(|x| J::from(n(x, "value"))).unwrap_or(J::Null)).set("b_verdict", other.map(|x| txt(x, "verdict")).unwrap_or("not in run".into()))
     }).collect();
     let (mut fa, mut fb) = (vec![], vec![]);
     flatten("", &load_spec(root, a)?, &mut fa);

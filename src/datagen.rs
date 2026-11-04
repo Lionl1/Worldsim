@@ -1,11 +1,11 @@
-//! Генерация датасетов. Каждый сэмпл проходит проверку закона сохранения;
-//! непрошедшие помечаются `valid=0` (или отбрасываются в режиме strict).
+//! Dataset generation. Each sample goes through a conservation law check;
+//! failures are marked `valid=0` (or dropped in the mode strict).
 //!
-//! Выход (каталог):
-//!   params.csv  — параметры и итоги каждого сэмпла
-//!   series.csv  — временные ряды (sample_id, t, ...)
-//!   series_noisy.csv — то же с шумом измерений (если --noise > 0)
-//!   meta.json   — задача, миры, seed, константы, статистика валидации
+//! Output (directory):
+//!   params.csv  — parameters and summary of each sample
+//!   series.csv  — time series (sample_id, t, ...)
+//!   series_noisy.csv — the same with measurement noise (if --noise > 0)
+//!   meta.json   — task, worlds, seed, constants, validation statistics
 
 use crate::ballistics::{self, Launch, Options, Projectile};
 use crate::constants::{AU, DAY, G, YEAR};
@@ -29,7 +29,7 @@ pub struct DatasetConfig {
     pub out_dir: String,
     pub noise: f64,
     pub strict: bool,
-    pub points: usize, // точек на временной ряд
+    pub points: usize, // points per time series
 }
 
 pub struct Stats { pub generated: usize, pub valid: usize, pub max_error: f64 }
@@ -59,13 +59,13 @@ impl Sink {
 
 pub fn generate(cfg: &DatasetConfig) -> Result<Stats, String> {
     let io = |e: std::io::Error| e.to_string();
-    // сначала всё проверяем: ошибка в параметрах не должна оставлять пустую папку и неполные файлы
-    if cfg.n == 0 { return Err("--n: нужен хотя бы один сэмпл".into()); }
+    // validate everything first: a bad parameter must not leave an empty folder and partial files
+    if cfg.n == 0 { return Err("--n: at least one sample is required".into()); }
     let worlds: Vec<World> = cfg.worlds.iter().map(World::build).collect::<Result<_, _>>()?;
     let (series_cols, param_cols) = columns(&cfg.task)?;
     if cfg.task == "particle" {
         if let Some(w) = worlds.iter().find(|w| w.physics.dipole_moment <= 0.0) {
-            return Err(format!("у мира {} нет магнитного диполя (используйте earth, jupiter, mercury)", w.physics.name));
+            return Err(format!("world {} has no magnetic dipole (use earth, jupiter, mercury)", w.physics.name));
         }
     }
     fs::create_dir_all(&cfg.out_dir).map_err(io)?;
@@ -96,7 +96,7 @@ pub fn generate(cfg: &DatasetConfig) -> Result<Stats, String> {
             "orbit" => sample_orbit(w, &mut rng, cfg.points),
             "thermal" => sample_thermal(w, &mut rng, cfg.points),
             "particle" => {
-                if w.physics.dipole_moment <= 0.0 { return Err(format!("у мира {} нет магнитного диполя (используйте earth, jupiter, mercury)", w.physics.name)); }
+                if w.physics.dipole_moment <= 0.0 { return Err(format!("world {} has no magnetic dipole (use earth, jupiter, mercury)", w.physics.name)); }
                 sample_particle(w, &mut rng, cfg.points)
             }
             "system" => sample_system(&mut rng, cfg.points),
@@ -133,7 +133,7 @@ fn columns(task: &str) -> Result<(Vec<&'static str>, Vec<&'static str>), String>
                        vec!["l_shell", "energy_mev", "pitch", "charge", "mass", "bounces", "mirror_lat_theory", "mirror_lat_sim", "drift_deg"]),
         "system" => (vec!["t", "body", "x", "y", "z", "vx", "vy", "vz"],
                      vec!["n_bodies", "star_gm", "total_planet_gm", "years"]),
-        _ => return Err(format!("неизвестная задача '{task}': projectile, orbit, thermal, particle, system")),
+        _ => return Err(format!("unknown task '{task}': projectile, orbit, thermal, particle, system")),
     })
 }
 
@@ -147,7 +147,7 @@ fn sample_projectile(w: &World, rng: &mut Rng, points: usize) -> Sample {
     let radius = rng.log_uniform(0.01, 0.5);
     let dens = rng.uniform(300.0, 8000.0);
     let p = Projectile::sphere(radius, dens);
-    // грубая оценка времени полёта для шага выборки
+    // rough flight time estimate for the sampling step
     let t_guess = (2.0 * speed * elev.to_radians().sin() / w.g_surface()).max(0.5);
     let opts = Options { sample_dt: t_guess / points as f64, max_time: t_guess * 3.0 + 10.0, ..Default::default() };
     let r = ballistics::simulate(w, p, Launch { lat: lat0, lon: 0.0, altitude: 0.0, speed, elevation: elev, azimuth: az }, opts);
@@ -170,7 +170,7 @@ fn sample_orbit(w: &World, rng: &mut Rng, points: usize) -> Sample {
     ]);
     let period = 2.0 * std::f64::consts::PI * (a.powi(3) / gm).sqrt();
     let total = 2.0 * period;
-    let sub = 200usize; // шагов интегратора на точку
+    let sub = 200usize; // integrator steps per point
     let dt = total / (points * sub) as f64;
     let i0 = s.invariants();
     let mut rows = Vec::with_capacity(points + 1);
@@ -206,11 +206,11 @@ fn sample_particle(w: &World, rng: &mut Rng, points: usize) -> Sample {
     let l = rng.uniform(2.0, 6.0);
     let en = rng.log_uniform(0.05, 20.0);
     let pitch = rng.uniform(15.0, 89.0);
-    // длительность = 3 периода баунс-колебаний: T_b ≈ 4LR/v · (1.30 − 0.56 sin α)
+    // duration = 3 bounce periods: T_b ≈ 4LR/v · (1.30 − 0.56 sin α)
     let gamma = 1.0 + en * crate::constants::MEV / (sp.mass * crate::constants::C.powi(2));
     let v = crate::constants::C * (1.0 - 1.0 / (gamma * gamma)).sqrt();
     let t_bounce = 4.0 * l * w.physics.radius / v * (1.30 - 0.56 * pitch.to_radians().sin());
-    // бюджет ≤ ~2·10⁶ шагов Бориса (у Юпитера электроны вращаются в ~10⁷ раз быстрее, чем баунсят)
+    // budget ≤ ~2·10⁶ Boris steps (at Jupiter electrons gyrate ~10⁷ times faster than they bounce)
     let b_eq = magneto::dipole_field(w.physics.dipole_moment, crate::vec3::Vec3::new(l * w.physics.radius, 0.0, 0.0)).norm();
     let gyro_eq = 2.0 * std::f64::consts::PI * gamma * sp.mass / (sp.charge.abs() * b_eq);
     let budget = 2.0e6 * gyro_eq / 40.0 * pitch.to_radians().sin().powi(2);
@@ -220,7 +220,7 @@ fn sample_particle(w: &World, rng: &mut Rng, points: usize) -> Sample {
     (vec![l, en, pitch, sp.charge, sp.mass, duration / t_bounce, r.mirror_lat_theory, r.max_abs_lat, r.drift_longitude], rows, r.energy_drift, 1e-9)
 }
 
-/// Случайная планетная система: звезда 0.5–1.5 M☉, 2–6 планет от массы Марса до Юпитера.
+/// Random planetary system: star 0.5–1.5 M☉, 2–6 planets from Mars mass to Jupiter mass.
 fn sample_system(rng: &mut Rng, points: usize) -> Sample {
     let star = 1.327_124_400_18e20 * rng.uniform(0.5, 1.5);
     let n = 2 + (rng.f64() * 5.0) as usize;
@@ -232,7 +232,7 @@ fn sample_system(rng: &mut Rng, points: usize) -> Sample {
         total += gm;
         let (r, v) = elements_to_state(star + gm, a, rng.uniform(0.0, 0.1), rng.uniform(0.0, 5.0), rng.uniform(0.0, 360.0), rng.uniform(0.0, 360.0), rng.uniform(0.0, 360.0));
         bodies.push(Body { name: format!("p{k}"), gm, r, v });
-        a *= rng.uniform(1.4, 2.2); // разнос орбит ради устойчивости
+        a *= rng.uniform(1.4, 2.2); // orbit spacing for stability
     }
     let mut s = NBody::new(bodies);
     s.to_barycentric();

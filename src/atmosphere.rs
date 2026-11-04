@@ -1,6 +1,6 @@
-//! Атмосфера в гидростатическом равновесии: dP/dz = -ρ g(z), ρ = P M / (R T),
-//! g(z) = GM/(R+z)^2 (закон тяготения), T(z) — кусочно-линейный профиль.
-//! Таблица строится численным интегрированием для любого тела, на которое «поставлена» атмосфера.
+//! Atmosphere in hydrostatic equilibrium: dP/dz = -ρ g(z), ρ = P M / (R T),
+//! g(z) = GM/(R+z)^2 (law of gravity), T(z) is a piecewise-linear profile.
+//! The table is built by numerical integration for any body the atmosphere is placed on.
 
 use crate::constants::{gas, R_GAS};
 use crate::presets::AtmospherePreset;
@@ -8,8 +8,8 @@ use crate::presets::AtmospherePreset;
 #[derive(Clone, Debug)]
 pub struct Atmosphere {
     pub preset: AtmospherePreset,
-    pub molar_mass: f64, // кг/моль
-    pub cp_molar: f64,   // Дж/(моль·К)
+    pub molar_mass: f64, // kg/mol
+    pub cp_molar: f64,   // J/(mol·K)
     pub gamma: f64,
     pub t0: f64,
     dz: f64,
@@ -31,11 +31,11 @@ impl Atmosphere {
         let mut cp = 0.0;
         let total: f64 = preset.composition.iter().map(|c| c.1).sum();
         for (g, x) in &preset.composition {
-            let (mm, c) = gas(g).ok_or(format!("неизвестный газ {g}"))?;
+            let (mm, c) = gas(g).ok_or(format!("unknown gas {g}"))?;
             m += x / total * mm;
             cp += x / total * c;
         }
-        let gamma = cp / (cp - R_GAS); // Майер: c_p - c_v = R
+        let gamma = cp / (cp - R_GAS); // Mayer: c_p - c_v = R
         let dz = 50.0;
         let n = (preset.top / dz).ceil() as usize + 1;
         let tz = |z: f64| -> f64 {
@@ -55,7 +55,7 @@ impl Atmosphere {
         for i in 0..n {
             let z = i as f64 * dz;
             if i > 0 {
-                // правило Симпсона для d lnP/dz = -M g / (R T)
+                // Simpson rule for d lnP/dz = -M g / (R T)
                 let f = |z: f64| -m * g(z) / (R_GAS * tz(z));
                 lp += dz / 6.0 * (f(z - dz) + 4.0 * f(z - dz / 2.0) + f(z));
             }
@@ -83,10 +83,10 @@ impl Atmosphere {
 
     fn sound(&self, t: f64) -> f64 { (self.gamma * R_GAS * t / self.molar_mass).sqrt() }
 
-    /// Шкала высот у поверхности H = RT/(Mg).
+    /// Scale height at the surface H = RT/(Mg).
     pub fn scale_height(&self, g: f64) -> f64 { R_GAS * self.t0 / (self.molar_mass * g) }
 
-    /// Масса столба атмосферы на м^2 (интеграл ρ dz) — для проверки P0 = ∫ρ g dz.
+    /// Atmospheric column mass per m^2 (integral of ρ dz), used for checks P0 = ∫ρ g dz.
     pub fn column_weight(&self, gm: f64, radius: f64) -> f64 {
         let mut s = 0.0;
         for i in 0..self.temp.len() - 1 {

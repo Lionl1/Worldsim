@@ -1,19 +1,19 @@
-# Безопасность
+# Security
 
-## Сообщить об уязвимости
+## Reporting a vulnerability
 
-Используйте [закрытое сообщение в GitHub](https://github.com/Lionl1/Worldsim/security/advisories/new), а не публичный issue.
+Use a [private message on GitHub](https://github.com/Lionl1/Worldsim/security/advisories/new), not a public issue.
 
-## Как устроена защита
+## How protection works
 
-- По умолчанию сервер слушает только `127.0.0.1`.
-- На внешнем адресе без токена сервер не запустится. Токен задаётся через `WORLDSIM_TOKEN` и передаётся в заголовке `Authorization: Bearer`.
-- Запросы со сторонних сайтов отклоняются; проверяются заголовки `Origin` и `Host`. Разрешить их можно ключом `--cors`.
-- Ограничены размер запроса, число соединений и фоновых задач.
-- Запросы не должны выполнять код: описание миссии — это только данные.
+- By default the server listens only on `127.0.0.1`.
+- On an external address the server will not start without a token. The token is set through `WORLDSIM_TOKEN` and passed in the `Authorization: Bearer` header.
+- Requests from third-party sites are rejected; the headers checked are `Origin` and `Host`. They can be allowed with the `--cors` flag.
+- Request size, connection count and background job count are limited.
+- Requests must not execute code: a mission description is data only.
 
-## Чего нет
+## What is missing
 
-TLS, учётных записей и ролей нет. В сети ставьте сервер за обратный прокси с TLS. Независимого аудита безопасности не было. Один токен даёт полный доступ.
+There is no TLS and there are no user accounts or roles. On a network put the server behind a reverse proxy with TLS. There has been no independent security audit. One token gives full access.
 
-Веб-интерфейс загружает three.js с `cdn.jsdelivr.net`; в закрытом контуре вкладки с 3D без этого работать не будут.
+The web interface loads three.js from `cdn.jsdelivr.net`; in a closed network the 3D tabs will not work without it.

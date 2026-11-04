@@ -1,5 +1,5 @@
-//! Мир = физика тела + атмосфера + поверхность (можно брать от разных тел).
-//! Производные величины (температура, τ, g) пересчитываются из законов, а не копируются.
+//! World = body physics + atmosphere + surface (can come from different bodies).
+//! Derived quantities (temperature, τ, g) are recomputed from the laws, not copied.
 
 use crate::atmosphere::Atmosphere;
 use crate::constants::{AU, L_SUN, SIGMA_SB};
@@ -11,9 +11,9 @@ pub struct World {
     pub physics: PhysicsPreset,
     pub atmosphere: Option<Atmosphere>,
     pub surface: SurfacePreset,
-    pub star_luminosity: f64, // Вт
-    pub star_distance: f64,   // м
-    pub star_gm: f64,         // м³/с²
+    pub star_luminosity: f64, // W
+    pub star_distance: f64,   // m
+    pub star_gm: f64,         // m³/s²
 }
 
 #[derive(Clone, Debug)]
@@ -30,17 +30,17 @@ impl WorldSpec {
         WorldSpec { physics: name.into(), atmosphere: None, surface: None, gravity_scale: 1.0, distance_au: None }
     }
 
-    /// `mars` или `mars:earth:moon` (физика:атмосфера:поверхность).
+    /// `mars` or `mars:earth:moon` (physics:atmosphere:surface).
     pub fn parse(s: &str) -> Self {
         let p: Vec<&str> = s.split(':').collect();
-        // auto значит «как у тела»: так пишут и форма, и meta.json
+        // auto means “same as the body”: the form and meta.json
         let opt = |x: Option<&&str>| x.filter(|v| !v.is_empty() && **v != "auto").map(|v| v.to_string());
         WorldSpec { physics: p[0].into(), atmosphere: opt(p.get(1)), surface: opt(p.get(2)), gravity_scale: 1.0, distance_au: None }
     }
 }
 
 impl World {
-    /// Мир целиком из одного пресета: `World::preset("mars")`.
+    /// World entirely from one preset: `World::preset("mars")`.
     pub fn preset(name: &str) -> Result<World, String> { World::build(&WorldSpec::preset(name)) }
 
     pub fn build(spec: &WorldSpec) -> Result<World, String> {
@@ -66,7 +66,7 @@ impl World {
         Ok(w)
     }
 
-    /// Мир из произвольных частей (например, сгенерированная экзопланета у другой звезды).
+    /// World from arbitrary parts (e.g. a generated exoplanet around another star).
     pub fn from_parts(physics: PhysicsPreset, atmo: Option<presets::AtmospherePreset>, surface: SurfacePreset,
                       star_luminosity: f64, star_gm: f64, star_distance: f64) -> Result<World, String> {
         let mut w = World { physics, atmosphere: None, surface, star_luminosity, star_distance, star_gm };
@@ -88,15 +88,15 @@ impl World {
     pub fn circular_velocity(&self, h: f64) -> f64 { (self.physics.gm / (self.physics.radius + h)).sqrt() }
     pub fn omega(&self) -> f64 { 2.0 * PI / self.physics.rotation_period }
 
-    /// Солнечная постоянная на орбите (закон обратных квадратов).
+    /// Solar constant at the orbit (inverse-square law).
     pub fn insolation(&self) -> f64 { self.star_luminosity / (4.0 * PI * self.star_distance.powi(2)) }
 
-    /// Равновесная температура (Стефан–Больцман, глобальное среднее).
+    /// Equilibrium temperature (Stefan–Boltzmann, global mean).
     pub fn equilibrium_temperature(&self) -> f64 {
         (self.insolation() * (1.0 - self.physics.bond_albedo) / (4.0 * SIGMA_SB)).powf(0.25)
     }
 
-    /// τ масштабируется пропорционально массе столба газа P0/g.
+    /// τ scales in proportion to the gas column mass P0/g.
     pub fn greenhouse_tau_with(&self, ap: Option<&presets::AtmospherePreset>) -> f64 {
         match ap {
             Some(a) => a.greenhouse_tau * a.reference_g / self.g_surface(),
@@ -105,7 +105,7 @@ impl World {
     }
 
     fn surface_temperature_with(&self, ap: Option<&presets::AtmospherePreset>) -> f64 {
-        // серая атмосфера Эддингтона: T_s^4 = T_eq^4 (1 + 3τ/4)
+        // gray Eddington atmosphere: T_s^4 = T_eq^4 (1 + 3τ/4)
         self.equilibrium_temperature() * (1.0 + 0.75 * self.greenhouse_tau_with(ap)).powf(0.25)
     }
 
@@ -113,7 +113,7 @@ impl World {
 
     pub fn mean_surface_temperature(&self) -> f64 {
         match &self.atmosphere {
-            // парниковый эффект только греет: пресет атмосферы не может охладить мир ниже равновесной T
+            // the greenhouse effect only warms: an atmosphere preset cannot cool a world below equilibrium T
             Some(a) => a.t0.max(self.equilibrium_temperature()),
             None => self.equilibrium_temperature(),
         }
@@ -122,7 +122,7 @@ impl World {
     pub fn density(&self, h: f64) -> f64 { self.atmosphere.as_ref().map(|a| a.at(h).density).unwrap_or(0.0) }
 }
 
-/// Расстояние до звезды: большая полуось тела или его родителя.
+/// Distance to the star: semi-major axis of the body or its parent.
 pub fn heliocentric_distance(p: &PhysicsPreset) -> Result<f64, String> {
     match &p.orbit {
         None => Ok(AU),

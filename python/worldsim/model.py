@@ -1,28 +1,28 @@
-"""Что должна уметь модель, чтобы её можно было квалифицировать.
+"""What a model must support to be qualified.
 
-Подходит любая архитектура: состояние модели непрозрачно для оценщика (вектор наблюдения, RSSM, латент JEPA…).
-Единственное требование — уметь выдавать предсказание в каналах сенсоров; для чисто латентных моделей
-это обычно обученная поверх латента линейная «проба».
+Any architecture fits: the model state is opaque to the evaluator (observation vector, RSSM, latent JEPA…).
+The only requirement is producing a prediction in sensor channels; for purely latent models
+this is usually a linear “probe” trained on top of the latent.
 """
 import numpy as np
 
 
 class WorldModel:
-    """Пакетный интерфейс: все массивы имеют первую размерность N (число параллельных траекторий)."""
+    """Batch interface: all arrays have first dimension N (the number of parallel trajectories)."""
 
     name = "model"
 
     def init(self, obs, params):
-        """Начальное состояние модели по наблюдению (N×O) и известным параметрам мира (N×P)."""
+        """Initial model state from an observation (N×O) and known world parameters (N×P)."""
         return np.asarray(obs, dtype=np.float32).copy()
 
     def step(self, state, action):
-        """Один шаг в воображении: вернуть (новое состояние, предсказанное наблюдение N×O)."""
+        """One step in imagination: return (new state, predicted observation N×O)."""
         raise NotImplementedError
 
 
 class FunctionModel(WorldModel):
-    """Модель без памяти: next_obs = fn(obs, action, params)."""
+    """Memoryless model: next_obs = fn(obs, action, params)."""
 
     def __init__(self, fn, name="function"):
         self.fn, self.name, self._params = fn, name, None
@@ -37,7 +37,7 @@ class FunctionModel(WorldModel):
 
 
 class Persistence(WorldModel):
-    """Нулевая модель «ничего не меняется». Любая настоящая модель должна быть лучше."""
+    """Null model: “nothing changes”. Any real model must do better."""
 
     name = "persistence"
 

@@ -1,9 +1,9 @@
-//! Космология ΛCDM.
-//!  * Уравнение Фридмана H(a) = H₀ √(Ω_r a⁻⁴ + Ω_m a⁻³ + Ω_k a⁻² + Ω_Λ): возраст, расстояния, красное смещение.
-//!  * Линейный рост возмущений D(a) (интеграл Хита для материи + Λ).
-//!  * Спектр мощности: P(k) ∝ kⁿˢ T²(k), передаточная функция BBKS с параметром формы Сугиямы, нормировка σ₈.
-//!  * Начальные условия Зельдовича, симуляция particle-mesh (облако-в-ячейке + решение Пуассона через FFT).
-//! Единицы PM: длина в Мпк/h (сопутствующая), время в 1/H₀, φ: ∇²φ = (3/2) Ω_m δ / a.
+//! Cosmology ΛCDM.
+//!  * Friedmann equation H(a) = H₀ √(Ω_r a⁻⁴ + Ω_m a⁻³ + Ω_k a⁻² + Ω_Λ): age, distances, redshift.
+//!  * Linear perturbation growth D(a) (Heath integral for matter + Λ).
+//!  * Power spectrum: P(k) ∝ kⁿˢ T²(k), BBKS transfer function with Sugiyama shape parameter, normalization σ₈.
+//!  * Zeldovich initial conditions, particle-mesh simulation (cloud-in-cell + Poisson solve via FFT).
+//! PM units: length in Mpc/h (comoving), time in 1/H₀, φ: ∇²φ = (3/2) Ω_m δ / a.
 
 use crate::rng::Rng;
 use std::f64::consts::PI;
@@ -14,7 +14,7 @@ pub const MPC_KM: f64 = 3.085_677_581e19;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Cosmology {
-    pub h: f64,        // H₀ / 100 км/с/Мпк
+    pub h: f64,        // H₀ / 100 km/s/Mpc
     pub omega_m: f64,
     pub omega_b: f64,
     pub omega_l: f64,
@@ -34,14 +34,14 @@ impl Cosmology {
         let p = Cosmology::planck2018();
         Ok(match name {
             "planck2018" => p,
-            "eds" => Cosmology { omega_m: 1.0, omega_l: 0.0, omega_r: 0.0, ..p },             // Эйнштейн–де Ситтер
-            "open" => Cosmology { omega_m: 0.3, omega_l: 0.0, omega_r: 0.0, ..p },            // открытая без Λ
+            "eds" => Cosmology { omega_m: 1.0, omega_l: 0.0, omega_r: 0.0, ..p },             // Einstein–de Sitter
+            "open" => Cosmology { omega_m: 0.3, omega_l: 0.0, omega_r: 0.0, ..p },            // open without Λ
             "lambda_heavy" => Cosmology { omega_m: 0.15, omega_l: 0.85, omega_r: 0.0, ..p },
-            _ => return Err(format!("неизвестная космология '{name}', доступны: {PRESETS:?}")),
+            _ => return Err(format!("unknown cosmology '{name}', available: {PRESETS:?}")),
         })
     }
     pub fn omega_k(&self) -> f64 { 1.0 - self.omega_m - self.omega_l - self.omega_r }
-    pub fn h0_si(&self) -> f64 { 100.0 * self.h / MPC_KM } // 1/с
+    pub fn h0_si(&self) -> f64 { 100.0 * self.h / MPC_KM } // 1/s
 
     /// E(a) = H(a)/H₀
     pub fn e(&self, a: f64) -> f64 {
@@ -56,13 +56,13 @@ impl Cosmology {
         s * h / 3.0
     }
 
-    /// Космическое время t(a) в единицах 1/H₀ (подстановка a = u² убирает особенность в нуле).
+    /// Cosmic time t(a) in units of 1/H₀ (substitution a = u² removes the singularity at zero).
     pub fn time_h0(&self, a: f64) -> f64 {
         Self::simpson(|u: f64| { if u == 0.0 { return 0.0; } let a = u * u; 2.0 * u / (a * self.e(a)) }, 0.0, a.sqrt(), 4000)
     }
     pub fn age_gyr(&self, a: f64) -> f64 { self.time_h0(a) / self.h0_si() / GYR_S }
 
-    /// Сопутствующее расстояние до z, Мпк.
+    /// Comoving distance to z, Mpc.
     pub fn comoving_distance(&self, z: f64) -> f64 {
         C_KM_S / (100.0 * self.h) * Self::simpson(|zz| 1.0 / self.e(1.0 / (1.0 + zz)), 0.0, z, 2000)
     }
@@ -75,7 +75,7 @@ impl Cosmology {
     pub fn luminosity_distance(&self, z: f64) -> f64 { (1.0 + z) * self.transverse_distance(z) }
     pub fn angular_diameter_distance(&self, z: f64) -> f64 { self.transverse_distance(z) / (1.0 + z) }
 
-    /// Линейный фактор роста D(a), нормированный D(1)=1 (без излучения).
+    /// Linear growth factor D(a), normalized D(1)=1 (without radiation).
     pub fn growth(&self, a: f64) -> f64 {
         let g = |a: f64| -> f64 {
             let e = |x: f64| (self.omega_m / x.powi(3) + self.omega_k() / (x * x) + self.omega_l).sqrt();
@@ -89,7 +89,7 @@ impl Cosmology {
         (self.growth(a * (1.0 + h)).ln() - self.growth(a * (1.0 - h)).ln()) / ((1.0 + h).ln() - (1.0 - h).ln())
     }
 
-    /// Передаточная функция BBKS, k в h/Мпк.
+    /// BBKS transfer function, k in h/Mpc.
     pub fn transfer(&self, k: f64) -> f64 {
         let gamma = self.omega_m * self.h * (-self.omega_b * (1.0 + (2.0 * self.h).sqrt() / self.omega_m)).exp();
         let q = k / gamma;
@@ -101,12 +101,12 @@ impl Cosmology {
 
     fn sigma_r_unnorm(&self, r: f64) -> f64 {
         let w = |x: f64| if x < 1e-3 { 1.0 - x * x / 10.0 } else { 3.0 * (x.sin() - x * x.cos()) / x.powi(3) };
-        // ∫ P(k) W²(kR) k² dk / 2π², интеграл по ln k
+        // ∫ P(k) W²(kR) k² dk / 2π², integral over ln k
         let f = |lk: f64| { let k = lk.exp(); self.p_unnorm(k) * w(k * r).powi(2) * k.powi(3) / (2.0 * PI * PI) };
         Self::simpson(f, (1e-5f64).ln(), (1e3f64).ln(), 20_000).sqrt()
     }
 
-    /// Линейный спектр мощности при a=1, (Мпк/h)³, нормирован на σ₈.
+    /// Linear power spectrum at a=1, (Mpc/h)³, normalized to σ₈.
     pub fn power(&self, k: f64) -> f64 {
         let amp = (self.sigma8 / self.sigma_r_unnorm(8.0)).powi(2);
         amp * self.p_unnorm(k)
@@ -150,7 +150,7 @@ fn fft1(buf: &mut [Cx], inverse: bool) {
     if inverse { for x in buf.iter_mut() { x.re /= n as f64; x.im /= n as f64; } }
 }
 
-/// 3D FFT на сетке n³ (n — степень двойки), индекс (i·n + j)·n + k.
+/// 3D FFT on an n³ grid (n is a power of two), index (i·n + j)·n + k.
 pub fn fft3(data: &mut [Cx], n: usize, inverse: bool) {
     let mut line = vec![Cx::default(); n];
     for axis in 0..3 {
@@ -173,12 +173,12 @@ fn kfreq(i: usize, n: usize, box_size: f64) -> f64 {
 // ------------------------------------------------------------------ PM
 pub struct PmSim {
     pub cosmo: Cosmology,
-    pub n: usize,        // частиц на сторону = размер сетки
-    pub box_size: f64,   // Мпк/h
+    pub n: usize,        // particles per side = grid size
+    pub box_size: f64,   // Mpc/h
     pub a: f64,
     pub pos: Vec<[f64; 3]>,
-    pub mom: Vec<[f64; 3]>, // u = a² dx/dt (Мпк/h · H₀)
-    pub density: Vec<f64>,  // δ+1 на сетке после последнего шага
+    pub mom: Vec<[f64; 3]>, // u = a² dx/dt (Mpc/h · H₀)
+    pub density: Vec<f64>,  // δ+1 on the grid after the last step
 }
 
 impl PmSim {
@@ -186,7 +186,7 @@ impl PmSim {
         assert!(n.is_power_of_two());
         let mut rng = Rng::new(seed);
         let n3 = n * n * n;
-        // гауссово поле δ_k с |δ_k|² = P(k)·N⁶/V (дискретная нормировка), действительность — через FFT действительного шума
+        // Gaussian field δ_k with |δ_k|² = P(k)·N⁶/V (discrete normalization), reality comes from an FFT of real noise
         let mut field: Vec<Cx> = (0..n3).map(|_| Cx { re: rng.normal(), im: 0.0 }).collect();
         fft3(&mut field, n, false);
         let vol = box_size.powi(3);
@@ -198,7 +198,7 @@ impl PmSim {
             let k2 = kx * kx + ky * ky + kz * kz;
             if k2 == 0.0 { continue; }
             let kk = k2.sqrt();
-            let s = (amp * cosmo.p_unnorm(kk) / vol).sqrt(); // белый шум имеет ⟨|w_k|²⟩ = N³
+            let s = (amp * cosmo.p_unnorm(kk) / vol).sqrt(); // white noise has ⟨|w_k|²⟩ = N³
             let d = Cx { re: field[idx].re * s, im: field[idx].im * s };
             // ψ_k = i k / k² · δ_k   (∇·ψ = −δ)
             for (c, kc) in [kx, ky, kz].iter().enumerate() {
@@ -206,7 +206,7 @@ impl PmSim {
             }
         }}}
         for c in 0..3 { fft3(&mut psi[c], n, true); }
-        // дискретная нормировка: ⟨|δ̃_k|²⟩ должно быть N⁶P/V, а у белого шума ⟨|w_k|²⟩ = N³ — множитель N^{3/2}
+        // discrete normalization: ⟨|δ̃_k|²⟩ should be N⁶P/V, and white noise has ⟨|w_k|²⟩ = N³ — factor N^{3/2}
         let scale = (n3 as f64).sqrt();
         let d = cosmo.growth(a_init);
         let f = cosmo.growth_rate(a_init);
@@ -246,11 +246,11 @@ impl PmSim {
                 rho[(ii * n + jj) * n + kk] += wx * wy * wz;
             }}}
         }
-        // среднее число частиц на ячейку = 1
+        // mean number of particles per cell = 1
         self.density = rho;
     }
 
-    /// Ускорение −∇φ на сетке (3 компоненты).
+    /// Acceleration −∇φ on the grid (3 components).
     fn forces(&mut self) -> [Vec<f64>; 3] {
         self.deposit();
         let n = self.n;
@@ -261,7 +261,7 @@ impl PmSim {
         let cell = self.box_size / n as f64;
         for i in 0..n { for j in 0..n { for k in 0..n {
             let idx = (i * n + j) * n + k;
-            // дискретный лапласиан (согласован с конечно-разностным градиентом)
+            // discrete Laplacian (consistent with the finite-difference gradient)
             let s = |m: usize| { let x = PI * m as f64 / n as f64; (2.0 * x.sin() / cell).powi(2) };
             let k2 = s(i) + s(j) + s(k);
             if k2 == 0.0 { d[idx] = Cx::default(); continue; }
@@ -304,7 +304,7 @@ impl PmSim {
     }
 
     fn drift(&mut self, a0: f64, a1: f64) {
-        // dx/da = u / (a³ E): интеграл по a при постоянном u
+        // dx/da = u / (a³ E): integral over a at constant u
         let ds = Cosmology::simpson(|a| 1.0 / (a.powi(3) * self.cosmo.e(a)), a0, a1, 16);
         let l = self.box_size;
         for (p, u) in self.pos.iter_mut().zip(self.mom.iter()) {
@@ -312,7 +312,7 @@ impl PmSim {
         }
     }
 
-    /// Шаг KDK по масштабному фактору.
+    /// KDK step in scale factor.
     pub fn step(&mut self, da: f64) {
         let a0 = self.a;
         let am = a0 + 0.5 * da;
@@ -323,14 +323,14 @@ impl PmSim {
         let _ = am;
     }
 
-    /// Среднеквадратичный контраст плотности на сетке.
+    /// RMS density contrast on the grid.
     pub fn delta_rms(&mut self) -> f64 {
         self.deposit();
         let n3 = self.density.len() as f64;
         (self.density.iter().map(|r| (r - 1.0).powi(2)).sum::<f64>() / n3).sqrt()
     }
 
-    /// Спектр мощности измеренный: (k, P(k)) в бинах, с учётом CIC (без деконволюции — только для крупных масштабов).
+    /// Measured power spectrum: (k, P(k)) in bins, with CIC (no deconvolution, large scales only).
     pub fn measure_power(&mut self, bins: usize) -> Vec<(f64, f64)> {
         self.deposit();
         let n = self.n;
@@ -357,7 +357,7 @@ impl PmSim {
         }).collect()
     }
 
-    /// Суммарный импульс (сохраняется при симметричной схеме CIC + центральные разности).
+    /// Total momentum (conserved with symmetric CIC + central differences).
     pub fn total_momentum(&self) -> f64 {
         let mut s = [0.0; 3];
         for u in &self.mom { for c in 0..3 { s[c] += u[c]; } }

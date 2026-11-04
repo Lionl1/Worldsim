@@ -1,5 +1,5 @@
 {
-  "name": "Лунный ровер, 180 кг",
+  "name": "Lunar rover, 180 kg",
   "task": "rover",
   "world": "moon",
   "runs": 300,
@@ -18,14 +18,14 @@
   "requirements": [
     {
       "id": "REQ-01",
-      "text": "Дошёл до цели",
+      "text": "Reached the goal",
       "metric": "success",
       "op": ">=",
       "value": 0.85
     },
     {
       "id": "REQ-02",
-      "text": "Энергия, 95-й перцентиль",
+      "text": "Energy, 95th percentile",
       "metric": "energy_used_kj",
       "percentile": 95,
       "op": "<=",
@@ -34,25 +34,25 @@
   ],
   "technologies": [
     {
-      "name": "Ровер тяжелее на 40 кг",
+      "name": "Rover 40 kg heavier",
       "set": {
         "rover_mass": 220
       }
     },
     {
-      "name": "Ровер легче на 40 кг",
+      "name": "Rover 40 kg lighter",
       "set": {
         "rover_mass": 140
       }
     },
     {
-      "name": "Сильнее моторы (1400 Н)",
+      "name": "Stronger motors (1400 N)",
       "set": {
         "motor_force": 1400
       }
     },
     {
-      "name": "Слабее моторы (500 Н)",
+      "name": "Weaker motors (500 N)",
       "set": {
         "motor_force": 500
       }

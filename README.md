@@ -1,18 +1,18 @@
 # 🌌 worldsim
 
-**Открытая физика на Rust: от анализа космической миссии до проверки обученных world models. Каждый закон проверяется автоматически.**
+**Open physics in Rust: from space mission analysis to checking trained world models. Each law is checked automatically.**
 
-*Open, dependency-free physics in Rust: Mission Lab turns mission requirements into a scorecard and technology trade study, and a qualification ladder tells you when a learned world model can be trusted. Includes robot environments, counterfactual data, a 3D viewer from planets to cosmology, and 131 automated physics checks.*
+*Open, dependency-free physics in Rust: Mission Lab turns mission requirements into a scorecard and technology trade study, and a qualification ladder tells you when a learned world model can be trusted. Includes robot environments, counterfactual data, a 3D viewer from planets to cosmology, and 129 automated physics checks.*
 
-**Для инженеров миссий:** [Mission Lab](#mission-lab) отвечает, выполняются ли требования, что ломает миссию и какая технология окупится. **Для разработчиков моделей:** [сбор данных и квалификация](#world-models-данные-и-квалификация) показывают, сколько секунд можно верить модели и видит ли она аварии заранее. Что это умеет, чего не умеет и на каких исследованиях основано, описано в [docs/PRODUCT.md](docs/PRODUCT.md).
+**For mission engineers:** [Mission Lab](#mission-lab) answers whether the requirements are met, what breaks the mission and which technology pays off. **For model developers:** [data collection and qualification](#world-models-data-and-qualification) show how many seconds a model can be trusted and whether it sees crashes in advance. What it can do, what it cannot and which research it builds on is described in [docs/PRODUCT.md](docs/PRODUCT.md).
 
 ```bash
 git clone https://github.com/Lionl1/worldsim && cd worldsim
-./tools/fetch_data.sh        # один раз: скачать каталоги звёзд и экзопланет (нужны git и python3)
-cargo run --release          # соберёт и откроет 3D-интерфейс в браузере (http://localhost:8080)
+./tools/fetch_data.sh        # once: download the star and exoplanet catalogs (requires git and python3)
+cargo run --release          # builds and opens the 3D interface in the browser (http://localhost:8080)
 ```
 
-Нужен только Rust ≥ 1.75 — внешних крейтов нет. Каталоги (вкладка «Карта») скачиваются скриптом из открытых репозиториев. Браузеру нужен интернет только для загрузки three.js с CDN.
+Only Rust ≥ 1.75 is required, there are no external crates. The catalogs (the “Map” tab) are downloaded by a script from open repositories. The browser needs internet only to load three.js from CDN.
 
 ## Mission Lab
 
@@ -20,75 +20,77 @@ cargo run --release          # соберёт и откроет 3D-интерф�
 cargo run --release -- mission missions/lunar_lander.json --out report
 ```
 
-Описание миссии задаёт аппарат, разбросы, требования и варианты технологий. Готовые примеры лежат в [missions/](missions/). Результат есть и на вкладке «Mission Lab» в интерфейсе.
+A mission description sets the vehicle, dispersions, requirements and technology options. Ready examples are in [missions/](missions/). The result is also available on the “Mission Lab” tab in the interface.
 
-| Вопрос | Что получите |
+| Question | What you get |
 |---|---|
-| Выполнима ли миссия? | Карта требований с интервалом 95%: выполнено, не выполнено или данных мало |
-| Как отказывает? | Виды отказов: большая скорость касания, опрокидывание и другие |
-| Что её ломает? | Влияние каждого разброса в отдельности |
-| Что купить? | Парное сравнение технологий на тех же условиях: что спасено, что потеряно, сколько это весит |
+| Is the mission feasible? | Requirements scorecard with a 95% interval: met, not met or not enough data |
+| How does it fail? | Failure modes: high touchdown speed, tip-over and others |
+| What breaks it? | The effect of each dispersion on its own |
+| What to buy? | Paired comparison of technologies under the same conditions: what was saved, what was lost, how much it weighs |
 
-Пример ответа для лунного модуля: успех 89,3%, требований выполнено 0 из 4, а двигатель 7 кН даёт +6,0 ± 3,2 п.п. за 25 кг и закрывает два требования.
+Example answer for the lunar lander: success 89.3%, 0 of 4 requirements met, while a 7 kN engine gives +6.0 ± 3.2 pp for 25 kg and closes two requirements.
 
-Физика упрощена: это инструмент для ранних проектных решений, а не замена высокоточному анализу и испытаниям.
+The physics is simplified: this is a tool for early design decisions, not a replacement for high-fidelity analysis and testing.
 
-## Что внутри
+In a mission description, `vehicle` holds registry parameters (see `worldsim params`), `dispersions` holds relative spreads and `technologies` lists the options to compare. `dry_mass_delta` in a technology exists only for the lander; on other vehicles set the mass through `set`.
 
-| Вкладка | Модель | Законы |
+## What is inside
+
+| Tab | Model | Laws |
 |---|---|---|
-| 🪐 **Миры** | Земля, Луна, Марс, Венера, Меркурий, Юпитер, Солнце + любые смеси (физика ≠ атмосфера ≠ кора) | тяготение, J2, Кориолис, гидростатика, идеальный газ, Архимед, сопротивление, стехиометрия |
-| 🌡️ **Климат** | сезонная широтная модель энергобаланса для любого мира | инсоляция из орбиты, Стефан–Больцман, парниковая атмосфера Эддингтона, лёд–альбедо, 1-е начало |
-| ☀️ **Солнечная система** | N тел по элементам J2000 | Ньютон, симплектический интегратор Йошиды, ОТО (1PN) |
-| ✨ **Звёздные системы** | генератор: звезда по IMF Крупы, планеты по устойчивости Хилла | масса–светимость, Планк → цвет, обитаемая зона Копарапу, масса–радиус Чена–Киппинга |
-| 🔭 **Карта** | 11 270 звёзд HYG + 5 283 экзопланеты | любую экзопланету — в модель мира одним кликом |
-| 🌀 **Галактики** | Млечный Путь, столкновение галактик, скопления | Барнс–Хат O(N log N), живое тёмное гало, вириал, кривая вращения |
-| 🕸️ **Космология** | ΛCDM, рост структур из Большого взрыва | Фридман, начальные условия Зельдовича, спектр BBKS/σ₈, particle-mesh через FFT |
-| 🚀 **Mission Lab** | анализ миссии по требованиям | Монте-Карло, интервалы Уилсона, парные сравнения |
-| 🤖 **Роботы** | посадочный модуль, дрон, ровер в реальном времени | Циолковский, импульсная теория винта, трение Кулона, контакт опор, устойчивость |
-| ⚫ **Чёрные дыры** | рендер лучей по геодезическим, Шварцшильд и Керр | ISCO, тень, Хокинг, волны Петерса |
-| 🔬 **Лаборатория** | туннелирование, ударная волна, плотина, озон, сопло, кратеры, тектоника | эталонные точные решения |
-| ✅ **Законы** | 131 тест | см. ниже |
+| 🪐 **Worlds** | Earth, Moon, Mars, Venus, Mercury, Jupiter, Sun + any mixes (physics ≠ atmosphere ≠ crust) | gravity, J2, Coriolis, hydrostatics, ideal gas, Archimedes, drag, stoichiometry |
+| 🌡️ **Climate** | seasonal latitudinal energy balance model for any world | insolation from the orbit, Stefan–Boltzmann, Eddington greenhouse atmosphere, ice-albedo, 1st law |
+| ☀️ **Solar system** | N bodies from J2000 elements | Newton, Yoshida symplectic integrator, GR (1PN) |
+| ✨ **Star systems** | generator: star from the Kroupa IMF, planets from Hill stability | mass–luminosity, Planck → color, Kopparapu habitable zone, Chen–Kipping mass–radius |
+| 🔭 **Map** | 11,270 HYG stars + 5,283 exoplanets | any exoplanet into a world model in one click |
+| 🌀 **Galaxies** | Milky Way, galaxy collision, clusters | Barnes–Hut O(N log N), live dark halo, virial, rotation curve |
+| 🕸️ **Cosmology** | ΛCDM, structure growth from the Big Bang | Friedmann, Zeldovich initial conditions, BBKS/σ₈ spectrum, particle-mesh through FFT |
+| 🚀 **Mission Lab** | mission analysis against requirements | Monte Carlo, Wilson intervals, paired comparisons |
+| 🤖 **Robots** | lander, drone, rover in real time | Tsiolkovsky, rotor momentum theory, Coulomb friction, leg contact, stability |
+| ⚫ **Black holes** | ray rendering along geodesics, Schwarzschild and Kerr | ISCO, shadow, Hawking, Peters waves |
+| 🔬 **Laboratory** | tunneling, shock wave, dam, ozone, nozzle, craters, tectonics | exact reference solutions |
+| ✅ **Laws** | 129 tests | see below |
 
-## Проверка законов
+## Law checks
 
 ```bash
-cargo run --release -- validate     # таблица, ~2–3 с
-cargo test --release                # то же, как тесты
+cargo run --release -- validate     # table, ~2–3 s
+cargo test --release                # same, as tests
 ```
 
-Примеры того, что проверяется, и что получается:
+Examples of what is checked and what comes out:
 
-| Закон | Тест | Результат |
+| Law | Test | Result |
 |---|---|---|
-| Сохранение энергии | Солнечная система, 1 год | ΔE/E ≈ 2·10⁻¹³ |
-| ОТО | прецессия перигелия Меркурия | 42.7″/век (теория 43.0″) |
-| Кориолис | падение со 100 м на экваторе | 21.977 мм (теория 21.977) |
-| Гидростатика | давление Земли на 11 км | 22 646 Па (US Std 22 632) |
-| Тепло + излучение | Луна, экватор | 98–386 К (Diviner ≈ 95–390) |
-| Климат | Земля: средняя T / кромка льда | 289.6 К / 75° |
-| Бистабильность | холодный старт Земли | «Земля-снежок» |
-| Вириал | сфера Пламмера | 2K/|W| = 1.006 |
-| Кривая вращения | Млечный Путь на 8 кпк | 212 км/с |
-| Фридман | возраст Вселенной (Planck 2018) | 13.786 млрд лет |
-| Рост структур | P(k) в PM против D(a)² | в пределах 4% |
-| Планк → Стефан–Больцман, Вин | численное интегрирование спектра | 10⁻⁸ / 10⁻⁶ |
-| Уравнение Циолковского | посадочный модуль, полный расход топлива | Δv = 1093.18 м/с (теория 1093.14) |
-| Импульсная теория винта | дрон на Марсе: обычные винты / площадь ×40 | −3.41 / +8.88 м/с (падает / взлетает) |
-| Контакт опор | модуль стоит на Марсе | акселерометр показывает g, ±3% |
-| Устойчивость v·ω/g | тот же поворот ровера | на Луне опрокидывает, на Земле нет |
-| Точность ветвления | копия среды против оригинала | совпадают до 10⁻¹² |
-| Туннельный эффект | волновой пакет сквозь барьер | совпадает с точной формулой, ±3% |
-| Предел Чандрасекара | белый карлик, μₑ = 2 | 1.43 M☉ |
-| Тень чёрной дыры | критический луч | 3√3 M |
-| Гравитационные волны | PSR B1913+16 | dP/dt согласуется с ОТО (−2.40·10⁻¹²) |
-| Задача Сода | ударная волна против точного решения | ошибка L1 < 1% |
-| Цикл Чепмена | стационарный озон | совпадает с аналитикой, ±2% |
+| Energy conservation | Solar system, 1 year | ΔE/E ≈ 2·10⁻¹³ |
+| GR | Mercury perihelion precession | 42.7″/century (theory 43.0″) |
+| Coriolis | fall from 100 m at the equator | 21.977 mm (theory 21.977) |
+| Hydrostatics | Earth pressure at 11 km | 22,646 Pa (US Std 22,632) |
+| Heat + radiation | Moon, equator | 98–386 K (Diviner ≈ 95–390) |
+| Climate | Earth: mean T / ice edge | 289.6 K / 75° |
+| Bistability | cold start of Earth | “snowball Earth” |
+| Virial | Plummer sphere | 2K/|W| = 1.006 |
+| Rotation curve | Milky Way at 8 kpc | 212 km/s |
+| Friedmann | age of the Universe (Planck 2018) | 13.786 Gyr |
+| Structure growth | P(k) in PM against D(a)² | within 4% |
+| Planck → Stefan–Boltzmann, Wien | numerical integration of the spectrum | 10⁻⁸ / 10⁻⁶ |
+| Tsiolkovsky equation | lander, full fuel burn | Δv = 1093.18 m/s (theory 1093.14) |
+| Rotor momentum theory | drone on Mars: ordinary rotors / area ×40 | −3.41 / +8.88 m/s (falls / takes off) |
+| Leg contact | lander stands on Mars | accelerometer shows g, ±3% |
+| Stability v·ω/g | same rover turn | tips over on the Moon, not on Earth |
+| Branching accuracy | environment copy against the original | match to within 10⁻¹² |
+| Tunnel effect | wave packet through a barrier | matches the exact formula, ±3% |
+| Chandrasekhar limit | white dwarf, μₑ = 2 | 1.43 M☉ |
+| Black hole shadow | critical ray | 3√3 M |
+| Gravitational waves | PSR B1913+16 | dP/dt agrees with GR (−2.40·10⁻¹²) |
+| Sod problem | shock wave against the exact solution | L1 error < 1% |
+| Chapman cycle | steady ozone | matches the analytic value, ±2% |
 
-## Командная строка
+## Command line
 
 ```bash
-worldsim info --physics mars --atmosphere earth --surface moon   # смешанный мир
+worldsim info --physics mars --atmosphere earth --surface moon   # mixed world
 worldsim throw mars --speed 100 --elev 45 --out traj.csv
 worldsim thermal moon --lat 0
 worldsim particle earth --species proton --mev 1 --L 3 --pitch 40
@@ -99,82 +101,82 @@ worldsim collect --task lander --worlds moon,mars:earth:moon --episodes 1000 --r
 worldsim serve --port 8080
 ```
 
-Задачи датасетов: `projectile`, `orbit`, `thermal`, `particle`, `system`. У каждого сэмпла есть
-`validation_error` и `valid`, а `meta.json` хранит миры, seed и константы.
+Dataset tasks: `projectile`, `orbit`, `thermal`, `particle`, `system`. Each sample has
+`validation_error` and `valid`, and `meta.json` stores worlds, seed and constants.
 
-## Среда для обучения роботов
+## Environment for training robots
 
-Три задачи в стиле Gymnasium. Агент видит только зашумлённые показания сенсоров и выдаёт непрерывные команды приводам,
-а физика та же, что в остальном worldsim, поэтому одного агента можно учить на разных и смешанных мирах.
+Three tasks in the Gymnasium style. The agent sees only noisy sensor readings and outputs continuous actuator commands,
+and the physics is the same as in the rest of worldsim, so one agent can train on different and mixed worlds.
 
-| Задача | Цель | Действия | Наблюдения |
+| Task | Target | Actions | Observations |
 |---|---|---|---|
-| `lander` | мягко сесть на площадку | `throttle` 0…1, `torque_x/y/z` −1…1 | 35: GPS, скорость, ориентация, гироскоп, радиовысотомер, акселерометр, топливо, давление, лидар, признаки попадания лучей |
-| `drone` | долететь до точки и зависнуть | `rotor_1…4` 0…1 | 20: цель, скорость, ориентация, гироскоп, радиовысотомер, акселерометр, батарея, давление, плотность воздуха, признак попадания |
-| `rover` | доехать до цели по рельефу | `left`, `right` −1…1 | 44: цель, курс, скорость, наклон, батарея, высота Солнца, температура, давление, лидар, признаки попадания |
+| `lander` | land softly on a pad | `throttle` 0…1, `torque_x/y/z` −1…1 | 35: GPS, speed, attitude, gyroscope, radar altimeter, accelerometer, fuel, pressure, lidar, ray hit flags |
+| `drone` | fly to a point and hover | `rotor_1…4` 0…1 | 20: goal, speed, attitude, gyroscope, radar altimeter, accelerometer, battery, pressure, air density, hit flag |
+| `rover` | drive to a goal over terrain | `left`, `right` −1…1 | 44: goal, heading, speed, tilt, battery, Sun elevation, temperature, pressure, lidar, hit flags |
 
-Модуль стоит на четырёх упругих опорах, поэтому модель видит сам контакт. Дрон стартует в воздухе и может сесть и снова взлететь. Ровер опрокидывается, если уклон и инерция поворота превышают запас устойчивости.
+The lander stands on four spring legs, so the model sees the contact itself. The drone starts in the air and can land and take off again. The rover tips over if the slope and turning inertia exceed the stability margin.
 
-Сложность добавляют порывы ветра (`gust`), задержка приводов (`lag`), скрытый отказ привода (`fault`) и смена мира между эпизодами (`worlds`).
+Difficulty is added by wind gusts (`gust`), actuator lag (`lag`), hidden actuator fault (`fault`) and changing the world between episodes (`worlds`).
 
 ### HTTP API
 
 ```bash
 worldsim serve --port 8080 --no-open
 
-curl 'http://localhost:8080/api/env/make?task=lander&physics=moon&seed=42'   # вернёт id сессии, имена и границы
-curl 'http://localhost:8080/api/env/step?id=1&action=0.5,0,0,0'              # одно действие
-curl 'http://localhost:8080/api/env/step?id=1&mode=auto&repeat=100&text=1'   # 100 шагов автопилота + описание текстом
+curl 'http://localhost:8080/api/env/make?task=lander&physics=moon&seed=42'   # returns the session id, names and bounds
+curl 'http://localhost:8080/api/env/step?id=1&action=0.5,0,0,0'              # one action
+curl 'http://localhost:8080/api/env/step?id=1&mode=auto&repeat=100&text=1'   # 100 autopilot steps + text description
 ```
 
-`step` возвращает `obs`, `reward`, `terminated`, `truncated` и `info`. Сервер держит соединение открытым (keep-alive), поэтому
-агент может слать много запросов подряд через одно подключение. Числа вне допустимого диапазона дают ошибку 400.
+`step` returns `obs`, `reward`, `terminated`, `truncated` and `info`. The server keeps the connection open (keep-alive), so
+an agent can send many requests in a row over one connection. Numbers out of the allowed range give an error 400.
 
-Сервер хранит до 1024 сред и 64 тяжёлые симуляции. Когда места нет, удаляется давно не использованная сессия того же рода. Закончив работу, вызывайте `close`.
+The server holds up to 1024 environments and 64 heavy simulations. When there is no room, the least recently used session of the same kind is removed. When you finish, call `close`.
 
-| Запрос `/api/env/…` | Параметры |
+| Request `/api/env/…` | Parameters |
 |---|---|
 | `tasks`, `list` | — |
-| `make` | `task`, `physics`, `worlds`, `atmosphere`, `surface`, `gravity_scale`, `randomize=1`, `noise` (0 — идеальные сенсоры), `rotor_scale`, `max_steps`, `frame_skip`, `gust`, `lag`, `fault`, `seed` |
+| `make` | `task`, `physics`, `worlds`, `atmosphere`, `surface`, `gravity_scale`, `randomize=1`, `noise` (0 — ideal sensors), `rotor_scale`, `max_steps`, `frame_skip`, `gust`, `lag`, `fault`, `seed` |
 | `reset` | `id`, `seed` |
-| `step` | `id`, `action=a,b,…` или `mode=auto\|random`, `repeat` (1–100), `text=1`, `traj=1` (все промежуточные шаги) |
-| `state` | `id`: также истинное состояние и скрытые параметры |
-| `fork` | `id`: копия среды, чтобы проиграть другое действие из той же точки |
+| `step` | `id`, `action=a,b,…` or `mode=auto\|random`, `repeat` (1–100), `text=1`, `traj=1` (all intermediate steps) |
+| `state` | `id`: also the true state and hidden parameters |
+| `fork` | `id`: environment copy, to play another action from the same point |
 | `close` | `id` |
-| `terrain` | `id`, `n` (сетка 17–257) |
+| `terrain` | `id`, `n` (grid 17–257) |
 | `camera` | `id`, `w`, `h` (4–256), `fov`, `mode=depth\|rgb` |
 
-### Из Rust
+### From Rust
 
 ```rust
 use worldsim::env::{Env, EnvConfig};
 let mut cfg = EnvConfig::new("lander", "moon")?;
-cfg.randomize = true;                  // случайные параметры в каждом эпизоде
+cfg.randomize = true;                  // random parameters in each episode
 let mut env = Env::new(cfg)?;
 env.reset(42);
 loop {
-    let action = env.autopilot();      // замените своей политикой: наблюдения → действие
+    let action = env.autopilot();      // replace with your policy: observations → action
     let (_obs, _reward, terminated, truncated) = env.step(&action);
     if terminated || truncated { break; }
 }
 println!("{}: {:.1}", env.info.reason, env.ep_return);
 ```
 
-### Базовая линия
+### Baseline
 
-С этими числами можно сравнивать обученного агента. Встроенный ПД-автопилот, успешные эпизоды из 10, со случайными
-параметрами и стандартным размером винтов:
+A trained agent can be compared with these numbers. The built-in PD autopilot, successful episodes out of 10, with random
+parameters and the standard rotor size:
 
-| Задача | Земля | Луна | Марс |
+| Task | Earth | Moon | Mars |
 |---|---|---|---|
 | `lander` | 10 | 10 | 10 |
 | `drone` | 10 | 0 | 0 |
 | `rover` | 8 | 6 | 4 |
 
-На Луне дрону не на что опереться: там нет воздуха. На Марсе обычным винтам не хватает плотности атмосферы. Повторить замер:
+On the Moon a drone has nothing to push against: there is no air. On Mars ordinary rotors lack atmospheric density. To repeat the measurement:
 `cargo run --release --example probe_env`.
 
-## World models: данные и квалификация
+## World models: data and qualification
 
 ```bash
 cargo build --release
@@ -187,34 +189,34 @@ python -m worldsim.baseline train --data ../runs/moon ../runs/earth --out ../run
 python -m worldsim.baseline qualify --model ../runs/base.pt --world moon=../runs/moon --world mix=../runs/mix --out ../runs/report
 ```
 
-`collect` пишет `.npy` и `meta.json`: наблюдения, действия, истинное состояние, скрытые параметры и причины окончания эпизодов. Результат не зависит от числа потоков. С `--counterfactuals` добавляются ветвления: разные действия из одной точки с истинным ответом.
+`collect` writes `.npy` and `meta.json`: observations, actions, true state, hidden parameters and episode end reasons. The result does not depend on thread count. With `--counterfactuals N` branches are added at N points per 1000 steps: different actions from one point with the true response.
 
-Подключить свою модель можно любой архитектуры:
+You can connect your own model of any architecture:
 
 ```python
 from worldsim import Dataset, WorldModel, qualify, to_markdown
 
 class MyModel(WorldModel):
     name = "my-rssm"
-    def init(self, obs, params):      # начальное состояние по наблюдениям
+    def init(self, obs, params):      # initial state from observations
         return encode(obs)
-    def step(self, state, action):    # шаг в воображении
+    def step(self, state, action):    # a step in imagination
         state = dynamics(state, action)
-        return state, decode(state)   # предсказание в каналах сенсоров
+        return state, decode(state)   # prediction in sensor channels
 
 report = qualify(MyModel(), {"moon": Dataset("runs/moon"), "mix": Dataset("runs/mix")})
 print(to_markdown(report))
 ```
 
-| Ступень | Что проверяет |
+| Level | What it checks |
 |---|---|
-| L1 Точность | горизонт доверия при допусках миссии |
-| L2 Физика | нарушения законов в воображении относительно симулятора |
-| L3 Отклик | эффект действия против истинных ветвлений |
-| L4 Оптимизм | пропущенные аварии и ложные тревоги |
-| L5 Границы | те же проверки в мирах вне обучения |
+| L1 Accuracy | trust horizon under mission tolerances |
+| L2 Physics | law violations in imagination relative to the simulator |
+| L3 Response | action effect against true branches |
+| L4 Optimism | missed crashes and false alarms |
+| L5 Boundaries | same checks in worlds outside training |
 
-Для обучения без файлов есть векторная среда, которая работает без HTTP:
+For training without files there is a vector environment that works without HTTP:
 
 ```python
 from worldsim import VectorEnv
@@ -223,123 +225,125 @@ obs = env.reset()
 obs, reward, terminated, truncated, info = env.step(env.autopilot())
 ```
 
-## Для работы с вашей системой
+## To work with your system
 
-**Свой контроллер.** Те же полёты и требования, но управляет ваша система. Отчёт показывает также парное сравнение со встроенным автопилотом:
+**Custom controller.** Same flights and requirements, but your system controls. The report also shows a paired comparison with the built-in autopilot:
 
 ```python
 import json
 from worldsim import MissionRunner
 
 runner = MissionRunner(json.load(open("missions/lunar_lander.json")))
-report = runner.evaluate(lambda obs: my_policy(obs), name="my-gnc")   # obs: N×O, ответ: N×A
+report = runner.evaluate(lambda obs: my_policy(obs), name="my-gnc")   # obs: N×O, response: N×A
 print(report["success"], report["delta_vs_autopilot"], report["scorecard"])
 ```
 
-**Калибровка по телеметрии.** Параметры подбираются так, чтобы модель повторила записанный полёт. Результат содержит погрешности и признак, определяются ли параметры по этим данным:
+**Telemetry calibration.** Parameters are fitted so the model reproduces a recorded flight. The result contains uncertainties and a flag for whether the data determines the parameters:
 
 ```bash
 cd python && python -m worldsim.calibrate --task lander --world moon --csv flight.csv \
   --fit isp:200:400 --fit t_max:1000:50000 --set terrain_scale=0,crater_scale=0 --out params.json
 ```
 
-В CSV нужны столбцы `act_0…` и столбцы состояния (`x y z vx vy vz`, по желанию `mass`). Шаг таблицы равен шагу управления. Проверено только на синтетических записях: на настоящей телеметрии ещё не запускалось. Хороший остаток не доказывает, что упрощённая физика верна для вашего аппарата.
+The CSV needs columns `act_0…` and state columns (`x y z vx vy vz`, optional `mass`). The table step equals the control step. Verified only on synthetic recordings: not yet run on real telemetry. A good residual does not prove that the simplified physics is right for your vehicle. From code, use `worldsim.fit_telemetry`.
 
-**Рельеф реальной площадки.** Форматы `.asc` (ESRI ASCII Grid), `.csv`, `.npy`; центр карты совпадает с площадкой:
+**Terrain of a real site.** Formats `.asc` (ESRI ASCII Grid), `.csv`, `.npy`; the map center coincides with the pad:
 
 ```bash
 worldsim collect --task rover --worlds moon --terrain-file site.asc --episodes 100 --out runs/site
 ```
 
-В описании миссии: `"terrain": {"file": "site.asc"}` при локальном запуске или `"terrain": {"n": 65, "size": 800, "heights": [...]}` через API. Сервер не читает файлы по пути из запроса.
+In the mission description: `"terrain": {"file": "site.asc"}` for a local run or `"terrain": {"n": 65, "size": 800, "heights": [...]}` through the API. The server does not read files by a path from the request.
 
-**Экспорт для обучения.** Формат LeRobotDataset v3, загрузка проверена на lerobot 0.6.1. Нужны `pyarrow` и `pandas`:
+**Export for training.** LeRobotDataset v3 format, loading verified on lerobot 0.6.1. Requires `pyarrow` and `pandas`:
 
 ```bash
 cd python && python -m worldsim.export --data ../runs/moon --out ../runs/moon_lerobot
 ```
 
-**Настройка в интерфейсе.** Параметры, требования и варианты технологий редактируются в формах вкладок «Роботы» и «Mission Lab». Там же сохранение и импорт пресетов, а на вкладке «Настройки» — тема, размер текста, ширина панели и качество графики. Всё это хранится в браузере.
+**Interface settings.** Parameters, requirements and technology options are edited in the forms of the “Robots” and “Mission Lab” tabs. Presets can be saved and imported there too, and the “Settings” tab has theme, text size, panel width and graphics quality. All of this is stored in the browser.
 
-**Параметры.** Список всех настраиваемых величин с единицами и диапазонами: `worldsim params --task lander`. Они работают в `collect --set`, в описании миссии, в API (`params=isp=320,gust=2`) и в `VectorEnv(params={...})`.
+**Parameters.** A list of all configurable quantities with units and ranges: `worldsim params --task lander`. They work in `collect --set`, in a mission description, in API (`params=isp=320,gust=2`) and in `VectorEnv(params={...})`.
 
-## Как библиотека
+## As a library
 
 ```rust
 use worldsim::{world::World, climate::{simulate, ClimateOptions}};
 let mars = World::preset("mars")?;
 let c = simulate(&mars, &ClimateOptions::default());
-println!("Марс: {:.0} К, CO₂-шапки от {:.0}°", c.global_mean, c.ice_edge);
+println!("Mars: {:.0} K, CO₂ caps from {:.0}°", c.global_mean, c.ice_edge);
 ```
 
-## Устройство
+## Layout
 
 ```
 src/
-  constants  presets  world  atmosphere      — константы CODATA, пресеты, сборка мира
-  ballistics  thermal  magneto  nbody  orbit  — механика, тепло, частицы, N тел
-  stars  starsystem                           — звёзды, генератор систем
-  climate                                     — сезонная модель энергобаланса
-  galaxy                                      — Барнс–Хат, начальные условия галактик
-  cosmology                                   — Фридман, FFT, particle-mesh
-  env                                         — среда для обучения роботов: lander, drone, rover
-  quantum  blackhole  fluid  chemistry         — квант, чёрные дыры, гидродинамика, химия
-  collisions  tectonics  lab                  — удары, тектоника, опыты для интерфейса
-  validate                                    — 131 проверка законов
-  mission  collect  ffi                       — Mission Lab, сбор переходов, векторная среда для Python
-  datagen  server  json  main                 — датасеты, HTTP-сервер, CLI
-web/index.html                                — 3D-интерфейс (three.js), встроен в бинарник
-missions/                                     — примеры миссий
-python/worldsim/                              — клиент, векторная среда, данные, квалификация, базовая модель
-docs/PRODUCT.md                               — продукт, исследования, ограничения, планы
-data/                                         — каталоги HYG и OEC (скачиваются tools/fetch_data.sh, свои лицензии)
-tools/fetch_data.sh, build_data.py           — загрузка и сборка данных из каталогов
+  constants  presets  world  atmosphere      — CODATA constants, presets, world assembly
+  ballistics  thermal  magneto  nbody  orbit  — mechanics, heat, particles, N bodies
+  stars  starsystem                           — stars, system generator
+  climate                                     — seasonal energy balance model
+  galaxy                                      — Barnes–Hut, galaxy initial conditions
+  cosmology                                   — Friedmann, FFT, particle-mesh
+  env                                         — environment for training robots: lander, drone, rover
+  quantum  blackhole  fluid  chemistry         — quantum, black holes, fluid dynamics, chemistry
+  collisions  tectonics  lab                  — impacts, tectonics, experiments for the interface
+  validate                                    — 129 law checks
+  mission  collect  ffi                       — Mission Lab, transition collection, vector environment for Python
+  datagen  server  json  main                 — datasets, HTTP server, CLI
+web/index.html                                — 3D interface (three.js), built into the binary
+missions/                                     — example missions
+python/worldsim/                              — client, vector environment, data, qualification, baseline model
+docs/PRODUCT.md                               — product, research, limitations, plans
+data/                                         — HYG and OEC catalogs (downloaded by tools/fetch_data.sh, have their own licenses)
+tools/fetch_data.sh, build_data.py           — downloading and building data from catalogs
 ```
 
-## Запуск для команды
+## Running for a team
 
 ```bash
 docker build -t worldsim .
-docker run -p 8080:8080 -e WORLDSIM_TOKEN=придумайте-длинный-токен -v worldsim-data:/data worldsim
+docker run -p 8080:8080 -e WORLDSIM_TOKEN=choose-a-long-token -v worldsim-data:/data worldsim
 ```
 
-Или готовый бинарник со страницы релизов:
+The star and exoplanet catalogs are not in the image. For the “Map” tab, run `./tools/fetch_data.sh` and add `-v "$PWD/data:/opt/worldsim/data:ro"`. No release has been published yet, so until then use the image or build from source.
+
+Or a prebuilt binary from the releases page:
 
 ```bash
-WORLDSIM_TOKEN=придумайте-длинный-токен worldsim serve --host 0.0.0.0 --data-dir /var/lib/worldsim --log
+WORLDSIM_TOKEN=choose-a-long-token worldsim serve --host 0.0.0.0 --data-dir /var/lib/worldsim --log
 ```
 
-| Что | Как |
+| What | How |
 |---|---|
-| Доступ | заголовок `Authorization: Bearer <токен>`; на внешнем адресе без токена сервер не запустится |
-| Проверка живости | `GET /healthz` или `worldsim health` |
-| Описание API | `GET /api/openapi.json` |
-| Долгие расчёты | `POST /api/jobs/mission`, затем `GET /api/jobs/{id}`; отмена — `POST /api/jobs/{id}/cancel` |
-| История | `GET /api/runs`, сравнение `GET /api/runs/compare?a=…&b=…`; файлы лежат в `--data-dir` |
-| Запросы с чужих сайтов | отклоняются; разрешить можно ключом `--cors` |
+| Access | header `Authorization: Bearer <token>`; on an external address the server will not start without a token |
+| Liveness check | `GET /healthz` or `worldsim health` |
+| API description | `GET /api/openapi.json` |
+| Long calculations | `POST /api/jobs/mission`, then `GET /api/jobs/{id}`; cancel — `POST /api/jobs/{id}/cancel` |
+| History | `GET /api/runs`, comparison `GET /api/runs/compare?a=…&b=…`; files are in `--data-dir` |
+| Requests from other sites | are rejected; can be allowed with the `--cors` flag |
 
-TLS сервер не поддерживает: в сети ставьте его за обратный прокси. Подробности в [SECURITY.md](SECURITY.md), история изменений в [CHANGELOG.md](CHANGELOG.md).
+The server does not support TLS: on a network put it behind a reverse proxy. Details in [SECURITY.md](SECURITY.md), change history in [CHANGELOG.md](CHANGELOG.md).
 
-## Сравнение с аналогами
+## Comparison with alternatives
 
-Universe Sandbox, SpaceEngine, OpenSpace, REBOUND, GADGET-4/SWIFT, ExoPlaSim — в [COMPARISON.md](COMPARISON.md):
-где worldsim сильнее, где уступает и что в плане. Сравнение с инструментами для космических миссий и таблица разрывов: [docs/COMPETITORS.md](docs/COMPETITORS.md).
+Universe Sandbox, SpaceEngine, OpenSpace, REBOUND, GADGET-4/SWIFT, ExoPlaSim — in [COMPARISON.md](COMPARISON.md):
+where worldsim is stronger, where it falls behind and what is planned. A comparison with space mission tools and a gap table: [docs/COMPETITORS.md](docs/COMPETITORS.md).
 
-## Границы модели
+## Model boundaries
 
-Классическая механика, термодинамика, электромагнетизм, СТО, ОТО (1PN, а также геодезические Шварцшильда и формулы Керра), нерелятивистская квантовая механика одной частицы, 1D-гидродинамика, химическая кинетика, масштабные законы столкновений и тектоники.
+Classical mechanics, thermodynamics, electromagnetism, SR, GR (1PN, plus Schwarzschild geodesics and Kerr formulas), nonrelativistic single-particle quantum mechanics, 1D fluid dynamics, chemical kinetics, scaling laws of collisions and tectonics.
 
-| Раздел | Что есть | Чего нет |
+| Section | What is there | What is not |
 |---|---|---|
-| Квантовая механика | уравнение Шрёдингера 1D, туннелирование, водород, вырождение электронов | многочастичные системы, спин, поле, релятивистская квантовая теория |
-| Чёрные дыры | ISCO, тень, отклонение света, Хокинг, волны Петерса, рендер | численная ОТО, слияния, рендер с вращением дыры, поляризация |
-| Гидродинамика | 1D Эйлер и мелкая вода с точными эталонами | 3D, турбулентность, глобальная циркуляция |
-| Химия | кинетика, цикл Чепмена, идеальное сопло | химические равновесия реальных топлив, горение |
-| Столкновения | масштабные законы разрушения и кратеров, слияние | расчёт разрушения конкретного тела (SPH) |
-| Тектоника | остывание плиты, глубина дна, порядок скорости конвекции | движение плит, вулканизм |
+| Quantum mechanics | 1D Schrödinger equation, tunneling, hydrogen, electron degeneracy | many-particle systems, spin, fields, relativistic quantum theory |
+| Black holes | ISCO, shadow, light deflection, Hawking, Peters waves, render | numerical GR, mergers, render with hole rotation, polarization |
+| Fluid dynamics | 1D Euler and shallow water with exact references | 3D, turbulence, global circulation |
+| Chemistry | kinetics, Chapman cycle, ideal nozzle | chemical equilibria of real propellants, combustion |
+| Collisions | scaling laws of disruption and craters, merging | calculating the disruption of a specific body (SPH) |
+| Tectonics | plate cooling, seafloor depth, order of convection speed | plate motion, volcanism |
 
-Пресеты — средние значения из открытых источников (NASA Fact Sheets, JPL, US Std Atmosphere 1976, Planck 2018 и др.).
+Presets are mean values from open sources (NASA Fact Sheets, JPL, US Std Atmosphere 1976, Planck 2018 and others).
 
-## Лицензия
+## License
 
-Код — MIT. Данные в `data/` — под своими лицензиями: HYG — CC BY-SA 4.0, Open Exoplanet Catalogue — MIT.
+The code is MIT. Data in `data/` — under their own licenses: HYG — CC BY-SA 4.0, Open Exoplanet Catalogue — MIT.

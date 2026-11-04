@@ -1,4 +1,4 @@
-//! Кеплеровы элементы <-> вектор состояния.
+//! Keplerian elements <-> state vector.
 
 use crate::vec3::Vec3;
 use std::f64::consts::PI;
@@ -15,7 +15,7 @@ pub fn solve_kepler(m: f64, e: f64) -> f64 {
     ea
 }
 
-/// Элементы (градусы для углов) -> (r, v) в системе отсчёта родителя.
+/// Elements (degrees for angles) -> (r, v) in the parent frame.
 pub fn elements_to_state(mu: f64, a: f64, e: f64, i_deg: f64, node_deg: f64, argp_deg: f64, mean_anom_deg: f64) -> (Vec3, Vec3) {
     let (i, om, w, m) = (i_deg.to_radians(), node_deg.to_radians(), argp_deg.to_radians(), mean_anom_deg.to_radians());
     let ea = solve_kepler(m, e);
@@ -43,10 +43,10 @@ pub struct Elements {
     pub a: f64,
     pub e: f64,
     pub i: f64,
-    pub periapsis_dir: Vec3, // единичный вектор Лапласа–Рунге–Ленца
+    pub periapsis_dir: Vec3, // unit Laplace–Runge–Lenz vector
 }
 
-/// Вектор состояния -> элементы (используется для проверки законов Кеплера и прецессии).
+/// State vector -> elements (used to check Kepler laws and precession).
 pub fn state_to_elements(mu: f64, r: Vec3, v: Vec3) -> Elements {
     let h = r.cross(v);
     let e_vec = v.cross(h) / mu - r.unit();

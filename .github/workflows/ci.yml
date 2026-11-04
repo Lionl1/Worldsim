@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t worldsim:ci .
-      - name: Проверка образа
+      - name: Image check
         run: |
           docker run -d --name ws -e WORLDSIM_TOKEN=ci-token -p 8080:8080 worldsim:ci
           for i in $(seq 1 30); do curl -fs http://localhost:8080/healthz && break; sleep 1; done

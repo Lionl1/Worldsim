@@ -1,4 +1,4 @@
-"""Проверки Python-инструментов. Запуск: cd python && python -m unittest discover tests"""
+"""Python tool checks. Run: cd python && python -m unittest discover tests"""
 import http.client
 import json
 import os
@@ -40,10 +40,10 @@ class Data(Base):
         self.assertEqual(d.obs.shape, d.next_obs.shape)
         self.assertEqual(len(d.starts), 24)
         self.assertEqual(d.params.shape, (24, len(d.param_names)))
-        # next_obs шага t = obs шага t+1 внутри эпизода
+        # next_obs steps t = obs of step t+1 within the episode
         same = np.asarray(d.episode[1:]) == np.asarray(d.episode[:-1])
         self.assertTrue(np.array_equal(np.asarray(d.next_obs[:-1])[same], np.asarray(d.obs[1:])[same]))
-        # в конце каждого эпизода ровно один флаг завершения
+        # exactly one termination flag at the end of each episode
         ends = np.asarray(d.terminated) | np.asarray(d.truncated)
         self.assertEqual(int(ends.sum()), 24)
 
@@ -56,7 +56,7 @@ class Data(Base):
 
     def test_counterfactuals_cover_whole_episode(self):
         d = collect(self.tmp / "cf2", episodes=12, extra=("--counterfactuals", "20"))
-        # радиовысотомер у точек ветвления показывает и большую высоту, и подход к поверхности
+        # the radar altimeter at branch points shows both high altitude and approach to the surface
         alt = np.asarray(d.cf_obs)[:, d.channel("radar_alt")]
         self.assertLess(float(np.percentile(alt, 5)), 50.0)
 
@@ -64,7 +64,7 @@ class Data(Base):
         d = collect(self.tmp / "cf", episodes=12)
         self.assertGreater(len(d.cf_obs), 0)
         self.assertEqual(d.cf_next.shape[1:3], (d.meta["cf_branches"], d.meta["cf_horizon"]))
-        # разные действия дают разный исход, если эпизод ещё идёт
+        # different actions give different outcomes while the episode is still running
         alive = np.asarray(d.cf_alive)[:, :, -1].all(axis=1)
         self.assertGreater(alive.sum(), 0)
         v = d.channel("vel_z")
@@ -122,10 +122,10 @@ class Qualification(Base):
     def test_persistence_fails_and_report_renders(self):
         r = qualify(Persistence(), {"moon": self.ds}, n_starts=60)
         w = r["worlds"]["moon"]
-        self.assertFalse(w["gates"]["L3"])  # не реагирует на действия
+        self.assertFalse(w["gates"]["L3"])  # does not respond to actions
         self.assertFalse(w["gates"]["L1"])
         self.assertLess(w["action"]["worst"], 0.1)
-        self.assertIn("Квалификация", to_markdown(r))
+        self.assertIn("qualification", to_markdown(r))
         json.dumps(r)
 
     def test_kinematic_model_beats_persistence(self):
@@ -140,7 +140,7 @@ class Qualification(Base):
         self.assertGreaterEqual(a["accuracy"]["trust_horizon_s"], b["accuracy"]["trust_horizon_s"])
 
     def test_gates_are_reachable_and_not_gameable(self):
-        # L2 должен быть достижим: истинные траектории проходят, хотя у симулятора |up| − 1 почти ноль
+        # L2 must be reachable: true trajectories pass, even though the simulator has |up| − 1 almost zero
         from worldsim.qualify import level_physics
         n = 40
         true = np.asarray(self.ds.next_obs[:n], np.float32)[:, None, :]
@@ -149,7 +149,7 @@ class Qualification(Base):
         self.assertTrue(same.all())
         phys = level_physics(true, true, mask, self.ds)
         self.assertTrue(all(v["passed"] for v in phys.values()), phys)
-        # модель, которая всегда видит аварию: пропусков нет, а L4 не пройден из-за ложных тревог
+        # a model that always predicts a crash: no misses, but L4 fails on false alarms
         idx = self.ds.channel("radar_alt"), self.ds.channel("vel_z")
 
         def alarm(o, a, p):
@@ -182,7 +182,7 @@ class Server(unittest.TestCase):
                 return
             except OSError:
                 time.sleep(0.1)
-        raise RuntimeError("сервер не запустился")
+        raise RuntimeError("server did not start")
 
     @classmethod
     def tearDownClass(cls):
@@ -247,7 +247,7 @@ class Server(unittest.TestCase):
         spec = {"task": "lander", "runs": 2, "requirements": [{"metric": "success", "op": ">=", "value": 0.5}], "terrain": {"file": "/etc/hosts", "size": 100}}
         with self.assertRaisesRegex(RuntimeError, "terrain.file"):
             self.c.post("/api/mission/run", json.dumps(spec).encode())
-        # а рельеф прямо в описании работает
+        # but terrain directly in the description works
         spec["terrain"] = {"n": 9, "size": 900, "heights": [0.0] * 81}
         self.assertIn("scorecard", self.c.post("/api/mission/run", json.dumps(spec).encode()))
 
@@ -267,7 +267,7 @@ class Server(unittest.TestCase):
             self.c.get("/api/blackhole/props", a=1.5)
         b = self.c.get("/api/blackhole/render", w=64, h=40)
         self.assertEqual(len(b), 64 * 40 * 3)
-        # в центре кадра тень, сбоку свет диска или фон
+        # shadow in the center of the frame, disk light or background at the side
         px = np.frombuffer(b, np.uint8).reshape(40, 64, 3)
         self.assertLess(int(px[20, 32].sum()), 30)
         self.assertGreater(int(px.sum()), 0)
@@ -286,7 +286,7 @@ class Server(unittest.TestCase):
         self.assertGreaterEqual(len(runs), 2)
         cmp = self.c.get("/api/runs/compare", a=runs[1]["id"], b=runs[0]["id"])
         self.assertTrue(any(x["key"] == "rotor_scale" for x in cmp["spec_changes"]))
-        # отмена долгой задачи
+        # cancelling a long job
         big = dict(spec, runs=20000)
         job = self.c.post("/api/jobs/mission", json.dumps(big).encode())["id"]
         self.c.post(f"/api/jobs/{job}/cancel")
@@ -296,7 +296,7 @@ class Server(unittest.TestCase):
                 break
             time.sleep(0.1)
         self.assertEqual(j["status"], "cancelled")
-        # ошибки доступа и пути
+        # access and path errors
         for bad in ("../../etc", "..%2f", "abc!"):
             with self.assertRaises(RuntimeError):
                 self.c.get(f"/api/runs/{bad}")
@@ -332,7 +332,7 @@ class Server(unittest.TestCase):
 
 
 class ProductGaps(Base):
-    SPEC = {"name": "тест", "task": "lander", "world": "moon", "runs": 24, "seed": 2, "vehicle": {"t_max": 8000, "fuel": 120, "start_offset": 5, "start_vh": 1},
+    SPEC = {"name": "test", "task": "lander", "world": "moon", "runs": 24, "seed": 2, "vehicle": {"t_max": 8000, "fuel": 120, "start_offset": 5, "start_vh": 1},
             "dispersions": {"t_max": 0.03}, "requirements": [{"metric": "success", "op": ">=", "value": 0.5}]}
 
     def test_own_controller_in_mission(self):
@@ -341,7 +341,7 @@ class ProductGaps(Base):
         vz, gz, up = names.index("vel_z"), names.index("gps_dz"), names.index("up_bz")
 
         def pd(obs):
-            # контроллер снаружи: вертикальный канал на сенсорах, момент ноль
+            # external controller: vertical channel from sensors, zero torque
             a = np.zeros((r.n, r.act_dim), np.float32)
             target = -np.minimum(1.0 + 0.12 * obs[:, gz], 40.0)
             a[:, 0] = np.clip(0.2 + 0.5 * (target - obs[:, vz]), 0, 1)
@@ -353,7 +353,7 @@ class ProductGaps(Base):
         self.assertEqual(good["unfinished"], 0)
         self.assertGreater(good["autopilot_success"], 0)
         off = r.evaluate(lambda obs: np.zeros((r.n, r.act_dim), np.float32), "off")
-        self.assertEqual(off["success"], 0.0)  # без двигателя никто не садится
+        self.assertEqual(off["success"], 0.0)  # nobody lands without an engine
         self.assertGreater(good["success"], off["success"])
         with self.assertRaises(ValueError):
             r.evaluate(lambda obs: np.zeros((1, 1), np.float32))
@@ -390,7 +390,7 @@ class ProductGaps(Base):
         init = [0, 0, 500, 0, 0, -10]
         flat = {"terrain_scale": 0, "crater_scale": 0, "t_max": 12000}
         s, names = replay("lander", "moon", flat, init, act)
-        # таблица как в реальной записи: первая строка — начальное состояние, команда этой строки ещё не подействовала
+        # table like a real recording: the first row is the initial state, the command of this row has not acted yet
         p = self.tmp / "flight.csv"
         with open(p, "w") as f:
             f.write("act_0,act_1,act_2,act_3,z,vz\n")
@@ -402,9 +402,9 @@ class ProductGaps(Base):
         self.assertLess(np.abs(sim[:, names.index("vz")] - st["vz"]).max(), 1e-3)
 
     def test_form_values_for_engine_are_normalized(self):
-        # параметр в разделе vehicle не должен молча перекрывать технологию
+        # a parameter in the vehicle section must not silently override a technology
         spec = {"task": "drone", "world": "mars", "runs": 12, "vehicle": {"rotor_scale": 8}, "requirements": [{"metric": "success", "op": ">=", "value": 0.5}],
-                "technologies": [{"name": "большие винты", "set_top": {"rotor_scale": 30}}]}
+                "technologies": [{"name": "large rotors", "set_top": {"rotor_scale": 30}}]}
         c = self.tmp / "s.json"
         c.write_text(json.dumps(spec), encoding="utf8")
         out = self.tmp / "norm"
@@ -430,7 +430,7 @@ class ProductGaps(Base):
         size = 800.0
         x = np.linspace(-size / 2, size / 2, n)
         h = 100 + 0.02 * x[None, :] + 0 * x[:, None]
-        # ступень в 40 м на востоке: посадка на неё даст большую высоту над площадкой
+        # a step 40 m to the east: landing on it gives a large height above the pad
         h[:, x > 150] += 40
         for ext, write in {".npy": lambda p: np.save(p, h), ".csv": lambda p: np.savetxt(p, h, delimiter=",")}.items():
             p = self.tmp / f"site{ext}"
@@ -457,7 +457,7 @@ class ProductGaps(Base):
             import pandas  # noqa: F401
             import pyarrow.parquet as pq
         except ImportError:
-            self.skipTest("нет pyarrow или pandas")
+            self.skipTest("no pyarrow or pandas")
         from worldsim.export import to_lerobot
         d = collect(self.tmp / "lr", episodes=6)
         out = to_lerobot(d, self.tmp / "lr_out")
@@ -470,7 +470,7 @@ class ProductGaps(Base):
         self.assertEqual(int(e["dataset_to_index"][5].as_py()), len(d))
         import pandas as pd
         tasks = pd.read_parquet(out / "meta" / "tasks.parquet")
-        self.assertIn("lander", tasks.index[0])  # LeRobot берёт текст задачи из индекса
+        self.assertIn("lander", tasks.index[0])  # LeRobot takes the task text from the index
 
 
 class Security(unittest.TestCase):
@@ -513,7 +513,7 @@ class Security(unittest.TestCase):
         ok = {"Authorization": "Bearer secret-token"}
         self.assertEqual(self.raw(headers={**ok, "Origin": "https://evil.example"})[0], 403)
         self.assertEqual(self.raw(headers={**ok, "Origin": f"http://localhost:{self.PORT}"})[0], 200)
-        # картинка на чужом сайте: Origin нет, но браузер присылает Sec-Fetch-Site
+        # an image on another site: no Origin, but the browser sends Sec-Fetch-Site
         self.assertEqual(self.raw(headers={**ok, "Sec-Fetch-Site": "cross-site"})[0], 403)
         self.assertEqual(self.raw(headers={**ok, "Sec-Fetch-Site": "same-origin"})[0], 200)
         self.assertNotIn("Access-Control-Allow-Origin", self.raw(headers=ok)[1])
@@ -528,7 +528,7 @@ class Security(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if k != "WORLDSIM_TOKEN"}
         r = subprocess.run([str(BIN), "serve", "--host", "0.0.0.0", "--port", "18767", "--no-open"], capture_output=True, env=env, timeout=10)
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("токен", r.stderr.decode())
+        self.assertIn("token", r.stderr.decode())
 
     def test_health_command(self):
         self.assertEqual(subprocess.run([str(BIN), "health", "--port", str(self.PORT)], capture_output=True).returncode, 0)

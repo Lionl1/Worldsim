@@ -1,5 +1,5 @@
 {
-  "name": "Лунный посадочный модуль, 1050 кг",
+  "name": "Lunar lander, 1050 kg",
   "task": "lander",
   "world": "moon",
   "runs": 300,
@@ -23,14 +23,14 @@
   "requirements": [
     {
       "id": "REQ-01",
-      "text": "Успешная мягкая посадка",
+      "text": "Successful soft landing",
       "metric": "success",
       "op": ">=",
       "value": 0.9
     },
     {
       "id": "REQ-02",
-      "text": "Скорость касания, 99-й перцентиль",
+      "text": "Touchdown speed, 99th percentile",
       "metric": "touch_speed",
       "percentile": 99,
       "op": "<=",
@@ -38,7 +38,7 @@
     },
     {
       "id": "REQ-03",
-      "text": "Промах от площадки, 95-й перцентиль",
+      "text": "Miss from the pad, 95th percentile",
       "metric": "touch_offset",
       "percentile": 95,
       "op": "<=",
@@ -46,7 +46,7 @@
     },
     {
       "id": "REQ-04",
-      "text": "Расход топлива, 99-й перцентиль",
+      "text": "Fuel use, 99th percentile",
       "metric": "fuel_used",
       "percentile": 99,
       "op": "<=",
@@ -55,42 +55,42 @@
   ],
   "technologies": [
     {
-      "name": "Двигатель Isp 340 с",
+      "name": "Engine Isp 340 s",
       "set": {
         "isp": 340
       },
       "dry_mass_delta": 15
     },
     {
-      "name": "Двигатель 7 кН",
+      "name": "Engine 7 kN",
       "set": {
         "t_max": 7000
       },
       "dry_mass_delta": 25
     },
     {
-      "name": "Мощнее двигатели ориентации",
+      "name": "Stronger attitude thrusters",
       "set": {
         "torque_max": 4000
       },
       "dry_mass_delta": 8
     },
     {
-      "name": "Точнее навигация (шум ×0.25)",
+      "name": "Better navigation (noise ×0.25)",
       "set_dispersion": {
         "nav_noise": 0.25
       },
       "dry_mass_delta": 5
     },
     {
-      "name": "Быстрые приводы (задержка 0.03 с)",
+      "name": "Fast actuators (lag 0.03 s)",
       "set_dispersion": {
         "actuator_lag": 0.03
       },
       "dry_mass_delta": 3
     },
     {
-      "name": "Запас топлива +30 кг",
+      "name": "Fuel margin +30 kg",
       "set": {
         "fuel": 80
       },

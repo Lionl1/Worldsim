@@ -2,8 +2,8 @@ use worldsim::validate::{self, Check};
 use worldsim::world::{World, WorldSpec};
 
 fn assert_all(v: Vec<Check>) {
-    let failed: Vec<_> = v.iter().filter(|c| !c.pass).map(|c| format!("{} / {}: {} (ожидалось {})", c.law, c.test, c.value, c.expected)).collect();
-    assert!(failed.is_empty(), "не выполнены законы:\n{}", failed.join("\n"));
+    let failed: Vec<_> = v.iter().filter(|c| !c.pass).map(|c| format!("{} / {}: {} (expected {})", c.law, c.test, c.value, c.expected)).collect();
+    assert!(failed.is_empty(), "laws not satisfied:\n{}", failed.join("\n"));
 }
 
 #[test] fn kepler() { assert_all(validate::kepler()); }
@@ -28,14 +28,14 @@ fn assert_all(v: Vec<Check>) {
 
 #[test]
 fn mixed_world_is_self_consistent() {
-    // Марс с земной атмосферой: давление у поверхности то же, но столб газа тяжелее (g меньше),
-    // значит τ больше и поверхность теплее, чем T_eq Марса.
+    // Mars with Earth atmosphere: same surface pressure, but the gas column is heavier (lower g),
+    // so τ is larger and the surface is warmer than the T_eq of Mars.
     let w = World::build(&WorldSpec { physics: "mars".into(), atmosphere: Some("earth".into()), surface: Some("moon".into()), gravity_scale: 1.0, distance_au: None }).unwrap();
     let a = w.atmosphere.as_ref().unwrap();
     assert!((a.column_weight(w.physics.gm, w.physics.radius) / 101_325.0 - 1.0).abs() < 0.005);
     assert!(w.greenhouse_tau() > 0.875 * 2.0);
     assert!(w.mean_surface_temperature() > w.equilibrium_temperature());
-    assert!(a.scale_height(w.g_surface()) > 20_000.0); // ниже g → атмосфера «пухлее»
+    assert!(a.scale_height(w.g_surface()) > 20_000.0); // lower g → the atmosphere is “puffier”
 }
 
 #[test]

@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>worldsim — модель вселенной</title>
+<title>worldsim — universe model</title>
 <style>
 :root{--bg:#0a0e15;--side:#10151f;--panel:#131925;--raised:#1a2230;--line:#2a3445;--hair:#222b3a;--field:#3a475c;--field-h:#52617a;--track:#232c3b;--axis:#7c8aa3;--code:#d8e4f7;--text:#edf1f7;--soft:#c5cedc;--muted:#a3aec1;--accent:#5aa2ff;--accent-strong:#2f6fed;--good:#4ade80;--bad:#ff7b7b;--warn:#fbbf4b;--good-bg:#123a26;--bad-bg:#451c20;--warn-bg:#40310f;--panel-w:384px;--chart-h:216px}
 :root[data-theme=light]{--bg:#f4f6f9;--side:#ffffff;--panel:#ffffff;--raised:#eef1f6;--line:#d5dbe5;--hair:#e3e7ee;--field:#b6c0cf;--field-h:#8b98ab;--track:#dfe4ec;--axis:#6b7789;--code:#1c2b45;--text:#141a24;--soft:#35404f;--muted:#566173;--accent:#1f66e0;--accent-strong:#1f66e0;--good:#0f7a3d;--bad:#c62f3a;--warn:#8f5e00;--good-bg:#dcf5e6;--bad-bg:#fbe2e4;--warn-bg:#fbeecb}
 .no-motion *,.no-motion *::before,.no-motion *::after{animation-duration:.01ms!important;transition-duration:.01ms!important}.no-chart #chartbox:not(main.plot #chartbox){display:none!important}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
 #app{display:grid;grid-template-columns:216px minmax(0,1fr);height:100%}
-/* меню */
+/* menu */
 nav{background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 10px;gap:2px;overflow:auto}
 nav h1{font-size:18px;font-weight:700;margin:0 8px;letter-spacing:-.2px}nav .sub{color:var(--muted);font-size:13px;margin:2px 8px 10px;line-height:1.35}
 nav .grp{color:var(--muted);font-size:12px;font-weight:600;margin:14px 8px 4px}
@@ -18,7 +18,7 @@ nav button{all:unset;cursor:pointer;padding:8px 10px;border-radius:6px;color:var
 nav button:hover{background:var(--raised);color:var(--text)}nav button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 nav button.on{background:var(--accent-strong);color:#fff;font-weight:600}
 nav .foot{margin-top:auto;padding:14px 8px 2px;color:var(--muted);font-size:12px;line-height:1.45}
-/* единая раскладка: сцена в центре, график под ней, управление справа */
+/* single layout: scene in the center, chart below it, controls on the right */
 main{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) var(--panel-w);grid-template-rows:auto minmax(0,1fr) auto}
 #hud{grid-column:1;grid-row:1;background:var(--side);border-bottom:1px solid var(--line);padding:9px 16px;color:var(--soft);font-variant-numeric:tabular-nums;font-size:14px}.hud b{color:var(--text);font-weight:600}.hud .k{color:var(--muted)}
 #stage{grid-column:1;grid-row:2;position:relative;min-height:0;min-width:0;background:#05070c}
@@ -31,21 +31,21 @@ main.plot #stage{display:none}main.plot #chartbox{grid-row:1/4;height:auto;displ
 h3{margin:20px 0 8px;font-size:13px;font-weight:650;color:var(--text);padding-top:14px;border-top:1px solid var(--line);text-transform:none;letter-spacing:0}
 .panel h2+h3{border-top:0}
 .muted{color:var(--muted)}.ok{color:var(--good)}.no{color:var(--bad)}
-/* поля */
+/* fields */
 .row{display:flex;gap:10px;align-items:center;margin:8px 0}.row label{flex:0 0 128px;color:var(--soft);font-size:14px;line-height:1.25}.row>*:last-child{flex:1;min-width:0}
 select,input[type=number],input[type=text],textarea{background:var(--bg);color:var(--text);border:1px solid var(--field);border-radius:6px;padding:7px 9px;width:100%;font:inherit;transition:border-color .15s,box-shadow .15s}
 select:hover,input:hover,textarea:hover{border-color:var(--field-h)}select:focus,input:focus,textarea:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px rgba(90,162,255,.25)}
 input[type=range]{width:100%;accent-color:var(--accent);height:20px}
 .btn{all:unset;cursor:pointer;background:var(--accent-strong);color:#fff;padding:8px 14px;border-radius:6px;text-align:center;font-weight:600;transition:background .15s}.btn:hover{background:#4383f7}.btn:focus-visible{outline:2px solid #fff;outline-offset:1px}
 .btn.sec{background:var(--raised);color:var(--text);font-weight:500;box-shadow:inset 0 0 0 1px var(--field)}.btn.sec:hover{background:var(--track)}.btn.off{opacity:.5;pointer-events:none}.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-/* таблицы */
+/* tables */
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--muted);font-weight:500;font-size:13px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:0}.kv>div{padding:5px 0;border-bottom:1px solid var(--hair)}.kv div:nth-child(odd){color:var(--soft);padding-right:12px}.kv div:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
 .pill{display:inline-block;padding:2px 9px;border-radius:4px;font-size:13px;font-weight:600;background:var(--raised);color:var(--soft);white-space:nowrap}.pill.g{background:var(--good-bg);color:var(--good)}.pill.r{background:var(--bad-bg);color:var(--bad)}.pill.y{background:var(--warn-bg);color:var(--warn)}
 .bar{height:8px;border-radius:2px;background:var(--track);overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--soft)}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
 .cam{width:100%;image-rendering:pixelated;border-radius:4px;background:#000;display:block}
-/* законы */
+/* laws */
 #settings{position:absolute;inset:0;overflow:auto;padding:28px 36px;display:none;background:var(--bg);z-index:3}
 .pg{border-top:1px solid var(--line)}.pg summary{cursor:pointer;padding:9px 0;font-weight:600;list-style-position:inside}.pg .row{margin:6px 0}.badge{display:inline-block;min-width:18px;text-align:center;border-radius:9px;background:var(--accent-strong);color:#fff;font-size:12px;padding:0 5px}.badge:empty{display:none}
 .tabs2{display:flex;gap:6px;margin:12px 0 4px}.tabs2 .btn{flex:1}.item{padding:9px 0;border-bottom:1px solid var(--hair)}.item input[type=text]{margin-bottom:6px}.item .row{margin:6px 0 0}.item1{margin:6px 0}.del{padding:5px 9px;flex:0 0 auto!important}.pset{display:flex;gap:6px;margin:8px 0}.pset select{flex:1;min-width:0}
@@ -55,7 +55,7 @@ input:invalid{border-color:var(--bad)}
 #veil{position:absolute;inset:0;pointer-events:none;opacity:0;background:var(--bg);transition:opacity .16s ease;z-index:6}#veil.on{opacity:1}
 @keyframes spin{to{transform:rotate(360deg)}}@keyframes fade{from{opacity:0}to{opacity:1}}.panel.enter>*{animation:fade .25s ease both}
 #busy{position:absolute;left:50%;top:12px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:var(--raised);border:1px solid var(--line);padding:7px 14px;border-radius:6px;opacity:0;visibility:hidden;transition:opacity .15s;z-index:8}#busy.on{opacity:1;visibility:visible}#busy::before{content:"";width:13px;height:13px;border-radius:50%;border:2px solid #4a5870;border-top-color:var(--accent);animation:spin .7s linear infinite}
-/* Mission Lab: отчёт как одна страница */
+/* Mission Lab: report as a single page */
 #mission{position:absolute;inset:0;overflow:auto;display:none;background:var(--bg);padding:28px 36px 40px;z-index:2}.report{max-width:940px;margin:0 auto;animation:fade .3s ease both}
 .report h2{font-size:22px;margin:0 0 4px;letter-spacing:-.3px}.report h3{font-size:16px;margin:30px 0 10px;padding:0;border:0}.report td{font-size:14px}.report .sub{color:var(--muted);margin-bottom:18px}
 .ml-empty{max-width:520px;margin:18vh auto 0;text-align:center;color:var(--soft)}.ml-empty b{display:block;font-size:20px;margin-bottom:8px;color:var(--text)}
@@ -74,25 +74,25 @@ main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 40vh minmax(0,1
 <body>
 <div id="app">
 <nav>
-  <h1>worldsim</h1><div class="sub">физика для миссий и world models</div>
-  <div class="grp">Инженерия</div>
+  <h1>worldsim</h1><div class="sub">physics for missions and world models</div>
+  <div class="grp">Engineering</div>
   <button data-tab="mission">Mission Lab</button>
-  <button data-tab="robots">Роботы</button>
-  <button data-tab="laws">Законы</button>
-  <div class="grp">Вселенная</div>
-  <button data-tab="world">Миры</button>
-  <button data-tab="climate">Климат</button>
-  <button data-tab="solar">Солнечная система</button>
-  <button data-tab="system">Звёздные системы</button>
-  <button data-tab="starmap">Карта звёзд и экзопланет</button>
-  <button data-tab="galaxy">Галактики</button>
-  <button data-tab="cosmo">Космология</button>
-  <div class="grp">Физика</div>
-  <button data-tab="blackhole">Чёрные дыры</button>
-  <button data-tab="lab">Лаборатория</button>
-  <div class="grp">Прочее</div>
-  <button data-tab="settings">Настройки</button>
-  <div class="foot">Данные: HYG v4.1 (CC BY-SA 4.0), Open Exoplanet Catalogue (MIT), Planck 2018, NASA Fact Sheets.<br>Мышь: вращение, колесо — масштаб.</div>
+  <button data-tab="robots">Robots</button>
+  <button data-tab="laws">Laws</button>
+  <div class="grp">Universe</div>
+  <button data-tab="world">Worlds</button>
+  <button data-tab="climate">Climate</button>
+  <button data-tab="solar">Solar system</button>
+  <button data-tab="system">Star systems</button>
+  <button data-tab="starmap">Stars and exoplanets map</button>
+  <button data-tab="galaxy">Galaxies</button>
+  <button data-tab="cosmo">Cosmology</button>
+  <div class="grp">Physics</div>
+  <button data-tab="blackhole">Black holes</button>
+  <button data-tab="lab">Laboratory</button>
+  <div class="grp">Other</div>
+  <button data-tab="settings">Settings</button>
+  <div class="foot">Data: HYG v4.1 (CC BY-SA 4.0), Open Exoplanet Catalogue (MIT), Planck 2018, NASA Fact Sheets.<br>Mouse: rotate, wheel: zoom.</div>
 </nav>
 <main>
   <div id="hud" class="hud" style="display:none"></div>
@@ -103,14 +103,14 @@ main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 40vh minmax(0,1
   <div id="settings"></div>
   <div id="veil"></div>
   <div id="tip"></div>
-  <div id="busy"><span id="busy_t">считаю…</span></div>
+  <div id="busy"><span id="busy_t">computing…</span></div>
 </main>
 </div>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// ============================================================ инфраструктура
+// ============================================================ infrastructure
 const $ = s => document.querySelector(s);
 const canvas = $('#gl'), panel = $('#panel'), hud = $('#hud'), chartbox = $('#chartbox'), chartEl = $('#chart'), tip = $('#tip');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
@@ -119,29 +119,29 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 let current = null, epoch = 0;
-/* токен живёт только до закрытия вкладки и передаётся заголовком, а не в адресе */
+/* the token lives only until the tab closes and goes in a header, not in the URL */
 const authToken = () => { try { return sessionStorage.getItem('ws_token') || ''; } catch(e){ return ''; } };
 const api = async (path, opts={}) => {
   const headers = {...(opts.headers||{})}, t = authToken(); if (t) headers.Authorization = 'Bearer '+t;
   let r = await fetch(path, {...opts, headers});
   if (r.status === 401){
-    const v = prompt('Сервер защищён. Введите токен доступа:');
+    const v = prompt('This server is protected. Enter the access token:');
     if (v){ try { sessionStorage.setItem('ws_token', v); } catch(e){} headers.Authorization = 'Bearer '+v; r = await fetch(path, {...opts, headers}); }
   }
   if (!r.ok) { let m = r.statusText; try { m = (await r.json()).error } catch(e){} throw new Error(m); }
   return opts.binary ? r : r.json();
 };
 const qs = o => new URLSearchParams(Object.entries(o).filter(([k,v]) => v !== undefined && v !== null && v !== '')).toString();
-const busy = (on, text='считаю…') => { $('#busy_t').textContent = text; $('#busy').classList.toggle('on', !!on); };
+const busy = (on, text='computing…') => { $('#busy_t').textContent = text; $('#busy').classList.toggle('on', !!on); };
 const esc = t => String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-/* время в подходящих единицах: млрд лет … лет */
-const fmtTime = g => { const a=Math.abs(g); return a>=1 ? g.toFixed(3)+' млрд лет' : a>=1e-3 ? (g*1e3).toFixed(2)+' млн лет' : a>=1e-6 ? (g*1e6).toFixed(1)+' тыс. лет' : (g*1e9).toFixed(0)+' лет'; };
+/* time in suitable units: billion years … years */
+const fmtTime = g => { const a=Math.abs(g); return a>=1 ? g.toFixed(3)+' Gyr' : a>=1e-3 ? (g*1e3).toFixed(2)+' Myr' : a>=1e-6 ? (g*1e6).toFixed(1)+' kyr' : (g*1e9).toFixed(0)+' yr'; };
 const fmt = (x, d=2) => x == null || !isFinite(x) ? '—' : (Math.abs(x) >= 1e5 || (Math.abs(x) < 1e-3 && x !== 0)) ? x.toExponential(d) : x.toFixed(d);
 function resize(){ const m = canvas.parentElement; renderer.setSize(m.clientWidth, m.clientHeight, false); if (current?.camera){ current.camera.aspect = m.clientWidth/m.clientHeight; current.camera.updateProjectionMatrix(); } }
 addEventListener('resize', resize);
-/* панели могут менять размер сцены без изменения окна (появился график, строка статуса) */
+/* panels can resize the scene without resizing the window (a chart or status line appeared) */
 new ResizeObserver(() => resize()).observe($('#stage'));
 new ResizeObserver(() => { if (lastChart && chartbox.style.display !== 'none') chart(...lastChart); }).observe(chartbox);
 
@@ -156,26 +156,26 @@ function starfield(scene, n=4000, r=5000){
   const g = new THREE.BufferGeometry(), p = new Float32Array(n*3);
   for (let i=0;i<n;i++){ const u=Math.random()*2-1, t=Math.random()*6.283, s=Math.sqrt(1-u*u); p.set([r*s*Math.cos(t), r*u, r*s*Math.sin(t)], i*3); }
   g.setAttribute('position', new THREE.BufferAttribute(p,3));
-  // звёзды разного цвета и яркости, а не одинаковые точки
+  // stars of different color and brightness, not identical dots
   const col = new Float32Array(n*3), tint = [[.75,.82,1],[1,1,1],[1,.93,.8],[1,.8,.65]];
   for (let i=0;i<n;i++){ const t = tint[Math.random()*tint.length|0], b = .25+Math.pow(Math.random(),3)*.95; col.set([t[0]*b,t[1]*b,t[2]*b], i*3); }
   g.setAttribute('color', new THREE.BufferAttribute(col,3));
   const pts = new THREE.Points(g, new THREE.PointsMaterial({vertexColors:true, size:1.5, sizeAttenuation:false, depthWrite:false, fog:false})); scene.add(pts); return pts;
 }
-/* подпись объекта: всегда одного размера на экране и читается поверх сцены */
+/* object label: constant size on screen and readable over the scene */
 function labelSprite(text){
   const c = document.createElement('canvas'), g = c.getContext('2d'), f = '500 32px -apple-system,Segoe UI,sans-serif'; g.font = f; const w = Math.ceil(g.measureText(text).width)+24; c.width = w; c.height = 46;
   const g2 = c.getContext('2d'); g2.font = f; g2.fillStyle = 'rgba(10,14,21,.72)'; g2.beginPath(); g2.roundRect(0,0,w,46,8); g2.fill(); g2.fillStyle = '#edf1f7'; g2.textBaseline = 'middle'; g2.fillText(text,12,24);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:t, sizeAttenuation:false, depthTest:false, transparent:true})); const h = .026; sp.scale.set(h*w/46, h, 1); sp.center.set(-.08,.5); sp.renderOrder = 5; return sp;
 }
-const RU_BODY = {sun:'Солнце', mercury:'Меркурий', venus:'Венера', earth:'Земля', moon:'Луна', mars:'Марс', jupiter:'Юпитер'};
+const RU_BODY = {sun:'Sun', mercury:'Mercury', venus:'Venus', earth:'Earth', moon:'Moon', mars:'Mars', jupiter:'Jupiter'};
 
-// ------------------------------------------------------------ графики
+// ------------------------------------------------------------ charts
 let lastChart = null;
 function chart(series, o={}){
   const css = getComputedStyle(document.documentElement), col = k => css.getPropertyValue(k).trim();
   chartbox.style.display = 'block'; lastChart = [series, o];
-  // размер берём из раскладки: график тянется вместе с панелью и остаётся чётким на любом экране
+  // size comes from the layout: the chart stretches with the panel and stays sharp on any screen
   const dpr = devicePixelRatio || 1, W = chartEl.clientWidth || 460, H = chartEl.clientHeight || 200, c = chartEl.getContext('2d');
   if (chartEl.width !== Math.round(W*dpr) || chartEl.height !== Math.round(H*dpr)){ chartEl.width = Math.round(W*dpr); chartEl.height = Math.round(H*dpr); }
   c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,W,H);
@@ -194,7 +194,7 @@ function chart(series, o={}){
   for (let k=0;k<=4;k++){ const v=x0+(x1-x0)*k/4, xx=L+k*(W-L-R)/4; c.fillText(o.logx? '1e'+v.toFixed(1) : fmt(v, Math.abs(v)<10?2:0), xx-12, H-B+13); }
   c.fillStyle=col('--text'); c.font='600 13px -apple-system,Segoe UI,sans-serif'; c.fillText(o.title||'', L, 15); c.font='12px -apple-system,Segoe UI,sans-serif';
   c.fillStyle=col('--muted'); c.fillText(o.xlabel||'', W-R-c.measureText(o.xlabel||'').width, H-3);
-  let lx = L; // легенда отдельной строкой под заголовком: длинный заголовок на неё не наезжает
+  let lx = L; // legend on its own line under the title: a long title cannot overlap it
   for (const s of series){
     c.strokeStyle = c.fillStyle = s.color || '#6fb7ff'; c.lineWidth = s.width||1.6;
     if (s.dots){ for (let i=0;i<s.x.length;i++){ const xx=X(s.x[i]), yy=Y(s.y[i]); if(isFinite(xx)&&isFinite(yy)) c.fillRect(xx-1,yy-1,s.dot||2,s.dot||2);} }
@@ -204,22 +204,22 @@ function chart(series, o={}){
   if (o.marker!=null){ c.strokeStyle='#ffc361'; c.beginPath(); c.moveTo(X(o.marker),T); c.lineTo(X(o.marker),H-B); c.stroke(); }
 }
 
-// ------------------------------------------------------------ цвета
-function bbColor(t){ // быстрая аппроксимация цвета чёрного тела (для тысяч звёзд)
+// ------------------------------------------------------------ colors
+function bbColor(t){ // fast black-body color approximation (for thousands of stars)
   t = Math.min(Math.max(t,1000),40000)/100; let r,g,b;
   r = t<=66 ? 255 : 329.698727446*Math.pow(t-60,-0.1332047592);
   g = t<=66 ? 99.4708025861*Math.log(t)-161.1195681661 : 288.1221695283*Math.pow(t-60,-0.0755148492);
   b = t>=66 ? 255 : t<=19 ? 0 : 138.5177312231*Math.log(t-10)-305.0447927307;
   return [r,g,b].map(v=>Math.min(Math.max(v,0),255)/255);
 }
-function tempColor(T, lo=200, hi=320){ // «turbo»-подобная шкала
+function tempColor(T, lo=200, hi=320){ // “turbo”-like scale
   const x = Math.min(Math.max((T-lo)/(hi-lo),0),1);
   const st=[[0.19,0.07,0.23],[0.27,0.46,0.92],[0.15,0.85,0.75],[0.64,0.99,0.24],[0.98,0.73,0.22],[0.85,0.25,0.06],[0.48,0.02,0.01]];
   const f=x*(st.length-1), i=Math.min(Math.floor(f),st.length-2), w=f-i;
   return st[i].map((v,k)=>v*(1-w)+st[i+1][k]*w);
 }
 
-// ------------------------------------------------------------ шейдер планеты
+// ------------------------------------------------------------ planet shader
 const NOISE = `
 vec3 mod289(vec3 x){return x-floor(x*(1./289.))*289.;}vec4 mod289(vec4 x){return x-floor(x*(1./289.))*289.;}
 vec4 perm(vec4 x){return mod289(((x*34.)+1.)*x);}vec4 tis(vec4 r){return 1.79284291400159-0.85373472095314*r;}
@@ -269,7 +269,7 @@ function atmosphereShell(radius, color, strength){
     fragmentShader:`uniform vec3 c; uniform float s; varying vec3 n; varying vec3 v; void main(){ float f=pow(1.-abs(dot(n,v)),2.2); gl_FragColor=vec4(c*f*s,f*s); }`});
   return new THREE.Mesh(new THREE.SphereGeometry(radius*1.06, 64, 32), m);
 }
-// цвет поверхности из химического состава
+// surface color from chemical composition
 function surfaceColors(w){
   const ox = Object.fromEntries(w.surface.oxides); const fe=(ox.FeO||0), al=(ox.Al2O3||0)+(ox.CaO||0), ti=(ox.TiO2||0);
   const oxidized = w.atmosphere && w.atmosphere.composition.some(([g,x])=>g==='CO2'&&x>.5) && w.physics==='mars' || w.surface.name==='mars';
@@ -288,8 +288,8 @@ function atmoColor(w){
   return [[.35,.6,1], Math.min(.3+col*.25, 2.0)];
 }
 
-// ============================================================ вкладка: Миры
-/* полосы газового гиганта */
+// ============================================================ tab: Worlds
+/* gas giant bands */
 let _bands = null;
 function bandTex(){ if (_bands) return _bands; const c=document.createElement('canvas'); c.width=4; c.height=128; const g=c.getContext('2d'); for(let y=0;y<128;y++){ const v=.72+.28*Math.sin(y*.42+Math.sin(y*.13)*2.4); g.fillStyle=`rgb(${255*v|0},${235*v|0},${205*v|0})`; g.fillRect(0,y,4,1);} _bands=new THREE.CanvasTexture(c); _bands.colorSpace=THREE.SRGBColorSpace; return _bands; }
 const worldTab = {
@@ -299,20 +299,20 @@ const worldTab = {
     this.group = new THREE.Group(); S.scene.add(this.group);
     const pr = this.presets = await api('/api/presets');
     const opt = (arr, sel, extra=[]) => extra.concat(arr).map(x=>`<option ${x===sel?'selected':''}>${x}</option>`).join('');
-    panel.innerHTML = `<h2>Конструктор мира</h2><div class="muted">Смешивайте физику, атмосферу и состав разных тел — величины пересчитываются из законов.</div>
-      <div class="row"><label>Физика тела</label><select id="w_phys">${opt(pr.physics,'earth')}</select></div>
-      <div class="row"><label>Атмосфера</label><select id="w_atm">${opt(pr.atmosphere,'auto',['auto'])}</select></div>
-      <div class="row"><label>Поверхность</label><select id="w_srf">${opt(pr.surface,'auto',['auto'])}</select></div>
-      <div class="row"><label>Масштаб g</label><input id="w_g" type="range" min="0.2" max="3" step="0.05" value="1"></div>
-      <div class="row"><label>Расстояние, а.е.</label><input id="w_d" type="text" placeholder="по орбите"></div>
-      <div class="btns"><span class="btn" id="w_go">Построить</span><span class="btn sec" id="w_cl">Климат этого мира →</span></div>
+    panel.innerHTML = `<h2>World builder</h2><div class="muted">Mix physics, atmosphere and composition of different bodies. Quantities are recomputed from the laws.</div>
+      <div class="row"><label>Body physics</label><select id="w_phys">${opt(pr.physics,'earth')}</select></div>
+      <div class="row"><label>Atmosphere</label><select id="w_atm">${opt(pr.atmosphere,'auto',['auto'])}</select></div>
+      <div class="row"><label>Surface</label><select id="w_srf">${opt(pr.surface,'auto',['auto'])}</select></div>
+      <div class="row"><label>Scale g</label><input id="w_g" type="range" min="0.2" max="3" step="0.05" value="1"></div>
+      <div class="row"><label>Distance, AU</label><input id="w_d" type="text" placeholder="from orbit"></div>
+      <div class="btns"><span class="btn" id="w_go">Build</span><span class="btn sec" id="w_cl">Climate of this world →</span></div>
       <div id="w_info"></div>
-      <h3>Бросок / запуск</h3>
-      <div class="row"><label>Скорость, м/с</label><input id="t_v" type="number" value="300"></div>
-      <div class="row"><label>Угол, °</label><input id="t_e" type="number" value="45"></div>
-      <div class="row"><label>Широта, °</label><input id="t_lat" type="number" value="30"></div>
-      <div class="row"><label>Сопротивление</label><select id="t_drag"><option value="1">да</option><option value="0">вакуум</option></select></div>
-      <div class="btns"><span class="btn" id="t_go">Запустить</span><span class="btn sec" id="t_orb">Почти орбитальная скорость</span></div>
+      <h3>Throw / launch</h3>
+      <div class="row"><label>Speed, m/s</label><input id="t_v" type="number" value="300"></div>
+      <div class="row"><label>Angle, °</label><input id="t_e" type="number" value="45"></div>
+      <div class="row"><label>Latitude, °</label><input id="t_lat" type="number" value="30"></div>
+      <div class="row"><label>Drag</label><select id="t_drag"><option value="1">yes</option><option value="0">vacuum</option></select></div>
+      <div class="btns"><span class="btn" id="t_go">Launch</span><span class="btn sec" id="t_orb">Near-orbital speed</span></div>
       <div id="t_info" class="muted"></div>`;
     $('#w_go').onclick = () => this.load();
     $('#w_cl').onclick = () => { climateTab.pending = this.query(); switchTab('climate'); };
@@ -335,17 +335,17 @@ const worldTab = {
       this.planet = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), mat); this.group.add(this.planet);
       const ac = atmoColor(w); if (ac) this.group.add(atmosphereShell(1, ac[0], ac[1]));
       const P = (k,v) => `<div>${k}</div><div>${v}</div>`;
-      let h = `<h3>${w.name.replaceAll(' ', ' · ')}</h3><div class="kv">${P('Масса', fmt(w.mass_earth,3)+' M⊕')}${P('Радиус', fmt(w.radius_km,0)+' км')}${P('g', fmt(w.g,3)+' м/с²')}
-        ${P('1-я / 2-я косм.', fmt(w.v_orb/1e3,2)+' / '+fmt(w.v_esc/1e3,2)+' км/с')}${P('Сутки', w.tidally_locked ? 'приливной захват' : fmt(w.day_h,2)+' ч')}${P('Год', fmt(w.year_days,1)+' сут')}
-        ${P('Инсоляция', fmt(w.insolation,1)+' Вт/м²')}${P('T равновесная', fmt(w.t_eq,1)+' К')}${P('T поверхности', fmt(w.t_mean,1)+' К ('+fmt(w.t_mean-273.15,1)+' °C)')}
-        ${P('Парниковая τ', fmt(w.tau,3))}${P('Магн. диполь', w.dipole? fmt(w.dipole,2)+' А·м²':'нет')}</div>`;
-      if (w.atmosphere){ const a=w.atmosphere; h += `<h3>Атмосфера (${a.name})</h3><div class="kv">${P('Давление', fmt(a.pressure,0)+' Па')}${P('Шкала высот', fmt(a.scale_height_km,2)+' км')}${P('M, γ', fmt(a.molar_mass*1e3,2)+' г/моль, '+fmt(a.gamma,3))}${P('Масса столба', fmt(a.column_kg_m2,0)+' кг/м²')}</div>
+      let h = `<h3>${w.name.replaceAll(' ', ' · ')}</h3><div class="kv">${P('Mass', fmt(w.mass_earth,3)+' M⊕')}${P('Radius', fmt(w.radius_km,0)+' km')}${P('g', fmt(w.g,3)+' m/s²')}
+        ${P('Orbital / escape', fmt(w.v_orb/1e3,2)+' / '+fmt(w.v_esc/1e3,2)+' km/s')}${P('Solar day', w.tidally_locked ? 'tidally locked' : fmt(w.day_h,2)+' h')}${P('Year', fmt(w.year_days,1)+' d')}
+        ${P('Insolation', fmt(w.insolation,1)+' W/m²')}${P('T equilibrium', fmt(w.t_eq,1)+' K')}${P('T surface', fmt(w.t_mean,1)+' K ('+fmt(w.t_mean-273.15,1)+' °C)')}
+        ${P('Greenhouse τ', fmt(w.tau,3))}${P('Magnetic dipole', w.dipole? fmt(w.dipole,2)+' A·m²':'no')}</div>`;
+      if (w.atmosphere){ const a=w.atmosphere; h += `<h3>Atmosphere (${a.name})</h3><div class="kv">${P('Pressure', fmt(a.pressure,0)+' Pa')}${P('Scale height', fmt(a.scale_height_km,2)+' km')}${P('M, γ', fmt(a.molar_mass*1e3,2)+' g/mol, '+fmt(a.gamma,3))}${P('Column mass', fmt(a.column_kg_m2,0)+' kg/m²')}</div>
         ${a.composition.map(([g,x])=>`<div class="row" style="margin:2px 0"><label>${g}</label><div><div class="bar"><i style="width:${Math.max(x*100,1)}%"></i></div></div><span class="muted" style="flex:0 0 60px;text-align:right">${fmt(x*100,3)}%</span></div>`).join('')}`; }
-      else h += `<h3>Атмосфера</h3><div class="muted">нет (вакуум)</div>`;
-      h += `<h3>Кора (${w.surface.name})</h3><div class="muted">${w.surface.description}</div>` + w.surface.elements.slice(0,8).map(([e,x])=>`<div class="row" style="margin:2px 0"><label>${e}</label><div><div class="bar"><i style="width:${x*100}%;background:#c9a46a"></i></div></div><span class="muted" style="flex:0 0 60px;text-align:right">${fmt(x*100,1)}%</span></div>`).join('');
+      else h += `<h3>Atmosphere</h3><div class="muted">none (vacuum)</div>`;
+      h += `<h3>Crust (${w.surface.name})</h3><div class="muted">${w.surface.description}</div>` + w.surface.elements.slice(0,8).map(([e,x])=>`<div class="row" style="margin:2px 0"><label>${e}</label><div><div class="bar"><i style="width:${x*100}%;background:#c9a46a"></i></div></div><span class="muted" style="flex:0 0 60px;text-align:right">${fmt(x*100,1)}%</span></div>`).join('');
       $('#w_info').innerHTML = h;
-      hud.style.display='block'; hud.innerHTML = `<b>${w.physics}</b> <span class="k">· g</span> ${fmt(w.g,2)} <span class="k">· T</span> ${fmt(w.t_mean,0)} К <span class="k">· P</span> ${w.atmosphere? fmt(w.atmosphere.pressure,0)+' Па':'вакуум'}`;
-      if (w.atmosphere){ const p=w.atmosphere.profile; chart([{x:p.T, y:p.h_km, color:'#ff9a5a', label:'T, К'}], {title:'Профиль атмосферы: высота (км) от температуры', xlabel:'T, К'}); }
+      hud.style.display='block'; hud.innerHTML = `<b>${w.physics}</b> <span class="k">· g</span> ${fmt(w.g,2)} <span class="k">· T</span> ${fmt(w.t_mean,0)} K <span class="k">· P</span> ${w.atmosphere? fmt(w.atmosphere.pressure,0)+' Pa':'vacuum'}`;
+      if (w.atmosphere){ const p=w.atmosphere.profile; chart([{x:p.T, y:p.h_km, color:'#ff9a5a', label:'T, K'}], {title:'Atmosphere profile: altitude (km) vs temperature', xlabel:'T, K'}); }
       else chartbox.style.display='none';
     } catch(e){ alert(e.message); } finally { busy(false); }
   },
@@ -356,35 +356,35 @@ const worldTab = {
       if (this.traj) this.group.remove(this.traj);
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(r.points),3));
       this.traj = new THREE.Line(g, new THREE.LineBasicMaterial({color:0xffd166})); this.group.add(this.traj);
-      $('#t_info').innerHTML = `Дальность <b>${fmt(r.range/1e3,3)} км</b>, время ${fmt(r.flight_time,1)} с, апогей ${fmt(r.max_alt/1e3,3)} км, удар ${fmt(r.impact_speed,1)} м/с${r.landed?'':' (не упал — орбита/уход)'}<br>Рассеяно в тепло ${fmt(r.dissipated,2)} Дж · ошибка баланса энергии ${fmt(r.energy_error,1)}`;
-      chart([{x:r.downrange.map(v=>v/1e3), y:r.altitude.map(v=>v/1e3), color:'#ffd166', label:'траектория'}], {title:'Высота (км) от дальности (км)', xlabel:'км'});
+      $('#t_info').innerHTML = `Range <b>${fmt(r.range/1e3,3)} km</b>, time ${fmt(r.flight_time,1)} s, apogee ${fmt(r.max_alt/1e3,3)} km, impact ${fmt(r.impact_speed,1)} m/s${r.landed?'':' (did not land: orbit or escape)'}<br>Dissipated as heat ${fmt(r.dissipated,2)} J · energy balance error ${fmt(r.energy_error,1)}`;
+      chart([{x:r.downrange.map(v=>v/1e3), y:r.altitude.map(v=>v/1e3), color:'#ffd166', label:'trajectory'}], {title:'Altitude (km) vs range (km)', xlabel:'km'});
     } catch(e){ alert(e.message); } finally { busy(false); }
   },
   update(dt){ if (this.planet) this.planet.rotation.y += dt*0.05; },
 };
 
-// ============================================================ вкладка: Климат
+// ============================================================ tab: Climate
 const climateTab = {
   async init(){
     const S = makeScene(40); Object.assign(this, S); starfield(S.scene); this.camera.position.set(0,0.4,3.2);
     const pr = await api('/api/presets');
     const opt = (arr, sel, extra=[]) => extra.concat(arr).map(x=>`<option ${x===sel?'selected':''}>${x}</option>`).join('');
-    panel.innerHTML = `<h2>Климат: сезонная модель энергобаланса</h2>
-      <div class="muted">Инсоляция по орбите и наклону оси, лёд–альбедо, перенос тепла, парниковая атмосфера. Каждая широта — свой энергобаланс.</div>
-      <div class="row"><label>Мир</label><select id="c_phys">${opt(pr.physics.filter(x=>x!=='sun'),'earth')}</select></div>
-      <div class="row"><label>Атмосфера</label><select id="c_atm">${opt(pr.atmosphere,'auto',['auto'])}</select></div>
-      <div class="row"><label>Светимость звезды</label><input id="c_s" type="range" min="0.6" max="1.6" step="0.01" value="1"><span id="c_sv" style="flex:0 0 46px">100%</span></div>
-      <div class="row"><label>Парниковость (CO₂)</label><input id="c_tau" type="range" min="0" max="4" step="0.05" value="1"><span id="c_tv" style="flex:0 0 46px">×1.0</span></div>
-      <div class="row"><label>Наклон оси, °</label><input id="c_obl" type="number" placeholder="как у тела"></div>
-      <div class="row"><label>Эксцентриситет</label><input id="c_ecc" type="number" step="0.01" placeholder="как у тела"></div>
-      <div class="row"><label>Доля океана</label><input id="c_oc" type="number" step="0.1" placeholder="авто"></div>
-      <div class="row"><label>Старт</label><select id="c_cold"><option value="0">тёплый</option><option value="1">холодный («снежок»)</option></select></div>
-      <div class="row"><label>Раскраска</label><select id="c_map"><option value="1">температура</option><option value="0">реалистичная + лёд</option></select></div>
-      <div class="btns"><span class="btn" id="c_go">Рассчитать</span></div><div id="c_base" class="muted" style="margin-top:6px"></div><div id="c_info"></div>`;
+    panel.innerHTML = `<h2>Climate: seasonal energy balance model</h2>
+      <div class="muted">Insolation from orbit and axial tilt, ice-albedo, heat transport, greenhouse atmosphere. Each latitude has its own energy balance.</div>
+      <div class="row"><label>World</label><select id="c_phys">${opt(pr.physics.filter(x=>x!=='sun'),'earth')}</select></div>
+      <div class="row"><label>Atmosphere</label><select id="c_atm">${opt(pr.atmosphere,'auto',['auto'])}</select></div>
+      <div class="row"><label>Stellar luminosity</label><input id="c_s" type="range" min="0.6" max="1.6" step="0.01" value="1"><span id="c_sv" style="flex:0 0 46px">100%</span></div>
+      <div class="row"><label>Greenhouse strength (CO₂)</label><input id="c_tau" type="range" min="0" max="4" step="0.05" value="1"><span id="c_tv" style="flex:0 0 46px">×1.0</span></div>
+      <div class="row"><label>Axial tilt, °</label><input id="c_obl" type="number" placeholder="same as body"></div>
+      <div class="row"><label>Eccentricity</label><input id="c_ecc" type="number" step="0.01" placeholder="same as body"></div>
+      <div class="row"><label>Ocean fraction</label><input id="c_oc" type="number" step="0.1" placeholder="auto"></div>
+      <div class="row"><label>Start</label><select id="c_cold"><option value="0">warm</option><option value="1">cold (“snowball”)</option></select></div>
+      <div class="row"><label>Coloring</label><select id="c_map"><option value="1">temperature</option><option value="0">realistic + ice</option></select></div>
+      <div class="btns"><span class="btn" id="c_go">Compute</span></div><div id="c_base" class="muted" style="margin-top:6px"></div><div id="c_info"></div>`;
     $('#c_s').oninput = e => $('#c_sv').textContent = Math.round(e.target.value*100)+'%';
     $('#c_tau').oninput = e => $('#c_tv').textContent = '×'+(+e.target.value).toFixed(2);
     $('#c_go').onclick = () => this.run(this.base);
-    // мир из другой вкладки (смешанный или экзопланета) остаётся выбранным, пока пользователь не сменит его сам
+    // a world from another tab (mixed or exoplanet) stays selected until the user changes it
     const clearBase = () => { this.base = null; $('#c_base').innerHTML = ''; };
     $('#c_phys').onchange = clearBase; $('#c_atm').onchange = clearBase;
     $('#c_map').onchange = () => { if (this.mat) this.mat.uniforms.uMap.value = +$('#c_map').value; };
@@ -400,7 +400,7 @@ const climateTab = {
       const q = Object.assign({}, base || {physics:$('#c_phys').value, atmosphere:$('#c_atm').value}, {solar:$('#c_s').value, tau:$('#c_tau').value, obliquity:$('#c_obl').value, ecc:$('#c_ecc').value, ocean:$('#c_oc').value, cold:$('#c_cold').value});
       const [r, w] = await Promise.all([api('/api/climate?'+qs(q)), api('/api/world?'+qs(q))]);
       this.r = r;
-      if ($('#c_base')) $('#c_base').innerHTML = base ? `Считается мир из другой вкладки: <b>${esc(w.name)}</b>. Смените поле «Мир», чтобы вернуться к пресетам.` : '';
+      if ($('#c_base')) $('#c_base').innerHTML = base ? `Using the world from another tab: <b>${esc(w.name)}</b>. Change the World field to return to presets.` : '';
       if (this.mesh) this.scene.remove(this.mesh);
       const nl = r.lat.length;
       this.tex = new THREE.DataTexture(new Float32Array(nl*4), 1, nl, THREE.RGBAFormat, THREE.FloatType);
@@ -411,11 +411,11 @@ const climateTab = {
         uTemp:{value:this.tex}, uUseTemp:{value:1}, uIceT:{value:r.ice_t}, uTlo:{value:lo}, uThi:{value:Math.max(hi,lo+1)}, uMap:{value:+$('#c_map').value}, uSeed:{value:3}, uAmb:{value:.55}});
       this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1,128,64), this.mat); this.scene.add(this.mesh);
       this.frame = 0; this.acc = 0;
-      $('#c_info').innerHTML = `<h3>Итог (${r.world.split(' ').slice(0,2).join(' · ')})</h3><div class="kv">
-        <div>Средняя T</div><div><b>${fmt(r.global,1)} К</b> (${fmt(r.global-273.15,1)} °C)</div><div>Кромка льда</div><div>${r.ice_t? (r.ice_edge>=89.9?'льда нет':fmt(r.ice_edge,1)+'°') : 'нет конденсата'}</div>
-        <div>Год</div><div>${fmt(r.year_days,1)} сут</div><div>Перенос D</div><div>${fmt(r.D,3)} Вт/(м²·К)</div><div>Теплоёмкость</div><div>${fmt(r.C,2)} Дж/(м²·К)</div>
-        <div>Невязка энергии</div><div>${fmt(r.residual,1)}</div><div>Дисбаланс TOA</div><div>${fmt(r.imbalance,3)} Вт/м²</div></div>
-        <div class="muted" style="margin-top:6px">Шкала: ${fmt(lo,0)}–${fmt(hi,0)} К. Попробуйте снизить светимость до 85% с холодным стартом — гистерезис Будыко.</div>`;
+      $('#c_info').innerHTML = `<h3>Result (${r.world.split(' ').slice(0,2).join(' · ')})</h3><div class="kv">
+        <div>Mean T</div><div><b>${fmt(r.global,1)} K</b> (${fmt(r.global-273.15,1)} °C)</div><div>Ice edge</div><div>${r.ice_t? (r.ice_edge>=89.9?'no ice':fmt(r.ice_edge,1)+'°') : 'no condensation'}</div>
+        <div>Year</div><div>${fmt(r.year_days,1)} d</div><div>Transport D</div><div>${fmt(r.D,3)} W/(m²·K)</div><div>Heat capacity</div><div>${fmt(r.C,2)} J/(m²·K)</div>
+        <div>Energy residual</div><div>${fmt(r.residual,1)}</div><div>Imbalance TOA</div><div>${fmt(r.imbalance,3)} W/m²</div></div>
+        <div class="muted" style="margin-top:6px">Scale: ${fmt(lo,0)}–${fmt(hi,0)} K. Try lowering luminosity to 85% with a cold start: Budyko hysteresis.</div>`;
       this.setFrame(0);
     } catch(e){ alert(e.message); } finally { busy(false); }
   },
@@ -423,14 +423,14 @@ const climateTab = {
     const r = this.r; if (!r) return; const row = r.temp[k % r.temp.length], d = this.tex.image.data;
     for (let j=0;j<row.length;j++) d[j*4] = row[j]; this.tex.needsUpdate = true;
     const t = r.time[k % r.time.length];
-    hud.style.display='block'; hud.innerHTML = `<span class="k">день года</span> <b>${Math.round(t*r.year_days)}</b> / ${Math.round(r.year_days)} <span class="k">· глоб. T</span> <b>${fmt(row.reduce((a,b)=>a+b,0)/row.length,1)} К</b>`;
-    chart([{x:r.lat, y:row, color:'#ff9a5a', label:'сейчас'}, {x:r.lat, y:r.annual, color:'#6fb7ff', label:'среднегодовая', dash:true}].concat(r.ice_t?[{x:[-90,90], y:[r.ice_t,r.ice_t], color:'#cfe8ff', label:'порог льда', width:1}]:[]),
-      {title:'Температура (К) по широте', xlabel:'широта, °', yr:[Math.min(...r.temp.flat())-5, Math.max(...r.temp.flat())+5]});
+    hud.style.display='block'; hud.innerHTML = `<span class="k">day of year</span> <b>${Math.round(t*r.year_days)}</b> / ${Math.round(r.year_days)} <span class="k">· global. T</span> <b>${fmt(row.reduce((a,b)=>a+b,0)/row.length,1)} K</b>`;
+    chart([{x:r.lat, y:row, color:'#ff9a5a', label:'now'}, {x:r.lat, y:r.annual, color:'#6fb7ff', label:'annual mean', dash:true}].concat(r.ice_t?[{x:[-90,90], y:[r.ice_t,r.ice_t], color:'#cfe8ff', label:'ice threshold', width:1}]:[]),
+      {title:'Temperature (K) by latitude', xlabel:'latitude, °', yr:[Math.min(...r.temp.flat())-5, Math.max(...r.temp.flat())+5]});
   },
   update(dt){ if (this.mesh){ this.mesh.rotation.y += dt*0.1; this.acc += dt; if (this.acc > 0.12){ this.acc=0; this.frame++; this.setFrame(this.frame); } } },
 };
 
-// ============================================================ N тел (общая логика для солнечной и сгенерированных систем)
+// ============================================================ N bodies (shared logic for the solar and generated systems)
 function nbodyView(S, meta, opts){
   const bodies = meta.bodies.map((b,i) => {
     const r = b.star ? 0.06 : Math.max(0.012, 0.0075*Math.log10(1+b.radius_km/400)*3);
@@ -450,7 +450,7 @@ function nbodyView(S, meta, opts){
 let _glow = null;
 function glowTex(){ if (_glow) return _glow; const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d'); const gr=g.createRadialGradient(64,64,0,64,64,64);
   gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(.2,'rgba(255,255,255,.5)'); gr.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle=gr; g.fillRect(0,0,128,128); return _glow = new THREE.CanvasTexture(c); }
-function scalePos(x,y,z, mode){ // эклиптика → сцена (y вверх)
+function scalePos(x,y,z, mode){ // ecliptic → scene (y up)
   if (mode === 'sqrt'){ const r = Math.hypot(x,y,z) || 1e-12, s = Math.sqrt(r)/r; return [x*s, z*s, -y*s]; }
   return [x, z, -y];
 }
@@ -458,16 +458,16 @@ function scalePos(x,y,z, mode){ // эклиптика → сцена (y ввер
 const solarTab = {
   async init(){
     const S = makeScene(45, 0.001, 1e4); Object.assign(this, S); starfield(S.scene); this.camera.position.set(0, 2.2, 3.0);
-    panel.innerHTML = `<h2>Солнечная система</h2><div class="muted">Реальные элементы орбит J2000, интегратор Йошиды 4-го порядка, по желанию — поправка ОТО.</div>
-      <div class="row"><label>Тела</label><input id="s_b" type="text" value="sun,mercury,venus,earth,moon,mars,jupiter"></div>
-      <div class="row"><label>Масштаб расстояний</label><select id="s_m"><option value="sqrt">√r (всё видно)</option><option value="lin">линейный</option></select></div>
-      <div class="row"><label>Дней за кадр</label><input id="s_v" type="range" min="0.1" max="20" step="0.1" value="3"><span id="s_vv" style="flex:0 0 40px">3</span></div>
-      <div class="row"><label>ОТО (1PN)</label><select id="s_gr"><option value="0">выкл</option><option value="1">вкл</option></select></div>
-      <div class="row"><label>Луна ×</label><input id="s_moon" type="number" value="40" title="визуальное увеличение орбиты Луны"></div>
-      <div class="btns"><span class="btn" id="s_go">Перезапустить</span><span class="btn sec" id="s_p">Пауза</span></div><div id="s_info" class="muted" style="margin-top:8px"></div>`;
+    panel.innerHTML = `<h2>Solar system</h2><div class="muted">Real J2000 orbital elements, 4th-order Yoshida integrator, optional GR correction.</div>
+      <div class="row"><label>Bodies</label><input id="s_b" type="text" value="sun,mercury,venus,earth,moon,mars,jupiter"></div>
+      <div class="row"><label>Distance scale</label><select id="s_m"><option value="sqrt">√r (everything visible)</option><option value="lin">linear</option></select></div>
+      <div class="row"><label>Days per frame</label><input id="s_v" type="range" min="0.1" max="20" step="0.1" value="3"><span id="s_vv" style="flex:0 0 40px">3</span></div>
+      <div class="row"><label>GR (1PN)</label><select id="s_gr"><option value="0">off</option><option value="1">on</option></select></div>
+      <div class="row"><label>Moon ×</label><input id="s_moon" type="number" value="40" title="visual enlargement of the lunar orbit"></div>
+      <div class="btns"><span class="btn" id="s_go">Restart</span><span class="btn sec" id="s_p">Pause</span></div><div id="s_info" class="muted" style="margin-top:8px"></div>`;
     $('#s_v').oninput = e => $('#s_vv').textContent = e.target.value;
     $('#s_go').onclick = () => this.start();
-    $('#s_p').onclick = () => { this.paused = !this.paused; $('#s_p').textContent = this.paused ? 'Продолжить':'Пауза'; };
+    $('#s_p').onclick = () => { this.paused = !this.paused; $('#s_p').textContent = this.paused ? 'Resume':'Pause'; };
     await this.start();
   },
   async start(){
@@ -500,22 +500,22 @@ const solarTab = {
       b.trail.geometry.setDrawRange(0,b.n); b.trail.geometry.attributes.position.needsUpdate = true;
     });
     const date = new Date(Date.UTC(2000,0,1,12) + r.t_days*864e5);
-    hud.style.display='block'; hud.innerHTML = `<span class="k">дата</span> <b>${date.toISOString().slice(0,10)}</b> <span class="k">· t =</span> ${fmt(r.t_days/365.25,2)} г <span class="k">· |ΔE/E|</span> <b>${fmt(r.energy_error,1)}</b>`;
+    hud.style.display='block'; hud.innerHTML = `<span class="k">date</span> <b>${date.toISOString().slice(0,10)}</b> <span class="k">· t =</span> ${fmt(r.t_days/365.25,2)} yr <span class="k">· |ΔE/E|</span> <b>${fmt(r.energy_error,1)}</b>`;
     chartbox.style.display='none';
   },
   update(){},
 };
 
-// ============================================================ вкладка: Звёздные системы
+// ============================================================ tab: Star systems
 const systemTab = {
   async init(){
     const S = makeScene(45, 0.001, 1e4); Object.assign(this, S); starfield(S.scene); this.camera.position.set(0,1.6,2.4);
     const pr = await api('/api/presets');
-    panel.innerHTML = `<h2>Генератор звёздных систем</h2><div class="muted">Звезда из функции масс Крупы или пресета, планеты с разносом 10–25 радиусов Хилла, обитаемая зона по Копарапу.</div>
-      <div class="row"><label>Звезда</label><select id="g_star"><option value="random">случайная (IMF)</option><option value="solar">наша Солнечная</option>${pr.stars.map(s=>`<option>${s}</option>`).join('')}</select></div>
+    panel.innerHTML = `<h2>Star system generator</h2><div class="muted">Star from the Kroupa mass function or a preset, planets spaced 10–25 Hill radii, Kopparapu habitable zone.</div>
+      <div class="row"><label>Star</label><select id="g_star"><option value="random">random (IMF)</option><option value="solar">the Sun</option>${pr.stars.map(s=>`<option>${s}</option>`).join('')}</select></div>
       <div class="row"><label>Seed</label><input id="g_seed" type="number" value="${1+Math.floor(Math.random()*9999)}"></div>
-      <div class="row"><label>Дней за кадр</label><input id="g_v" type="range" min="0.05" max="20" step="0.05" value="1"></div>
-      <div class="btns"><span class="btn" id="g_go">Сгенерировать</span><span class="btn sec" id="g_rnd">🎲 Случайная</span></div><div id="g_info"></div>`;
+      <div class="row"><label>Days per frame</label><input id="g_v" type="range" min="0.05" max="20" step="0.05" value="1"></div>
+      <div class="btns"><span class="btn" id="g_go">Generate</span><span class="btn sec" id="g_rnd">🎲 Random</span></div><div id="g_info"></div>`;
     $('#g_go').onclick = () => this.start().catch(e => { busy(false); alert(e.message); });
     $('#g_rnd').onclick = () => { $('#g_seed').value = 1+Math.floor(Math.random()*99999); this.start(); };
     await this.start();
@@ -528,26 +528,26 @@ const systemTab = {
     const sys = meta.system, st = sys.star, amax = Math.max(...sys.planets.map(p=>p.a*(1+p.e)), st.hz[1]);
     this.scale = 1/Math.sqrt(amax);
     this.bodies = nbodyView(this, meta, {trail: 500});
-    // обитаемая зона
+    // habitable zone
     const s = this.scale, ring = new THREE.Mesh(new THREE.RingGeometry(Math.sqrt(st.hz[0]), Math.sqrt(st.hz[1]), 128), new THREE.MeshBasicMaterial({color:0x2fbf71, transparent:true, opacity:.18, side:THREE.DoubleSide}));
     ring.rotation.x = -Math.PI/2; ring.scale.setScalar(s); this.scene.add(ring);
     this.camera.position.set(0, 1.4, 2.0); this.controls.target.set(0,0,0);
-    const rows = sys.planets.map((p,i)=>`<tr><td><b>${p.name}</b></td><td>${fmt(p.mass,2)}</td><td>${fmt(p.a,3)}</td><td>${fmt(p.t_eq,0)}</td><td>${p.kind}${p.in_hz?' <span class="pill g">ОЗ</span>':''}</td>
-      <td><span class="btn sec" data-p="${i}" style="padding:3px 7px">мир</span></td></tr>`).join('');
-    $('#g_info').innerHTML = `<h3>${st.name} · класс ${st.class}</h3><div class="kv"><div>Масса / радиус</div><div>${fmt(st.mass,3)} M☉ / ${fmt(st.radius,3)} R☉</div>
-      <div>Светимость</div><div>${fmt(st.luminosity,4)} L☉</div><div>T эфф.</div><div>${fmt(st.teff,0)} К</div><div>Обитаемая зона</div><div>${fmt(st.hz[0],3)}–${fmt(st.hz[1],3)} а.е.</div>
-      <div>Жизнь на ГП</div><div>${fmt(st.lifetime_gyr,2)} млрд лет</div></div>
-      <h3>Планеты</h3><table><tr><th></th><th>M⊕</th><th>а.е.</th><th>T, К</th><th>тип</th><th></th></tr>${rows}</table>
-      <div class="muted" style="margin-top:6px">«мир» откроет планету в конструкторе: атмосфера и грунт подбираются по массе и температуре.</div>`;
+    const rows = sys.planets.map((p,i)=>`<tr><td><b>${p.name}</b></td><td>${fmt(p.mass,2)}</td><td>${fmt(p.a,3)}</td><td>${fmt(p.t_eq,0)}</td><td>${p.kind}${p.in_hz?' <span class="pill g">HZ</span>':''}</td>
+      <td><span class="btn sec" data-p="${i}" style="padding:3px 7px">world</span></td></tr>`).join('');
+    $('#g_info').innerHTML = `<h3>${st.name} · class ${st.class}</h3><div class="kv"><div>Mass / radius</div><div>${fmt(st.mass,3)} M☉ / ${fmt(st.radius,3)} R☉</div>
+      <div>Luminosity</div><div>${fmt(st.luminosity,4)} L☉</div><div>T eff</div><div>${fmt(st.teff,0)} K</div><div>Habitable zone</div><div>${fmt(st.hz[0],3)}–${fmt(st.hz[1],3)} AU</div>
+      <div>Main-sequence lifetime</div><div>${fmt(st.lifetime_gyr,2)} Gyr</div></div>
+      <h3>Planets</h3><table><tr><th></th><th>M⊕</th><th>AU</th><th>T, K</th><th>type</th><th></th></tr>${rows}</table>
+      <div class="muted" style="margin-top:6px">“world” opens the planet in the builder: atmosphere and soil are chosen from mass and temperature.</div>`;
     $('#g_info').querySelectorAll('[data-p]').forEach(b => b.onclick = () => {
       const qq = {seed:this.q.seed || 1, star:this.q.star, planet:b.dataset.p};
       if (this.q.star === 'solar'){ const names=['mercury','venus','earth','mars','jupiter']; worldTab.pending = {physics:names[b.dataset.p]}; }
       else worldTab.pending = qq;
       switchTab('world');
     });
-    chart([{x:sys.planets.map(p=>p.a), y:sys.planets.map(p=>p.t_eq), dots:true, dot:6, color:'#ffc361', label:'планеты'},
-           {x:[st.hz[0],st.hz[0]], y:[1,3000], color:'#2fbf71', label:'граница ОЗ'}, {x:[st.hz[1],st.hz[1]], y:[1,3000], color:'#2fbf71'}],
-      {title:'T равновесная (К) от полуоси (а.е.)', logx:true, logy:true, xlabel:'а.е.'});
+    chart([{x:sys.planets.map(p=>p.a), y:sys.planets.map(p=>p.t_eq), dots:true, dot:6, color:'#ffc361', label:'planets'},
+           {x:[st.hz[0],st.hz[0]], y:[1,3000], color:'#2fbf71', label:'HZ boundary'}, {x:[st.hz[1],st.hz[1]], y:[1,3000], color:'#2fbf71'}],
+      {title:'T equilibrium (K) vs semi-major axis (AU)', logx:true, logy:true, xlabel:'AU'});
     this.loop(epoch);
   },
   async loop(ep){
@@ -563,14 +563,14 @@ const systemTab = {
           if (b.n < b.N){ arr.set(p, b.n*3); b.n++; } else { arr.copyWithin(0,3); arr.set(p,(b.N-1)*3); }
           b.trail.geometry.setDrawRange(0,b.n); b.trail.geometry.attributes.position.needsUpdate = true;
         });
-        hud.style.display='block'; hud.innerHTML = `<span class="k">t =</span> <b>${fmt(r.t_days,1)} сут</b> <span class="k">· |ΔE/E|</span> ${fmt(r.energy_error,1)} <span class="k">· масштаб √r</span>`;
+        hud.style.display='block'; hud.innerHTML = `<span class="k">t =</span> <b>${fmt(r.t_days,1)} d</b> <span class="k">· |ΔE/E|</span> ${fmt(r.energy_error,1)} <span class="k">· scale √r</span>`;
       } catch(e){ return; }
     }
   },
   update(){},
 };
 
-// ============================================================ вкладка: Карта звёзд и экзопланет
+// ============================================================ tab: Stars and exoplanets map
 const starmapTab = {
   async init(){
     const S = makeScene(50, 0.01, 1e5); Object.assign(this, S); this.camera.position.set(0, 25, 60);
@@ -584,18 +584,18 @@ const starmapTab = {
       vertexShader:`attribute float size; attribute vec3 color; varying vec3 c; void main(){ c=color; vec4 mv=modelViewMatrix*vec4(position,1.); gl_PointSize=size*clamp(60./-mv.z,0.6,4.); gl_Position=projectionMatrix*mv; }`,
       fragmentShader:`varying vec3 c; void main(){ float d=length(gl_PointCoord-.5); if(d>.5) discard; gl_FragColor=vec4(c, pow(1.-2.*d,1.6)); }`});
     this.scene.add(this.stars = new THREE.Points(g, mat));
-    // хозяева экзопланет
+    // exoplanet hosts
     const hosts = new Map();
     for (const p of this.ex){ if (!p.xyz) continue; const host = p.n.replace(/ [a-z]$/,''); const h = hosts.get(host) || {name:host, xyz:p.xyz, d:p.d, planets:[], ts:p.ts, ms:p.ms, rs:p.rs}; h.planets.push(p); hosts.set(host,h); }
     this.hosts = [...hosts.values()];
-    // Солнце и сетка
+    // Sun and grid
     const sun = new THREE.Mesh(new THREE.SphereGeometry(.25,16,8), new THREE.MeshBasicMaterial({color:0xffe08a})); this.scene.add(sun);
     for (const r of [10, 25, 50, 100]){ const c = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({length:129},(_,k)=>new THREE.Vector3(r*Math.cos(k/128*6.283),0,r*Math.sin(k/128*6.283)))), new THREE.LineBasicMaterial({color:0x22304d})); this.scene.add(c); }
-    panel.innerHTML = `<h2>Звёзды и экзопланеты</h2><div class="muted">${n.toLocaleString('ru')} звёзд HYG (видимые глазом + всё ближе 25 пк), ${this.ex.length.toLocaleString('ru')} подтверждённых экзопланет. Кольца: 10, 25, 50, 100 пк.</div>
-      <div class="row"><label>Хозяева планет до, пк</label><input id="m_d" type="range" min="10" max="1000" step="10" value="150"><span id="m_dv" style="flex:0 0 46px">150</span></div>
-      <div class="row"><label>Поиск</label><input id="m_q" type="text" placeholder="TRAPPIST-1, Proxima, Kepler-452…"></div>
-      <div id="m_res"></div><div id="m_sel" class="muted">Кликните зелёную точку — звезду с планетами.</div>
-      <h3>Диаграмма экзопланет</h3><div class="legend"><span><i style="background:#ff7f50"></i>транзит</span><span><i style="background:#6fb7ff"></i>лучевые скорости</span><span><i style="background:#c792ea"></i>прочие</span></div>`;
+    panel.innerHTML = `<h2>Stars and exoplanets</h2><div class="muted">${n.toLocaleString('en')} HYG stars (naked-eye + everything within 25 pc), ${this.ex.length.toLocaleString('en')} confirmed exoplanets. Rings: 10, 25, 50, 100 pc.</div>
+      <div class="row"><label>Planet hosts within, pc</label><input id="m_d" type="range" min="10" max="1000" step="10" value="150"><span id="m_dv" style="flex:0 0 46px">150</span></div>
+      <div class="row"><label>Search</label><input id="m_q" type="text" placeholder="TRAPPIST-1, Proxima, Kepler-452…"></div>
+      <div id="m_res"></div><div id="m_sel" class="muted">Click a green dot: a star with planets.</div>
+      <h3>Exoplanet diagram</h3><div class="legend"><span><i style="background:#ff7f50"></i>transit</span><span><i style="background:#6fb7ff"></i>radial velocity</span><span><i style="background:#c792ea"></i>other</span></div>`;
     $('#m_d').oninput = e => { $('#m_dv').textContent = e.target.value; this.drawHosts(); };
     $('#m_q').oninput = e => this.search(e.target.value);
     this.drawHosts();
@@ -604,11 +604,11 @@ const starmapTab = {
       {x: ok.filter(p=>p.meth==='transit').map(p=>p.p), y: ok.filter(p=>p.meth==='transit').map(p=>p.m*317.8), dots:true, color:'#ff7f50'},
       {x: ok.filter(p=>p.meth==='RV').map(p=>p.p), y: ok.filter(p=>p.meth==='RV').map(p=>p.m*317.8), dots:true, color:'#6fb7ff'},
       {x: ok.filter(p=>p.meth!=='RV'&&p.meth!=='transit').map(p=>p.p), y: ok.filter(p=>p.meth!=='RV'&&p.meth!=='transit').map(p=>p.m*317.8), dots:true, color:'#c792ea'},
-      {x:[365.25], y:[1], dots:true, dot:6, color:'#5fd38d', label:'Земля'}, {x:[4333], y:[317.8], dots:true, dot:6, color:'#ffd27a', label:'Юпитер'}],
-      {title:'Масса (M⊕) от периода (сут) — реальные экзопланеты', logx:true, logy:true, xlabel:'сутки'});
+      {x:[365.25], y:[1], dots:true, dot:6, color:'#5fd38d', label:'Earth'}, {x:[4333], y:[317.8], dots:true, dot:6, color:'#ffd27a', label:'Jupiter'}],
+      {title:'Mass (M⊕) vs period (d): real exoplanets', logx:true, logy:true, xlabel:'days'});
     this.ray = new THREE.Raycaster(); this.ray.params.Points.threshold = 0.6;
     this.onclick = e => this.pick(e); canvas.addEventListener('click', this.onclick);
-    hud.style.display='block'; hud.innerHTML = `<span class="k">в центре —</span> <b>Солнце</b> <span class="k">· оси в парсеках (экваториальные)</span>`;
+    hud.style.display='block'; hud.innerHTML = `<span class="k">at the center —</span> <b>Sun</b> <span class="k">· axes in parsecs (equatorial)</span>`;
   },
   drawHosts(){
     if (this.hostPts) this.scene.remove(this.hostPts);
@@ -624,14 +624,14 @@ const starmapTab = {
   search(q){
     q = q.trim().toLowerCase(); if (q.length < 2){ $('#m_res').innerHTML=''; return; }
     const hs = this.hosts.filter(h=>h.name.toLowerCase().includes(q)).slice(0,8);
-    $('#m_res').innerHTML = hs.map((h,i)=>`<div><span class="btn sec" data-i="${i}" style="padding:2px 8px;margin:2px 0">${h.name}</span> <span class="muted">${fmt(h.d,1)} пк · ${h.planets.length} пл.</span></div>`).join('');
+    $('#m_res').innerHTML = hs.map((h,i)=>`<div><span class="btn sec" data-i="${i}" style="padding:2px 8px;margin:2px 0">${h.name}</span> <span class="muted">${fmt(h.d,1)} pc · ${h.planets.length} pl.</span></div>`).join('');
     $('#m_res').querySelectorAll('[data-i]').forEach(b => b.onclick = () => { const h = hs[b.dataset.i]; this.show(h); const p=new THREE.Vector3(h.xyz[0],h.xyz[2],-h.xyz[1]); this.controls.target.copy(p); this.camera.position.copy(p.clone().add(new THREE.Vector3(0,4,10))); });
   },
   show(h){
     const rows = h.planets.map((p,i)=>`<tr><td><b>${p.n.split(' ').pop()}</b></td><td>${p.m?fmt(p.m*317.8,2):'—'}</td><td>${p.r?fmt(p.r*11.21,2):'—'}</td><td>${p.a?fmt(p.a,4):'—'}</td><td>${p.y||''}</td>
-      <td>${(p.a&&(p.m||p.r)&&h.ts)?`<span class="btn sec" data-k="${i}" style="padding:2px 7px">мир</span>`:''}</td></tr>`).join('');
-    $('#m_sel').innerHTML = `<h3>${h.name}</h3><div class="kv"><div>Расстояние</div><div>${fmt(h.d,2)} пк (${fmt(h.d*3.2616,1)} св. лет)</div><div>Звезда</div><div>${h.ts?fmt(h.ts,0)+' К':'—'}, ${h.ms?fmt(h.ms,3)+' M☉':'—'}, ${h.rs?fmt(h.rs,3)+' R☉':'—'}</div></div>
-      <table><tr><th></th><th>M⊕</th><th>R⊕</th><th>а.е.</th><th>год</th><th></th></tr>${rows}</table><div class="muted">«мир» — превратить реальную экзопланету в модель worldsim (климат, атмосфера, бросок).</div>`;
+      <td>${(p.a&&(p.m||p.r)&&h.ts)?`<span class="btn sec" data-k="${i}" style="padding:2px 7px">world</span>`:''}</td></tr>`).join('');
+    $('#m_sel').innerHTML = `<h3>${h.name}</h3><div class="kv"><div>Distance</div><div>${fmt(h.d,2)} pc (${fmt(h.d*3.2616,1)} ly)</div><div>Star</div><div>${h.ts?fmt(h.ts,0)+' K':'—'}, ${h.ms?fmt(h.ms,3)+' M☉':'—'}, ${h.rs?fmt(h.rs,3)+' R☉':'—'}</div></div>
+      <table><tr><th></th><th>M⊕</th><th>R⊕</th><th>AU</th><th>year</th><th></th></tr>${rows}</table><div class="muted">“world” turns a real exoplanet into a worldsim model (climate, atmosphere, throw).</div>`;
     $('#m_sel').querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
       const p = h.planets[b.dataset.k]; const m = p.m ? p.m*317.8 : Math.pow(p.r*11.21, 1/0.279);
       worldTab.pending = {m, r: p.r ? p.r*11.21 : '', a:p.a, e:p.e||0, ms:h.ms||1, rs:h.rs||1, ts:h.ts, star_name:h.name, name:p.n}; switchTab('world');
@@ -641,23 +641,23 @@ const starmapTab = {
   dispose(){ canvas.removeEventListener('click', this.onclick); },
 };
 
-// ============================================================ вкладка: Галактики
+// ============================================================ tab: Galaxies
 const galaxyTab = {
   async init(){
     const S = makeScene(50, 0.01, 1e5); Object.assign(this, S); this.camera.position.set(0, 35, 55);
-    panel.innerHTML = `<h2>Галактики (Барнс–Хат)</h2><div class="muted">Живое тёмное гало + балдж + экспоненциальный диск. Сила — деревом O(N log N), многопоточно.</div>
-      <div class="row"><label>Пресет</label><select id="x_p"><option value="milky_way">Млечный Путь</option><option value="collision">Столкновение двух галактик</option><option value="plummer">Сфера Пламмера</option><option value="globular">Шаровое скопление</option></select></div>
-      <div class="row"><label>Частиц</label><select id="x_n"><option>10000</option><option selected>20000</option><option>40000</option><option>80000</option></select></div>
-      <div class="row"><label>Шаг</label><input id="x_dt" type="range" min="0.25" max="5" step="0.25" value="1"><span id="x_dtv" style="flex:0 0 76px;white-space:nowrap">1 млн лет</span></div>
-      <div class="row"><label>Тёмное гало</label><select id="x_h"><option value="0">скрыть</option><option value="1">показать</option></select></div>
-      <div class="btns"><span class="btn" id="x_go">Создать</span><span class="btn sec" id="x_pp">Пауза</span><span class="btn sec" id="x_rc">Кривая вращения</span></div>
-      <div class="legend" style="margin-top:8px"><span><i style="background:#9ab8ff"></i>диск</span><span><i style="background:#ffc27a"></i>балдж</span><span><i style="background:#6a4fa3"></i>тёмная материя</span></div>
+    panel.innerHTML = `<h2>Galaxies (Barnes–Hut)</h2><div class="muted">Live dark halo + bulge + exponential disk. Forces via an O(N log N) tree, multithreaded.</div>
+      <div class="row"><label>Preset</label><select id="x_p"><option value="milky_way">Milky Way</option><option value="collision">Collision of two galaxies</option><option value="plummer">Plummer sphere</option><option value="globular">Globular cluster</option></select></div>
+      <div class="row"><label>Particles</label><select id="x_n"><option>10000</option><option selected>20000</option><option>40000</option><option>80000</option></select></div>
+      <div class="row"><label>Step</label><input id="x_dt" type="range" min="0.25" max="5" step="0.25" value="1"><span id="x_dtv" style="flex:0 0 76px;white-space:nowrap">1 Myr</span></div>
+      <div class="row"><label>Dark halo</label><select id="x_h"><option value="0">hide</option><option value="1">show</option></select></div>
+      <div class="btns"><span class="btn" id="x_go">Create</span><span class="btn sec" id="x_pp">Pause</span><span class="btn sec" id="x_rc">Rotation curve</span></div>
+      <div class="legend" style="margin-top:8px"><span><i style="background:#9ab8ff"></i>disk</span><span><i style="background:#ffc27a"></i>bulge</span><span><i style="background:#6a4fa3"></i>dark matter</span></div>
       <div id="x_info" class="muted" style="margin-top:6px"></div>`;
     $('#x_dt').oninput = () => this.showStep();
     $('#x_p').onchange = () => { this.scaleKpc = {plummer:1, globular:.003}[$('#x_p').value] || 10; this.showStep(); };
     this.scaleKpc = 10;
     $('#x_go').onclick = () => this.start().catch(e => { busy(false); alert(e.message); });
-    $('#x_pp').onclick = () => { this.paused = !this.paused; $('#x_pp').textContent = this.paused?'Продолжить':'Пауза'; };
+    $('#x_pp').onclick = () => { this.paused = !this.paused; $('#x_pp').textContent = this.paused?'Resume':'Pause'; };
     $('#x_rc').onclick = () => this.rot();
     $('#x_h').onchange = () => this.recolor();
     await this.start();
@@ -675,7 +675,7 @@ const galaxyTab = {
     this.camera.position.set(0, 20, 30); this.controls.target.set(0,0,0);
     this.loop(epoch);
   },
-  /* шаг в млрд лет: компактным системам нужен меньший, иначе интегратор неустойчив */
+  /* step in Gyr: compact systems need a smaller one, or the integrator becomes unstable */
   stepGyr(){ const s = this.scaleKpc; return +$('#x_dt').value / 1000 * (s < 1 ? (s < .01 ? 1e-4 : .05) : s < 5 ? .05 : 1); },
   showStep(){ $('#x_dtv').textContent = fmtTime(this.stepGyr()); },
   recolor(){
@@ -694,31 +694,31 @@ const galaxyTab = {
         const buf = new Float32Array(await r.arrayBuffer());
         if (ep !== epoch || myId !== this.id) return;
         this.pts.geometry.attributes.position.array.set(buf); this.pts.geometry.attributes.position.needsUpdate = true;
-        hud.style.display='block'; hud.innerHTML = `<span class="k">t =</span> <b>${fmtTime(+r.headers.get('X-T-Gyr'))}</b> <span class="k">· N =</span> ${this.meta.n.toLocaleString('ru')}`;
+        hud.style.display='block'; hud.innerHTML = `<span class="k">t =</span> <b>${fmtTime(+r.headers.get('X-T-Gyr'))}</b> <span class="k">· N =</span> ${this.meta.n.toLocaleString('en')}`;
       } catch(e){ return; }
     }
   },
   async rot(){
     const r = await api('/api/galaxy/rotation?id=' + this.id);
-    $('#x_info').innerHTML = `Вириальное отношение 2K/|W| = <b>${fmt(r.virial,3)}</b> (равновесие = 1)`;
-    chart([{x:r.r, y:r.v, color:'#9ab8ff', label:'v_c(R) диска'}].concat(this.meta.scale_kpc >= 10 ? [{x:[8,8], y:[0,300], color:'#ffc361', label:'Солнце, 8 кпк', width:1}] : []), {title:'Кривая вращения: скорость (км/с) от радиуса (кпк)', xlabel:'кпк', yr:[0,300]});
+    $('#x_info').innerHTML = `Virial ratio 2K/|W| = <b>${fmt(r.virial,3)}</b> (equilibrium = 1)`;
+    chart([{x:r.r, y:r.v, color:'#9ab8ff', label:'v_c(R) of the disk'}].concat(this.meta.scale_kpc >= 10 ? [{x:[8,8], y:[0,300], color:'#ffc361', label:'Sun, 8 kpc', width:1}] : []), {title:'Rotation curve: speed (km/s) vs radius (kpc)', xlabel:'kpc', yr:[0,300]});
   },
   update(){},
 };
 
-// ============================================================ вкладка: Космология
+// ============================================================ tab: Cosmology
 const cosmoTab = {
   async init(){
     const S = makeScene(50, 0.1, 1e5); Object.assign(this, S); this.camera.position.set(260, 180, 260);
-    panel.innerHTML = `<h2>Формирование структур (ΛCDM)</h2><div class="muted">Уравнение Фридмана + particle-mesh: начальные условия Зельдовича из спектра BBKS (σ₈), гравитация через FFT. Видно, как из почти однородного поля вырастает космическая паутина.</div>
-      <div class="row"><label>Космология</label><select id="k_c"><option value="planck2018">Planck 2018</option><option value="eds">Эйнштейн–де Ситтер (Ω_m=1)</option><option value="open">Открытая (Ω_m=0.3, Λ=0)</option><option value="lambda_heavy">Много Λ (Ω_Λ=0.85)</option></select></div>
-      <div class="row"><label>Частиц</label><select id="k_n"><option value="32">32³ = 32 768</option><option value="64" selected>64³ = 262 144</option></select></div>
-      <div class="row"><label>Размер куба, Мпк/h</label><input id="k_b" type="number" value="200"></div>
-      <div class="row"><label>Δa за шаг</label><input id="k_da" type="range" min="0.002" max="0.03" step="0.002" value="0.01"></div>
-      <div class="btns"><span class="btn" id="k_go">Большой взрыв ↺</span><span class="btn sec" id="k_pp">Пауза</span><span class="btn sec" id="k_pk">Спектр P(k)</span><span class="btn sec" id="k_bg">История a(t)</span></div>
+    panel.innerHTML = `<h2>Structure formation (ΛCDM)</h2><div class="muted">Friedmann equation + particle-mesh: Zeldovich initial conditions from the BBKS spectrum (σ₈), gravity via FFT. The cosmic web grows from a nearly uniform field.</div>
+      <div class="row"><label>Cosmology</label><select id="k_c"><option value="planck2018">Planck 2018</option><option value="eds">Einstein–de Sitter (Ω_m=1)</option><option value="open">Open (Ω_m=0.3, Λ=0)</option><option value="lambda_heavy">High Λ (Ω_Λ=0.85)</option></select></div>
+      <div class="row"><label>Particles</label><select id="k_n"><option value="32">32³ = 32,768</option><option value="64" selected>64³ = 262,144</option></select></div>
+      <div class="row"><label>Box size, Mpc/h</label><input id="k_b" type="number" value="200"></div>
+      <div class="row"><label>Δa per step</label><input id="k_da" type="range" min="0.002" max="0.03" step="0.002" value="0.01"></div>
+      <div class="btns"><span class="btn" id="k_go">Big Bang ↺</span><span class="btn sec" id="k_pp">Pause</span><span class="btn sec" id="k_pk">Spectrum P(k)</span><span class="btn sec" id="k_bg">History a(t)</span></div>
       <div id="k_info" class="muted" style="margin-top:8px"></div>`;
     $('#k_go').onclick = () => this.start().catch(e => { busy(false); alert(e.message); });
-    $('#k_pp').onclick = () => { this.paused = !this.paused; $('#k_pp').textContent = this.paused?'Продолжить':'Пауза'; };
+    $('#k_pp').onclick = () => { this.paused = !this.paused; $('#k_pp').textContent = this.paused?'Resume':'Pause'; };
     $('#k_pk').onclick = () => this.power();
     $('#k_bg').onclick = () => this.background();
     this.bg = await api('/api/cosmo/background');
@@ -756,9 +756,9 @@ const cosmoTab = {
         this.pts.geometry.attributes.position.needsUpdate = this.pts.geometry.attributes.color.needsUpdate = true;
         const a = +r.headers.get('X-A');
         this.a = a;
-        hud.style.display='block'; hud.innerHTML = `<span class="k">z =</span> <b>${(+r.headers.get('X-Z')).toFixed(2)}</b> <span class="k">· a =</span> ${a.toFixed(3)} <span class="k">· возраст</span> <b>${(+r.headers.get('X-Age-Gyr')).toFixed(3)} млрд лет</b> <span class="k">· δ_rms</span> ${(+r.headers.get('X-Delta-Rms')).toFixed(3)} <span class="k">· D(a)</span> ${(+r.headers.get('X-Growth')).toFixed(3)}`;
+        hud.style.display='block'; hud.innerHTML = `<span class="k">z =</span> <b>${(+r.headers.get('X-Z')).toFixed(2)}</b> <span class="k">· a =</span> ${a.toFixed(3)} <span class="k">· age</span> <b>${(+r.headers.get('X-Age-Gyr')).toFixed(3)} Gyr</b> <span class="k">· δ_rms</span> ${(+r.headers.get('X-Delta-Rms')).toFixed(3)} <span class="k">· D(a)</span> ${(+r.headers.get('X-Growth')).toFixed(3)}`;
         if (this.showing === 'bg') this.background(true);
-        if (a >= 0.9999){ $('#k_info').innerHTML = 'Сегодня (z = 0). Нажмите «Спектр P(k)», чтобы сравнить с линейной теорией.'; this.paused = true; $('#k_pp').textContent='Продолжить'; }
+        if (a >= 0.9999){ $('#k_info').innerHTML = 'Today (z = 0). Press Spectrum P(k) to compare with linear theory.'; this.paused = true; $('#k_pp').textContent='Resume'; }
       } catch(e){ return; }
     }
   },
@@ -767,35 +767,35 @@ const cosmoTab = {
     const cols = {planck2018:'#6fb7ff', eds:'#ff9a5a', open:'#c792ea', lambda_heavy:'#5fd38d'};
     const series = Object.entries(this.bg).map(([k,v]) => ({x:v.t_gyr, y:v.a, color:cols[k], label:k, width: k===$('#k_c').value?2.6:1.2}));
     const cur = this.bg[$('#k_c').value];
-    chart(series, {title:'Масштабный фактор a(t): ускорение расширения из-за Λ', xlabel:'млрд лет', xr:[0,30], yr:[0,2.5], marker: this.a ? interp(cur.a, cur.t_gyr, this.a) : null});
-    if (!quiet) $('#k_info').innerHTML = `Возраст Вселенной в этой модели: <b>${fmt(cur.age,3)} млрд лет</b> (Ω_m = ${cur.om}, Ω_Λ = ${fmt(cur.ol,4)}, h = ${cur.h})`;
+    chart(series, {title:'Scale factor a(t): expansion accelerates because of Λ', xlabel:'Gyr', xr:[0,30], yr:[0,2.5], marker: this.a ? interp(cur.a, cur.t_gyr, this.a) : null});
+    if (!quiet) $('#k_info').innerHTML = `Age of the Universe in this model: <b>${fmt(cur.age,3)} Gyr</b> (Ω_m = ${cur.om}, Ω_Λ = ${fmt(cur.ol,4)}, h = ${cur.h})`;
   },
   async power(){
     this.showing = 'pk';
     const r = await api('/api/cosmo/power?id=' + this.id);
-    chart([{x:r.k, y:r.p, color:'#ffc361', label:'измерено в симуляции'}, {x:r.k, y:r.p_lin, color:'#6fb7ff', label:'линейная теория × D²', dash:true}],
-      {title:`Спектр мощности P(k), (Мпк/h)³ при a = ${r.a.toFixed(3)}`, logx:true, logy:true, xlabel:'k, h/Мпк'});
-    $('#k_info').innerHTML = 'На больших масштабах (малые k) рост идёт по линейной теории; на малых — нелинейное усиление: образуются гало и нити.';
+    chart([{x:r.k, y:r.p, color:'#ffc361', label:'measured in the simulation'}, {x:r.k, y:r.p_lin, color:'#6fb7ff', label:'linear theory × D²', dash:true}],
+      {title:`Power spectrum P(k), (Mpc/h)³ at a = ${r.a.toFixed(3)}`, logx:true, logy:true, xlabel:'k, h/Mpc'});
+    $('#k_info').innerHTML = 'At large scales (small k) growth follows linear theory; at small scales nonlinear amplification forms halos and filaments.';
   },
   update(){},
 };
 function interp(xs, ys, x){ for (let i=1;i<xs.length;i++) if (xs[i]>=x){ const w=(x-xs[i-1])/(xs[i]-xs[i-1]); return ys[i-1]*(1-w)+ys[i]*w; } return ys[ys.length-1]; }
 
-// ============================================================ вкладка: Законы
+// ============================================================ tab: Laws
 const lawsTab = {
   async init(){
     const el = $('#laws'); el.style.display='block'; panel.style.display='none';
-    el.innerHTML = '<h2>Проверка законов</h2><div class="muted">Каждая строка — независимый тест: симуляция против закона сохранения, аналитики или наблюдений. Считается заново прямо сейчас…</div>';
+    el.innerHTML = '<h2>Law checks</h2><div class="muted">Each row is an independent test: simulation against a conservation law, an analytic result or observations. Recomputed right now…</div>';
     const t0 = performance.now(); const r = await api('/api/validate'); const ok = r.filter(c=>c.pass).length;
-    el.innerHTML = `<h2>Проверка законов: <span class="${ok===r.length?'ok':'no'}">${ok} / ${r.length}</span> <span class="muted" style="font-size:12px">за ${((performance.now()-t0)/1000).toFixed(1)} с</span></h2>
-      <table><tr><th></th><th>Закон</th><th>Тест</th><th>Получено</th><th>Ожидалось</th></tr>${r.map(c=>`<tr><td class="${c.pass?'ok':'no'}">${c.pass?'✔':'✘'}</td><td>${c.law}</td><td>${c.test}</td><td><b>${c.value}</b></td><td class="muted">${c.expected}</td></tr>`).join('')}</table>`;
+    el.innerHTML = `<h2>Law checks: <span class="${ok===r.length?'ok':'no'}">${ok} / ${r.length}</span> <span class="muted" style="font-size:12px">in ${((performance.now()-t0)/1000).toFixed(1)} s</span></h2>
+      <table><tr><th></th><th>Law</th><th>Test</th><th>Got</th><th>Expected</th></tr>${r.map(c=>`<tr><td class="${c.pass?'ok':'no'}">${c.pass?'✔':'✘'}</td><td>${c.law}</td><td>${c.test}</td><td><b>${c.value}</b></td><td class="muted">${c.expected}</td></tr>`).join('')}</table>`;
   },
   update(){},
   dispose(){ $('#laws').style.display='none'; panel.style.display=''; },
 };
 
-// ============================================================ переключение и цикл
-// ============================================================ вкладка: Роботы
+// ============================================================ switching and main loop
+// ============================================================ tab: Robots
 const SKY = {none:[0x000000,0x000000], earth:[0x2a5fa8,0xb9d4ee], mars:[0x8f6a50,0xe0b98f], venus:[0x9c7c3f,0xe6cf8e], jupiter:[0x7d6547,0xd5b88e]};
 const GROUND = {moon:[.50,.49,.47], moon_mare:[.33,.32,.31], mercury:[.46,.42,.38], mars:[.62,.34,.19], venus:[.58,.44,.24], earth:[.33,.38,.22]};
 const hash = (a,b) => { const s = Math.sin(a*127.1+b*311.7)*43758.5453; return s-Math.floor(s); };
@@ -804,35 +804,35 @@ function gradientTex(top, bottom){
   gr.addColorStop(0, '#'+new THREE.Color(top).getHexString()); gr.addColorStop(.62, '#'+new THREE.Color(bottom).getHexString()); gr.addColorStop(1, '#'+new THREE.Color(bottom).getHexString());
   g.fillStyle = gr; g.fillRect(0,0,4,256); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
-/* солнечная панель: тёмные ячейки с серебристой сеткой */
+/* solar panel: dark cells with a silver grid */
 let _solar = null;
 function solarTex(){ if (_solar) return _solar; const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d'); g.fillStyle='#10244f'; g.fillRect(0,0,128,128); g.strokeStyle='#8fa6cc'; g.lineWidth=1.5; for(let i=0;i<=128;i+=16){ g.beginPath(); g.moveTo(i,0); g.lineTo(i,128); g.moveTo(0,i); g.lineTo(128,i); g.stroke(); } _solar=new THREE.CanvasTexture(c); _solar.colorSpace=THREE.SRGBColorSpace; return _solar; }
-/* золотая термоизоляция: неровности дают живые блики */
+/* gold thermal insulation: roughness gives lively highlights */
 let _foil = null;
 function foilTex(){ if (_foil) return _foil; const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d'); g.fillStyle='#808080'; g.fillRect(0,0,128,128); for(let i=0;i<500;i++){ const v=90+Math.random()*90|0; g.fillStyle=`rgb(${v},${v},${v})`; g.fillRect(Math.random()*128,Math.random()*128,2+Math.random()*12,1+Math.random()*7); } _foil=new THREE.CanvasTexture(c); _foil.wrapS=_foil.wrapT=THREE.RepeatWrapping; _foil.repeat.set(2,2); return _foil; }
 const std = (color, metal=.1, rough=.7, extra={}) => new THREE.MeshStandardMaterial({color, metalness:metal, roughness:rough, ...extra});
 function mesh(geo, mat, x=0, y=0, z=0){ const m = new THREE.Mesh(geo, mat); m.position.set(x,y,z); m.castShadow = true; m.receiveShadow = true; return m; }
-/* стержень между двумя точками: опоры, рычаги подвески */
+/* rod between two points: legs, suspension arms */
 function strut(a, b, r, mat){ const A=new THREE.Vector3(...a), B=new THREE.Vector3(...b), d=B.clone().sub(A), m=mesh(new THREE.CylinderGeometry(r,r,d.length(),8), mat); m.position.copy(A).addScaledVector(d,.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), d.normalize()); return m; }
 
-/* Размеры совпадают с физикой: опоры модуля ±1.5 м и 1.6 м вниз, плечи дрона 0.25 м, колея ровера 1.2 м */
+/* Dimensions match the physics: lander feet ±1.5 m and 1.6 m down, drone arms 0.25 m, rover track 1.2 m */
 function buildLander(){
   const g = new THREE.Group(), foil = std(0xd4a43c,.95,.38,{roughnessMap:foilTex(), bumpMap:foilTex(), bumpScale:.6}), white = std(0xe9ebef,.15,.55), dark = std(0x2b2f37,.6,.5), metal = std(0x9aa3b0,.85,.35);
   const bus = mesh(new THREE.CylinderGeometry(.95,1.05,1.0,8), foil, 0,.25,0); g.add(bus);
   g.add(mesh(new THREE.CylinderGeometry(1.0,1.0,.06,8), white, 0,.78,0));
   g.add(mesh(new THREE.CylinderGeometry(1.08,1.08,.06,8), dark, 0,-.27,0));
-  // баки топлива по бокам и панели сверху
+  // fuel tanks on the sides and panels on top
   for (const [x,z] of [[.72,.72],[-.72,.72],[.72,-.72],[-.72,-.72]]) g.add(mesh(new THREE.SphereGeometry(.3,20,14), white, x,.15,z));
   const deck = mesh(new THREE.BoxGeometry(1.25,.04,1.25), new THREE.MeshStandardMaterial({map:solarTex(), metalness:.5, roughness:.35}), 0,.84,0); g.add(deck);
-  // антенна
+  // antenna
   g.add(strut([.45,.84,.45],[.45,1.35,.45],.025,metal));
   const dish = mesh(new THREE.SphereGeometry(.26,20,10,0,Math.PI*2,0,Math.PI*.38), white, .45,1.28,.45); dish.rotation.x=Math.PI; dish.rotation.z=.5; g.add(dish);
-  // сопло: профиль колокола
+  // nozzle: bell profile
   const bell = []; for (let i=0;i<=12;i++){ const t=i/12; bell.push(new THREE.Vector2(.14+.38*Math.pow(t,.7), -.3-.62*t)); }
   g.add(mesh(new THREE.LatheGeometry(bell, 28), std(0x5a5148,.9,.3,{side:THREE.DoubleSide})));
-  // двигатели ориентации
+  // attitude thrusters
   for (const [x,z] of [[1,0],[-1,0],[0,1],[0,-1]]) { const r=mesh(new THREE.CylinderGeometry(.05,.09,.16,8), dark, x*1.04,.45,z*1.04); r.rotation.set(z*1.57,0,-x*1.57); g.add(r); }
-  // опоры: основная и две раскосных на каждую ногу, тарелка на конце
+  // legs: one main and two diagonal struts per leg, with a foot pad
   for (const [x,z] of [[1.5,0],[-1.5,0],[0,1.5],[0,-1.5]]) {
     const foot=[x,-1.57,z], ux=x/1.5, uz=z/1.5, px=uz, pz=-ux;
     g.add(strut([ux*.92,.0,uz*.92], foot, .05, metal));
@@ -852,10 +852,10 @@ function buildDrone(rotorScale){
     const rot = new THREE.Group(); rot.position.set(x,.046,z);
     const blade = new THREE.Mesh(new THREE.BoxGeometry(rotR*2,.002,rotR*.13), std(0x24272e,.2,.45));
     const b2 = blade.clone(); b2.rotation.y = Math.PI/2; rot.add(blade, b2);
-    // размытый диск вращения
+    // blurred rotor disk
     rot.add(new THREE.Mesh(new THREE.CircleGeometry(rotR,36).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color:0xcfdcf0, transparent:true, opacity:.14, side:THREE.DoubleSide, depthWrite:false})));
     rot.userData.dir = i%2 ? 1 : -1; rotors.push(rot); g.add(rot);
-    // навигационные огни: красный и зелёный показывают ориентацию
+    // navigation lights: red and green show orientation
     if (i<2){ const led=new THREE.Mesh(new THREE.SphereGeometry(.007,8,6), new THREE.MeshBasicMaterial({color:i?0xff4040:0x40ff70})); led.position.set(x,.002,z); g.add(led); }
   });
   for (const z of [.07,-.07]) { g.add(strut([.03,-.03,z],[.03,-.095,z*1.4],.004,carbon)); g.add(strut([-.03,-.03,z],[-.03,-.095,z*1.4],.004,carbon)); g.add(strut([.09,-.095,z*1.4],[-.09,-.095,z*1.4],.005,carbon)); }
@@ -867,14 +867,14 @@ function buildRover(){
   g.add(mesh(new THREE.BoxGeometry(1.25,.26,.72), foil, 0,.58,0));
   g.add(mesh(new THREE.BoxGeometry(1.31,.03,.78), body, 0,.72,0));
   g.add(mesh(new THREE.BoxGeometry(1.5,.03,.96), new THREE.MeshStandardMaterial({map:solarTex(), metalness:.6, roughness:.3}), 0,.76,0));
-  // мачта с камерами
+  // camera mast
   g.add(strut([.48,.76,.22],[.48,1.28,.22],.024,metal));
   const head = mesh(new THREE.BoxGeometry(.13,.08,.2), body, .5,1.31,.22); g.add(head);
   for (const z of [.15,.29]) { const l=mesh(new THREE.CylinderGeometry(.022,.022,.03,12), dark, .575,1.31,z); l.rotation.z=Math.PI/2; g.add(l); }
-  // антенна
+  // antenna
   g.add(strut([-.45,.76,-.25],[-.45,1.05,-.25],.018,metal));
   const dish = mesh(new THREE.SphereGeometry(.16,18,8,0,Math.PI*2,0,Math.PI*.4), body, -.45,1.03,-.25); dish.rotation.set(Math.PI,0,.6); g.add(dish);
-  // подвеска rocker-bogie и шесть колёс
+  // rocker-bogie suspension and six wheels
   for (const s of [1,-1]) {
     const z = s*.6;
     g.add(strut([0,.55,s*.36],[0,.55,z],.022,metal));
@@ -902,43 +902,43 @@ const robotsTab = {
     this.sun = new THREE.DirectionalLight(0xfff4e2, 3); this.sun.castShadow = true; this.sun.shadow.mapSize.set(2048,2048); this.sun.shadow.bias = -.0005; this.sun.shadow.normalBias = .03; this.scene.add(this.sun, this.sun.target);
     const pr = await api('/api/presets');
     const opt = (a, sel) => a.map(x=>`<option ${x===sel?'selected':''}>${x}</option>`).join('');
-    panel.innerHTML = `<h2>Роботы</h2><div class="muted">Истинная физика в реальном времени. Размеры аппаратов совпадают с расчётными.</div>
-      <div class="row"><label>Аппарат</label><select id="r_t"><option value="lander">Посадочный модуль</option><option value="drone">Дрон</option><option value="rover">Ровер</option></select></div>
-      <div class="row"><label>Гравитация</label><select id="r_w">${opt(pr.physics.filter(x=>x!=='sun'),'moon')}</select></div>
-      <div class="row"><label>Атмосфера</label><select id="r_a"><option>auto</option>${opt(pr.atmosphere)}</select></div>
-      <div class="row"><label>Управление</label><select id="r_m"><option value="auto">Автопилот</option><option value="random">Случайное</option></select></div>
-      <div class="row"><label>Скорость</label><input id="r_s" type="range" min="1" max="10" step="1" value="2"><span id="r_sv" style="flex:0 0 28px;text-align:right">×2</span></div>
-      <div class="row"><label>Лучи лидара</label><select id="r_l"><option value="1">Показать</option><option value="0">Скрыть</option></select></div>
-      <div class="btns"><span class="btn" id="r_go">Новый эпизод</span><span class="btn sec" id="r_p">Пауза</span></div>
-      <h3>Параметры</h3><div class="muted" style="margin-bottom:4px">Изменения применяются к новому эпизоду. Пустое поле означает значение по умолчанию.</div>
-      <div class="pset"><select id="r_ps" aria-label="Пресеты"></select><span class="btn sec del" id="r_pl">Открыть</span><span class="btn sec del" id="r_pd">×</span></div>
-      <div class="btns" style="margin:0 0 8px"><span class="btn sec del" id="r_psv">Сохранить как…</span><span class="btn sec del" id="r_pex">Экспорт</span><span class="btn sec del" id="r_pim">Импорт</span><span class="btn sec del" id="r_prs">Сброс</span><span class="btn sec del" id="r_cli">Команда CLI</span></div>
+    panel.innerHTML = `<h2>Robots</h2><div class="muted">True physics in real time. Vehicle dimensions match the computed ones.</div>
+      <div class="row"><label>Vehicle</label><select id="r_t"><option value="lander">Lander</option><option value="drone">Drone</option><option value="rover">Rover</option></select></div>
+      <div class="row"><label>Gravity</label><select id="r_w">${opt(pr.physics.filter(x=>x!=='sun'),'moon')}</select></div>
+      <div class="row"><label>Atmosphere</label><select id="r_a"><option>auto</option>${opt(pr.atmosphere)}</select></div>
+      <div class="row"><label>Control</label><select id="r_m"><option value="auto">Autopilot</option><option value="random">Random</option></select></div>
+      <div class="row"><label>Speed</label><input id="r_s" type="range" min="1" max="10" step="1" value="2"><span id="r_sv" style="flex:0 0 28px;text-align:right">×2</span></div>
+      <div class="row"><label>Lidar rays</label><select id="r_l"><option value="1">Show</option><option value="0">Hide</option></select></div>
+      <div class="btns"><span class="btn" id="r_go">New episode</span><span class="btn sec" id="r_p">Pause</span></div>
+      <h3>Parameters</h3><div class="muted" style="margin-bottom:4px">Changes apply to the next episode. An empty field means the default value.</div>
+      <div class="pset"><select id="r_ps" aria-label="Presets"></select><span class="btn sec del" id="r_pl">Open</span><span class="btn sec del" id="r_pd">×</span></div>
+      <div class="btns" style="margin:0 0 8px"><span class="btn sec del" id="r_psv">Save as…</span><span class="btn sec del" id="r_pex">Export</span><span class="btn sec del" id="r_pim">Import</span><span class="btn sec del" id="r_prs">Reset</span><span class="btn sec del" id="r_cli">Command CLI</span></div>
       <div id="r_pf"></div><div id="r_msg" class="muted" style="margin-top:6px"></div>
-      <h3>Сейчас</h3><div id="r_info"></div>
-      <h3>Камера аппарата</h3><canvas id="r_cam" width="96" height="64" class="cam"></canvas>
-      <h3>Скрыто от агента</h3><div id="r_hidden" class="kv"></div>`;
+      <h3>Now</h3><div id="r_info"></div>
+      <h3>Vehicle camera</h3><canvas id="r_cam" width="96" height="64" class="cam"></canvas>
+      <h3>Hidden from the agent</h3><div id="r_hidden" class="kv"></div>`;
     $('#r_s').oninput = e => $('#r_sv').textContent = '×'+e.target.value;
     $('#r_go').onclick = () => { this.seed = (this.seed||1)+1; this.start(); };
-    $('#r_p').onclick = () => { this.paused = !this.paused; $('#r_p').textContent = this.paused?'Продолжить':'Пауза'; };
+    $('#r_p').onclick = () => { this.paused = !this.paused; $('#r_p').textContent = this.paused?'Resume':'Pause'; };
     $('#r_l').onchange = e => { if (this.rays) this.rays.visible = e.target.value==='1'; };
     this.schema = await paramSchema(); this.pvals = {};
     const rebuild = () => { paramForm($('#r_pf'), this.schema, $('#r_t').value, this.pvals, () => { clearTimeout(this.deb); this.deb = setTimeout(()=>this.start(), 400); }, this.schemaOpen||[]); $('#r_pf').querySelectorAll('details').forEach(d=>d.ontoggle=()=>{ this.schemaOpen=[...$('#r_pf').querySelectorAll('details[open] summary')].map(x=>x.firstChild.textContent.trim()); }); };
     const presets = () => store.get('robot_presets', {});
-    const showPresets = () => { const p=presets(), n=Object.keys(p); $('#r_ps').innerHTML = n.length ? n.map(x=>`<option>${esc(x)}</option>`).join('') : '<option value="">Нет сохранённых</option>'; };
+    const showPresets = () => { const p=presets(), n=Object.keys(p); $('#r_ps').innerHTML = n.length ? n.map(x=>`<option>${esc(x)}</option>`).join('') : '<option value="">Nothing saved</option>'; };
     const current = () => ({task:$('#r_t').value, world:$('#r_w').value, atmosphere:$('#r_a').value, params:this.pvals});
-    const applyPreset = c => { if (!c || !c.task) throw new Error('файл не похож на пресет'); $('#r_t').value=c.task; $('#r_w').value=c.world||'moon'; $('#r_a').value=c.atmosphere||'auto'; this.pvals={...(c.params||{})}; rebuild(); this.start(); };
+    const applyPreset = c => { if (!c || !c.task) throw new Error('this file does not look like a preset'); $('#r_t').value=c.task; $('#r_w').value=c.world||'moon'; $('#r_a').value=c.atmosphere||'auto'; this.pvals={...(c.params||{})}; rebuild(); this.start(); };
     $('#r_t').onchange = () => { this.pvals = {}; rebuild(); this.start(); };
     for (const id of ['r_w','r_a']) $('#'+id).onchange = () => this.start();
-    $('#r_psv').onclick = () => { const n=prompt('Название пресета:'); if (n){ store.set('robot_presets',{...presets(),[n]:current()}); showPresets(); $('#r_ps').value=n; } };
+    $('#r_psv').onclick = () => { const n=prompt('Preset name:'); if (n){ store.set('robot_presets',{...presets(),[n]:current()}); showPresets(); $('#r_ps').value=n; } };
     $('#r_pl').onclick = () => { const c=presets()[$('#r_ps').value]; if (c) applyPreset(c); };
     $('#r_pd').onclick = () => { const p=presets(); delete p[$('#r_ps').value]; store.set('robot_presets',p); showPresets(); };
     $('#r_pex').onclick = () => download(JSON.stringify(current(),null,2), 'worldsim_preset.json');
-    $('#r_pim').onclick = async () => { const t=await pickFile('.json,application/json'); if (!t) return; try { applyPreset(JSON.parse(t)); $('#r_msg').textContent='Пресет загружен.'; } catch(e){ $('#r_msg').innerHTML=`<span class="no">${esc(e.message)}</span>`; } };
+    $('#r_pim').onclick = async () => { const t=await pickFile('.json,application/json'); if (!t) return; try { applyPreset(JSON.parse(t)); $('#r_msg').textContent='Preset loaded.'; } catch(e){ $('#r_msg').innerHTML=`<span class="no">${esc(e.message)}</span>`; } };
     $('#r_prs').onclick = () => { this.pvals={}; rebuild(); this.start(); };
-    $('#r_cli').onclick = async () => { const w=$('#r_a').value==='auto'?$('#r_w').value:`${$('#r_w').value}:${$('#r_a').value}:auto`, q=paramsQuery(this.pvals), cmd=`worldsim collect --task ${$('#r_t').value} --worlds ${w} --episodes 100 --randomize${q?` --set ${q}`:''} --out runs/data`; $('#r_msg').textContent=cmd; try { await navigator.clipboard.writeText(cmd); $('#r_msg').textContent='Скопировано: '+cmd; } catch(e){} };
+    $('#r_cli').onclick = async () => { const w=$('#r_a').value==='auto'?$('#r_w').value:`${$('#r_w').value}:${$('#r_a').value}:auto`, q=paramsQuery(this.pvals), cmd=`worldsim collect --task ${$('#r_t').value} --worlds ${w} --episodes 100 --randomize${q?` --set ${q}`:''} --out runs/data`; $('#r_msg').textContent=cmd; try { await navigator.clipboard.writeText(cmd); $('#r_msg').textContent='Copied: '+cmd; } catch(e){} };
     rebuild(); showPresets();
     this.seed = 1; this.paused = false;
-    // пыль от струи при посадке
+    // dust raised by the plume during landing
     const P = 240, pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(P*3).fill(1e6),3));
     this.dust = {pts:new THREE.Points(pg, new THREE.PointsMaterial({color:0xb7ab98, size:.55, transparent:true, opacity:.5, depthWrite:false})), vel:new Float32Array(P*3), life:new Float32Array(P), next:0, N:P};
     this.dust.pts.frustumCulled = false; this.scene.add(this.dust.pts);
@@ -955,7 +955,7 @@ const robotsTab = {
     if (this.id) api('/api/env/close?id='+this.id).catch(()=>{});
     this.id = meta.id; this.meta = meta; this.task = task; this.ter = ter; this.hist = {t:[],a:[],v:[]}; this.frame = 0; this.throttle = 0; this.speed = 0;
     this.release();
-    // рельеф: сетка совпадает с физической, цвет зависит от высоты и уклона
+    // terrain: the grid matches the physics grid, color depends on height and slope
     const n = ter.n, geo = new THREE.PlaneGeometry(ter.size, ter.size, n-1, n-1); geo.rotateX(-Math.PI/2);
     const pos = geo.attributes.position, col = new Float32Array(pos.count*3), base = GROUND[ter.surface] || GROUND.earth, cell = ter.size/(n-1);
     let lo=1e9, hi=-1e9; for (const h of ter.h){ lo=Math.min(lo,h); hi=Math.max(hi,h); }
@@ -967,13 +967,13 @@ const robotsTab = {
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col,3)); geo.computeVertexNormals();
     this.ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({vertexColors:true, roughness:.96, metalness:0})); this.ground.receiveShadow = true; this.scene.add(this.ground);
-    // небо и свет: в вакууме жёсткие тени и чёрное небо, в атмосфере рассеянный свет и дымка
+    // sky and light: hard shadows and a black sky in vacuum, scattered light and haze in an atmosphere
     const atm = q.atmosphere!=='auto' ? q.atmosphere : (ter.has_air ? q.physics : 'none'), air = ter.has_air && atm!=='none', sky = SKY[atm] || SKY.earth;
     this.stars.visible = !air;
     this.scene.background = air ? gradientTex(sky[0], sky[1]) : new THREE.Color(0x000000);
     this.scene.fog = air ? new THREE.Fog(sky[1], ter.size*.35, ter.size*1.5) : null;
     this.hemi.intensity = air ? 1.1 : .12; this.sun.intensity = air ? 2.6 : 3.6; this.dust.pts.material.color.setRGB(base[0]*1.2,base[1]*1.2,base[2]*1.2);
-    // камни для ощущения масштаба. Только декор: в физике их нет, поэтому они мелкие
+    // rocks for a sense of scale. Decorative only: the physics does not know about them, so they are small
     const R = task==='lander' ? 900 : 400, rock = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,0), new THREE.MeshStandardMaterial({color:new THREE.Color(base[0]*.8,base[1]*.8,base[2]*.8), roughness:1, flatShading:true}), R), mt = new THREE.Matrix4(), rq = new THREE.Quaternion(), ax = new THREE.Vector3();
     const span = task==='lander' ? 500 : 160;
     for (let i=0;i<R;i++){ const a=hash(i,this.seed)*6.283, d=Math.sqrt(hash(i+.5,this.seed+1))*span+6, x=d*Math.cos(a), y=d*Math.sin(a), sc=.04+Math.pow(hash(i,3),3)*(task==='lander'?.8:.22); ax.set(hash(i,4)-.5,hash(i,5)-.5,hash(i,6)-.5).normalize(); rq.setFromAxisAngle(ax,hash(i,7)*6); mt.compose(new THREE.Vector3(x,this.heightAt(x,y)+sc*.2,-y),rq,new THREE.Vector3(sc,sc*.7,sc)); rock.setMatrixAt(i,mt); }
@@ -986,7 +986,7 @@ const robotsTab = {
     const st = await api('/api/env/state?id='+meta.id);
     if (my !== this.run || ep0 !== epoch) return;
     const v3 = p => new THREE.Vector3(p[0],p[2],-p[1]), gp = v3(st.goal);
-    // цель: посадочная площадка, точка зависания или флаг
+    // goal: landing pad, hover point or flag
     this.goal = new THREE.Group(); this.goal.position.copy(gp);
     const green = new THREE.MeshBasicMaterial({color:0x4ade80, side:THREE.DoubleSide}), pad = meta.params[meta.param_names.indexOf('pad_radius')];
     if (task==='lander'){ gp.y; this.goal.position.y += .12; this.goal.add(new THREE.Mesh(new THREE.RingGeometry(pad-.7,pad,96).rotateX(-Math.PI/2), green), new THREE.Mesh(new THREE.RingGeometry(5.5,6,64).rotateX(-Math.PI/2), green)); for (let i=0;i<4;i++){ const b=new THREE.Mesh(new THREE.PlaneGeometry(.6,6).rotateX(-Math.PI/2), green); b.rotation.y=i*Math.PI/2; b.position.set(Math.sin(i*Math.PI/2)*9,0,Math.cos(i*Math.PI/2)*9); this.goal.add(b); } }
@@ -998,10 +998,10 @@ const robotsTab = {
     const dist = {lander:22, drone:2.6, rover:6.5}[task], p = v3(st.pos);
     this.controls.target.copy(p); this.camera.position.copy(p).add(new THREE.Vector3(dist*.75,dist*.42,dist));
     const Rr = (a,b) => `<div>${a}</div><div>${b}</div>`, nm = meta.param_names, pv = meta.params, g = k => pv[nm.indexOf(k)];
-    $('#r_hidden').innerHTML = Rr('g', fmt(g('g'),3)+' м/с²')+Rr('Плотность воздуха', fmt(g('rho0'),3)+' кг/м³')+(task==='lander'?Rr('Сухая масса', fmt(g('dry_mass'),0)+' кг')+Rr('Удельный импульс', fmt(g('isp'),0)+' с'):'')+Rr('Трение грунта', fmt(g('friction'),2))+Rr('Шаг управления', fmt(g('control_dt')*1000,0)+' мс');
+    $('#r_hidden').innerHTML = Rr('g', fmt(g('g'),3)+' m/s²')+Rr('Air density', fmt(g('rho0'),3)+' kg/m³')+(task==='lander'?Rr('Dry mass', fmt(g('dry_mass'),0)+' kg')+Rr('Specific impulse', fmt(g('isp'),0)+' s'):'')+Rr('Soil friction', fmt(g('friction'),2))+Rr('Control step', fmt(g('control_dt')*1000,0)+' ms');
     this.place(st); this.loop(ep0, my);
   },
-  /* эпизоды перезапускаются сами: без освобождения видеопамять росла бы, пока вкладка открыта. Текстуры панелей и фольги общие, их не трогаем */
+  /* episodes restart on their own: without releasing resources GPU memory would grow while the tab is open. Panel and foil textures are shared, so they stay */
   release(){
     for (const o of [this.ground,this.body,this.goal,this.rays,this.trail,this.rocks]) if (o){ o.parent?.remove(o); o.traverse?.(c=>{ c.geometry?.dispose?.(); c.material?.dispose?.(); }); o.dispose?.(); }
     if (this.scene?.background?.isTexture){ this.scene.background.dispose(); this.scene.background = null; }
@@ -1010,7 +1010,7 @@ const robotsTab = {
     const v3 = p => new THREE.Vector3(p[0],p[2],-p[1]), p = v3(st.pos), d = p.clone().sub(this.controls.target), q = st.quat;
     this.body.position.copy(p);
     if (this.task==='rover'){
-      // ровер стоит на грунте: ось вверх по нормали к рельефу, вперёд по курсу
+      // the rover stands on the ground: up along the terrain normal, forward along the heading
       const e=1, x=st.pos[0], y=st.pos[1], n=new THREE.Vector3(-(this.heightAt(x+e,y)-this.heightAt(x-e,y))/(2*e),1,(this.heightAt(x,y+e)-this.heightAt(x,y-e))/(2*e)).normalize(), hd=st.state[st.state_names.indexOf('heading')], f=new THREE.Vector3(Math.cos(hd),0,-Math.sin(hd)); f.addScaledVector(n,-f.dot(n)).normalize(); const z=new THREE.Vector3().crossVectors(f,n);
       this.body.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(f,n,z));
       this.speed = st.speed;
@@ -1018,7 +1018,7 @@ const robotsTab = {
     this.throttle = this.task==='lander' && !st.done ? (st.action?.[0]||0) : this.task==='drone' && !st.done ? (st.action||[]).reduce((a,b)=>a+b,0)/4 : 0;
     this.alt = this.task==='lander' ? p.y-this.heightAt(st.pos[0],st.pos[1])-1.6 : 1e9;
     this.controls.target.add(d); this.camera.position.add(d);
-    // тень считается вокруг аппарата
+    // the shadow is computed around the vehicle
     const sz = {lander:40, drone:12, rover:16}[this.task], cam = this.sun.shadow.camera, el = this.task==='rover' ? st.state[st.state_names.indexOf('sun_elev')] : .75;
     if (cam.right !== sz){ cam.left=-sz; cam.right=sz; cam.top=sz; cam.bottom=-sz; cam.near=1; cam.far=800; cam.updateProjectionMatrix(); }
     this.sun.target.position.copy(p); this.sun.position.copy(p).add(new THREE.Vector3(.6*Math.cos(el),Math.sin(el),.8*Math.cos(el)).multiplyScalar(400));
@@ -1027,11 +1027,11 @@ const robotsTab = {
     if (!this.trailPts.length || this.trailPts.at(-1).distanceTo(p)>.3){ this.trailPts.push(p); if (this.trailPts.length>900) this.trailPts.shift(); this.trail.geometry.setFromPoints(this.trailPts); }
     const v = Math.hypot(...st.vel), i = st.info, sn = st.state_names, sv = k => st.state[sn.indexOf(k)];
     hud.style.display='block';
-    hud.innerHTML = `<span class="k">Время</span> <b>${fmt(i.t,1)} с</b> &nbsp; <span class="k">Скорость</span> <b>${fmt(v,2)} м/с</b> &nbsp; <span class="k">Шаг</span> <b>${i.steps}</b> &nbsp; <span class="k">Награда</span> <b>${fmt(i.episode_return,1)}</b>`;
-    $('#r_info').innerHTML = st.done ? `<span class="pill ${i.success?'g':'r'}">${i.success?'Успех':'Отказ'}</span> ${esc(i.reason)}` : esc(st.text);
+    hud.innerHTML = `<span class="k">Time</span> <b>${fmt(i.t,1)} s</b> &nbsp; <span class="k">Speed</span> <b>${fmt(v,2)} m/s</b> &nbsp; <span class="k">Step</span> <b>${i.steps}</b> &nbsp; <span class="k">Reward</span> <b>${fmt(i.episode_return,1)}</b>`;
+    $('#r_info').innerHTML = st.done ? `<span class="pill ${i.success?'g':'r'}">${i.success?'Success':'Failure'}</span> ${esc(i.reason)}` : esc(st.text);
     const h = this.hist, gz = this.meta.params[this.meta.param_names.indexOf('goal_z')]; h.t.push(i.t); h.a.push(sv('z')-gz); h.v.push(v);
     if (h.t.length>800) for (const k of ['t','a','v']) h[k].shift();
-    if (this.frame++ % 6 === 0) chart([{x:h.t, y:h.a, color:'#5aa2ff', label:'Высота над целью, м'},{x:h.t, y:h.v, color:'#fbbf4b', label:'Скорость, м/с'}], {title:'Истинное состояние', xlabel:'время, с'});
+    if (this.frame++ % 6 === 0) chart([{x:h.t, y:h.a, color:'#5aa2ff', label:'Height above goal, m'},{x:h.t, y:h.v, color:'#fbbf4b', label:'Speed, m/s'}], {title:'True state', xlabel:'time, s'});
     if (this.frame % 8 === 1) this.camFrame();
   },
   async camFrame(){
@@ -1050,7 +1050,7 @@ const robotsTab = {
         this.place(st);
         if (st.done){ await sleep(2200); if (ep===epoch && my===this.run && !this.paused){ this.seed++; this.start(); } return; }
       } catch(e){ return; }
-      // вровень с отрисовкой, но скрытая вкладка браузера не должна останавливать симуляцию
+      // paced with rendering, but a hidden browser tab must not stop the simulation
       await Promise.race([new Promise(r=>requestAnimationFrame(r)), sleep(50)]);
     }
   },
@@ -1059,7 +1059,7 @@ const robotsTab = {
     if (b.userData.rotors) for (const r of b.userData.rotors) r.rotation.y += r.userData.dir * dt * (6+this.throttle*90);
     if (b.userData.wheels) for (const w of b.userData.wheels) w.rotation.z -= dt * this.speed / .2;
     if (this.plume){ const t=this.throttle, fl=.9+.2*Math.random(); this.plume.visible = t>.01; this.plume.scale.set(.55+t*.7, (.6+t*3.4)*fl, .55+t*.7); }
-    // пыль: струя поднимает грунт, если двигатель близко к поверхности
+    // dust: the plume lifts soil when the engine is close to the surface
     const D = this.dust; if (!D) return; const a = D.pts.geometry.attributes.position;
     if (this.plume && this.throttle>.05 && this.alt<18){ const n=Math.ceil(this.throttle*5*(1-this.alt/18)); for (let i=0;i<n;i++){ const k=D.next++%D.N, an=Math.random()*6.283, sp=4+Math.random()*9, g=this.heightAt(b.position.x,-b.position.z); a.setXYZ(k,b.position.x+Math.cos(an)*.8,g+.15,b.position.z+Math.sin(an)*.8); D.vel.set([Math.cos(an)*sp,.4+Math.random()*1.2,Math.sin(an)*sp],k*3); D.life[k]=.6+Math.random()*.9; } }
     let any=false; for (let k=0;k<D.N;k++){ if (D.life[k]<=0) continue; any=true; D.life[k]-=dt; if (D.life[k]<=0){ a.setXYZ(k,1e6,1e6,1e6); continue; } a.setXYZ(k,a.getX(k)+D.vel[k*3]*dt,a.getY(k)+D.vel[k*3+1]*dt,a.getZ(k)+D.vel[k*3+2]*dt); }
@@ -1068,80 +1068,80 @@ const robotsTab = {
   dispose(){ this.run = (this.run||0)+1; if (this.id){ api('/api/env/close?id='+this.id).catch(()=>{}); this.id=null; } clearTimeout(this.deb); this.release(); this.dust?.pts.geometry.dispose(); this.dust?.pts.material.dispose(); this.ground=this.body=this.goal=this.rays=this.trail=this.rocks=this.plume=this.dust=null; },
 };
 
-// ============================================================ вкладка: Mission Lab
-const VERDICT = {'выполнено':'g','не выполнено':'r','данных мало':'y','нет данных':''};
+// ============================================================ tab: Mission Lab
+const VERDICT = {'met':'g','not met':'r','not enough data':'y','no data':''};
 const missionTab = {
   async init(){
     const el = $('#mission'); el.style.display='block';
-    panel.innerHTML = `<h2>Mission Lab</h2><div class="muted">Опишите аппарат, разбросы, требования и варианты технологий.</div>
-      <div class="row"><label>Пример</label><select id="ml_p"><option value="lunar_lander">Лунный модуль</option><option value="mars_helicopter">Вертолёт на Марсе</option><option value="lunar_rover">Лунный ровер</option></select></div>
-      <div class="btns"><span class="btn" id="ml_go">Рассчитать миссию</span><span class="btn sec" id="ml_x" style="display:none">Отменить</span></div>
+    panel.innerHTML = `<h2>Mission Lab</h2><div class="muted">Describe the vehicle, dispersions, requirements and technology options.</div>
+      <div class="row"><label>Example</label><select id="ml_p"><option value="lunar_lander">Lunar lander</option><option value="mars_helicopter">Mars helicopter</option><option value="lunar_rover">Lunar rover</option></select></div>
+      <div class="btns"><span class="btn" id="ml_go">Run mission</span><span class="btn sec" id="ml_x" style="display:none">Cancel</span></div>
       <div id="ml_err" class="no" style="margin-top:6px"></div>
-      <h3>Мои миссии</h3><div class="pset"><select id="ml_sv" aria-label="Сохранённые миссии"></select><span class="btn sec del" id="ml_so">Открыть</span><span class="btn sec del" id="ml_sd">×</span></div>
-      <div class="btns" style="margin:0"><span class="btn sec del" id="ml_ss">Сохранить как…</span><span class="btn sec del" id="ml_se">Экспорт</span><span class="btn sec del" id="ml_si">Импорт</span></div>
-      <h3>Описание миссии</h3><div class="tabs2"><span class="btn" id="ml_mf">Форма</span><span class="btn sec" id="ml_mj">JSON</span></div>
-      <div id="ml_form"></div><div id="ml_json" style="display:none"><textarea id="ml_s" spellcheck="false" aria-label="Описание миссии"></textarea></div>
-      <h3>История запусков</h3><div id="ml_h" class="muted">Пока пусто.</div>`;
-    el.innerHTML = `<div class="ml-empty"><b>Выполнима ли миссия и что её ломает?</b>Нажмите «Рассчитать миссию». Сотни полётов с разбросами параметров дадут проверку требований, причины отказов и ценность каждой технологии.</div>`;
+      <h3>My missions</h3><div class="pset"><select id="ml_sv" aria-label="Saved missions"></select><span class="btn sec del" id="ml_so">Open</span><span class="btn sec del" id="ml_sd">×</span></div>
+      <div class="btns" style="margin:0"><span class="btn sec del" id="ml_ss">Save as…</span><span class="btn sec del" id="ml_se">Export</span><span class="btn sec del" id="ml_si">Import</span></div>
+      <h3>Mission description</h3><div class="tabs2"><span class="btn" id="ml_mf">Form</span><span class="btn sec" id="ml_mj">JSON</span></div>
+      <div id="ml_form"></div><div id="ml_json" style="display:none"><textarea id="ml_s" spellcheck="false" aria-label="Mission description"></textarea></div>
+      <h3>Run history</h3><div id="ml_h" class="muted">Nothing yet.</div>`;
+    el.innerHTML = `<div class="ml-empty"><b>Is the mission feasible, and what breaks it?</b>Press Run mission. Hundreds of flights with parameter dispersions give a requirements check, failure causes and the value of each technology.</div>`;
     $('#ml_p').onchange = () => this.load();
     $('#ml_go').onclick = () => this.calc();
     $('#ml_x').onclick = () => { if (this.job) api(`/api/jobs/${this.job}/cancel`, {method:'POST'}).catch(()=>{}); };
     $('#ml_mf').onclick = () => this.setMode('form');
     $('#ml_mj').onclick = () => this.setMode('json');
-    $('#ml_s').onchange = () => { try { this.spec = JSON.parse($('#ml_s').value); store.set('mission_draft', $('#ml_s').value); $('#ml_err').textContent=''; } catch(e){ $('#ml_err').textContent='В тексте ошибка: '+e.message; } };
-    $('#ml_ss').onclick = () => { const n=prompt('Название миссии:', this.spec?.name||''); if (n){ store.set('missions',{...this.savedList(),[n]:$('#ml_s').value}); this.renderSaved(); $('#ml_sv').value=n; } };
+    $('#ml_s').onchange = () => { try { this.spec = JSON.parse($('#ml_s').value); store.set('mission_draft', $('#ml_s').value); $('#ml_err').textContent=''; } catch(e){ $('#ml_err').textContent='Error in the text: '+e.message; } };
+    $('#ml_ss').onclick = () => { const n=prompt('Mission name:', this.spec?.name||''); if (n){ store.set('missions',{...this.savedList(),[n]:$('#ml_s').value}); this.renderSaved(); $('#ml_sv').value=n; } };
     $('#ml_so').onclick = () => { const t=this.savedList()[$('#ml_sv').value]; if (t){ $('#ml_s').value=t; this.setMode(this.mode||'form'); } };
     $('#ml_sd').onclick = () => { const m=this.savedList(); delete m[$('#ml_sv').value]; store.set('missions',m); this.renderSaved(); };
-    $('#ml_se').onclick = () => download($('#ml_s').value, `${(this.spec?.name||'mission').replace(/[^\wа-яё-]+/gi,'_')}.json`);
-    $('#ml_si').onclick = async () => { const t=await pickFile('.json,application/json'); if (!t) return; try { JSON.parse(t); $('#ml_s').value=t; this.setMode('form'); } catch(e){ $('#ml_err').textContent='Файл не разобран: '+e.message; } };
+    $('#ml_se').onclick = () => download($('#ml_s').value, `${(this.spec?.name||'mission').replace(/[^\w-]+/gi,'_')}.json`);
+    $('#ml_si').onclick = async () => { const t=await pickFile('.json,application/json'); if (!t) return; try { JSON.parse(t); $('#ml_s').value=t; this.setMode('form'); } catch(e){ $('#ml_err').textContent='Could not read the file: '+e.message; } };
     this.renderSaved(); this.mode='form';
     const draft = store.get('mission_draft', null);
     if (draft){ $('#ml_s').value = draft; this.setMode('form'); } else await this.load();
     this.history();
   },
-  /* сохранённые запуски: открыть отчёт или сравнить два */
+  /* saved runs: open a report or compare two */
   async history(){
     let rows = []; try { rows = await api('/api/runs'); } catch(e){ return; }
     const el = $('#ml_h'); if (!el) return;
-    if (!rows.length){ el.textContent = 'Пока пусто.'; return; }
-    el.innerHTML = rows.slice(0,8).map(r=>`<div class="hrun"><label><input type="checkbox" data-c="${esc(r.id)}"> ${esc(r.name)}</label><span class="muted">${new Date(r.created*1000).toLocaleString('ru',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${(r.success*100).toFixed(1)}%</span><span class="btn sec" data-o="${esc(r.id)}">Открыть</span></div>`).join('')+`<div class="btns"><span class="btn sec" id="ml_cmp">Сравнить выбранные</span></div>`;
+    if (!rows.length){ el.textContent = 'Nothing yet.'; return; }
+    el.innerHTML = rows.slice(0,8).map(r=>`<div class="hrun"><label><input type="checkbox" data-c="${esc(r.id)}"> ${esc(r.name)}</label><span class="muted">${new Date(r.created*1000).toLocaleString('en',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${(r.success*100).toFixed(1)}%</span><span class="btn sec" data-o="${esc(r.id)}">Open</span></div>`).join('')+`<div class="btns"><span class="btn sec" id="ml_cmp">Compare selected</span></div>`;
     el.querySelectorAll('[data-o]').forEach(b=>b.onclick=async()=>{ const r=await api('/api/runs/'+b.dataset.o); this.r=r; this.show(r); });
     $('#ml_cmp').onclick=()=>this.compare();
   },
   async compare(){
     const ids=[...document.querySelectorAll('#ml_h input:checked')].map(i=>i.dataset.c);
-    if (ids.length!==2){ $('#ml_err').textContent='Выберите ровно два запуска.'; return; }
+    if (ids.length!==2){ $('#ml_err').textContent='Select exactly two runs.'; return; }
     $('#ml_err').textContent='';
     const c=await api('/api/runs/compare?'+qs({a:ids[1],b:ids[0]}));
     const pct=x=>x==null||!isFinite(x)?'—':(100*x).toFixed(1)+'%', num=x=>x==null?'—':fmt(x,2);
-    $('#mission').innerHTML=`<div class="report"><h2>Сравнение запусков</h2><div class="sub">Сначала более ранний, затем более поздний.</div>
-      <div class="verdict"><div class="num ${c.delta>0?'ok':c.delta<0?'no':''}">${c.delta>=0?'+':''}${(c.delta*100).toFixed(1)} п.п.</div><div class="txt"><b>Изменение успеха</b><div class="muted">${pct(c.success_a)} → ${pct(c.success_b)}</div></div></div>
-      <h3>Требования</h3><table><tr><th>Требование</th><th>Было</th><th>Стало</th></tr>${c.requirements.map(q=>`<tr><td>${esc(q.text)}</td><td>${num(q.a)} <span class="pill ${VERDICT[q.a_verdict]||''}">${esc(q.a_verdict)}</span></td><td>${num(q.b)} <span class="pill ${VERDICT[q.b_verdict]||''}">${esc(q.b_verdict)}</span></td></tr>`).join('')}</table>
-      <h3>Что поменялось в описании</h3>${c.spec_changes.length?`<table><tr><th>Параметр</th><th>Было</th><th>Стало</th></tr>${c.spec_changes.map(x=>`<tr><td>${esc(x.key)}</td><td>${esc(x.a)}</td><td>${esc(x.b)}</td></tr>`).join('')}</table>`:'<div class="muted">Описания совпадают.</div>'}</div>`;
+    $('#mission').innerHTML=`<div class="report"><h2>Run comparison</h2><div class="sub">Earlier first, then later.</div>
+      <div class="verdict"><div class="num ${c.delta>0?'ok':c.delta<0?'no':''}">${c.delta>=0?'+':''}${(c.delta*100).toFixed(1)} pp.</div><div class="txt"><b>Change in success</b><div class="muted">${pct(c.success_a)} → ${pct(c.success_b)}</div></div></div>
+      <h3>Requirements</h3><table><tr><th>Requirement</th><th>Before</th><th>After</th></tr>${c.requirements.map(q=>`<tr><td>${esc(q.text)}</td><td>${num(q.a)} <span class="pill ${VERDICT[q.a_verdict]||''}">${esc(q.a_verdict)}</span></td><td>${num(q.b)} <span class="pill ${VERDICT[q.b_verdict]||''}">${esc(q.b_verdict)}</span></td></tr>`).join('')}</table>
+      <h3>What changed in the description</h3>${c.spec_changes.length?`<table><tr><th>Parameter</th><th>Before</th><th>After</th></tr>${c.spec_changes.map(x=>`<tr><td>${esc(x.key)}</td><td>${esc(x.a)}</td><td>${esc(x.b)}</td></tr>`).join('')}</table>`:'<div class="muted">The descriptions match.</div>'}</div>`;
   },
   async load(){ this.spec = await api('/api/mission/example?name='+$('#ml_p').value); $('#ml_s').value = JSON.stringify(this.spec, null, 2); store.set('mission_draft', $('#ml_s').value); this.setMode(this.mode||'form'); },
-  /* форма: описание миссии без JSON. Текст и форма показывают один и тот же объект this.spec */
+  /* form: mission description without JSON. The text and the form show the same object this.spec */
   async buildForm(){
     const sp = this.spec, pr = this.presets || (this.presets = await api('/api/presets')), schema = await paramSchema(), task = sp.task||'lander';
     const [ph,at,su] = String(sp.world||'moon').split(':'), opt = (a,v,ex=[]) => ex.concat(a).map(x=>`<option ${x===v?'selected':''}>${x}</option>`).join(''), defs = schema.filter(d=>d.tasks.includes(task));
-    const metric = {success:'Доля успешных полётов', crashed:'Доля аварий', touch_speed:'Скорость касания, м/с', touch_tilt:'Наклон при касании, °', touch_offset:'Промах, м', fuel_used:'Расход топлива, кг', energy_used_kj:'Энергия, кДж', duration_s:'Длительность, с'};
-    const dispOpts = [['gravity','Гравитация'],['nav_noise','Шум навигации'],['gust','Порывы, м/с'],['actuator_lag','Задержка приводов, с'],['fault','Вероятность отказа']].concat(defs.filter(d=>!['noise','gust','actuator_lag','fault_prob'].includes(d.name)&&d.defaults[task]>0).map(d=>[d.name,d.label]));
+    const metric = {success:'Share of successful flights', crashed:'Share of crashes', touch_speed:'Touchdown speed, m/s', touch_tilt:'Touchdown tilt, °', touch_offset:'Miss distance, m', fuel_used:'Fuel used, kg', energy_used_kj:'Energy, kJ', duration_s:'Duration, s'};
+    const dispOpts = [['gravity','Gravity'],['nav_noise','Navigation noise'],['gust','Gusts, m/s'],['actuator_lag','Actuator lag, s'],['fault','Fault probability']].concat(defs.filter(d=>!['noise','gust','actuator_lag','fault_prob'].includes(d.name)&&d.defaults[task]>0).map(d=>[d.name,d.label]));
     const techParam = t => t.set ? Object.entries(t.set)[0] : t.set_dispersion ? Object.entries(t.set_dispersion)[0] : t.set_top ? Object.entries(t.set_top)[0] : ['',''];
-    const techOpts = defs.map(d=>[d.name,d.label]).concat([['nav_noise','Шум навигации (разброс)'],['actuator_lag_d','Задержка приводов (разброс)']]);
+    const techOpts = defs.map(d=>[d.name,d.label]).concat([['nav_noise','Navigation noise (dispersion)'],['actuator_lag_d','Actuator lag (dispersion)']]);
     const f = $('#ml_form');
-    f.innerHTML = `<div class="row"><label>Название</label><input id="f_n" type="text" value="${esc(sp.name||'')}"></div>
-      <div class="row"><label>Аппарат</label><select id="f_t">${[['lander','Посадочный модуль'],['drone','Дрон'],['rover','Ровер']].map(([k,l])=>`<option value="${k}" ${k===task?'selected':''}>${l}</option>`).join('')}</select></div>
-      <div class="row"><label>Гравитация</label><select id="f_p">${opt(pr.physics.filter(x=>x!=='sun'),ph)}</select></div>
-      <div class="row"><label>Атмосфера</label><select id="f_a">${opt(pr.atmosphere,at||'auto',['auto'])}</select></div>
-      <div class="row"><label>Поверхность</label><select id="f_s">${opt(pr.surface,su||'auto',['auto'])}</select></div>
-      <div class="row"><label>Запусков</label><input id="f_r" type="number" min="1" max="20000" value="${sp.runs??300}"></div>
+    f.innerHTML = `<div class="row"><label>Name</label><input id="f_n" type="text" value="${esc(sp.name||'')}"></div>
+      <div class="row"><label>Vehicle</label><select id="f_t">${[['lander','Lander'],['drone','Drone'],['rover','Rover']].map(([k,l])=>`<option value="${k}" ${k===task?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="row"><label>Gravity</label><select id="f_p">${opt(pr.physics.filter(x=>x!=='sun'),ph)}</select></div>
+      <div class="row"><label>Atmosphere</label><select id="f_a">${opt(pr.atmosphere,at||'auto',['auto'])}</select></div>
+      <div class="row"><label>Surface</label><select id="f_s">${opt(pr.surface,su||'auto',['auto'])}</select></div>
+      <div class="row"><label>Runs</label><input id="f_r" type="number" min="1" max="20000" value="${sp.runs??300}"></div>
       <div class="row"><label>Seed</label><input id="f_e" type="number" min="0" value="${sp.seed??1}"></div>
-      <h3>Требования</h3><div id="f_q">${(sp.requirements||[]).map((q,i)=>`<div class="item" data-i="${i}"><input data-k="text" type="text" value="${esc(q.text||'')}" placeholder="Описание"><div class="row"><select data-k="metric">${Object.entries(metric).map(([k,l])=>`<option value="${k}" ${k===q.metric?'selected':''}>${l}</option>`).join('')}</select><select data-k="op" style="flex:0 0 58px"><option ${q.op==='<='?'selected':''} value="<=">≤</option><option ${q.op==='>='?'selected':''} value=">=">≥</option></select><input data-k="value" type="number" step="any" value="${q.value??''}" style="flex:0 0 76px" aria-label="Значение"></div><div class="row"><label>Перцентиль</label><input data-k="percentile" type="number" min="0" max="100" value="${q.percentile??''}" placeholder="для долей не нужен"><span class="btn sec del" data-del="q">Удалить</span></div></div>`).join('')}</div><span class="btn sec" id="f_qa">Добавить требование</span>
-      <h3>Разбросы</h3><div class="muted" style="margin-bottom:6px">Относительное СКО, кроме порывов, задержки и вероятности отказа.</div><div id="f_d">${Object.entries(sp.dispersions||{}).map(([k,v])=>`<div class="row item1"><select data-dk>${dispOpts.map(([a,l])=>`<option value="${a}" ${a===k?'selected':''}>${esc(l)}</option>`).join('')}</select><input data-dv type="number" min="0" step="any" value="${v}" style="flex:0 0 76px" aria-label="Величина"><span class="btn sec del" data-del="d">×</span></div>`).join('')}</div><span class="btn sec" id="f_da">Добавить разброс</span>
-      <h3>Варианты технологий</h3><div id="f_c">${(sp.technologies||[]).map((t,i)=>{const [k,v]=techParam(t);return `<div class="item" data-i="${i}"><input data-t="name" type="text" value="${esc(t.name||'')}" placeholder="Название"><div class="row"><select data-t="param">${techOpts.map(([a,l])=>`<option value="${a}" ${a===k||(a==='actuator_lag_d'&&k==='actuator_lag'&&t.set_dispersion)?'selected':''}>${esc(l)}</option>`).join('')}</select><input data-t="value" type="number" step="any" value="${v}" style="flex:0 0 84px" aria-label="Новое значение"></div><div class="row">${task==='lander'?`<label>Добавка массы, кг</label><input data-t="mass" type="number" step="any" value="${t.dry_mass_delta??''}">`:'<span style="flex:1"></span>'}<span class="btn sec del" data-del="c" style="flex:0 0 auto">Удалить</span></div></div>`}).join('')}</div><span class="btn sec" id="f_ca">Добавить вариант</span>
-      <h3>Параметры аппарата и среды</h3><div id="f_pf"></div>`;
+      <h3>Requirements</h3><div id="f_q">${(sp.requirements||[]).map((q,i)=>`<div class="item" data-i="${i}"><input data-k="text" type="text" value="${esc(q.text||'')}" placeholder="Description"><div class="row"><select data-k="metric">${Object.entries(metric).map(([k,l])=>`<option value="${k}" ${k===q.metric?'selected':''}>${l}</option>`).join('')}</select><select data-k="op" style="flex:0 0 58px"><option ${q.op==='<='?'selected':''} value="<=">≤</option><option ${q.op==='>='?'selected':''} value=">=">≥</option></select><input data-k="value" type="number" step="any" value="${q.value??''}" style="flex:0 0 76px" aria-label="Value"></div><div class="row"><label>Percentile</label><input data-k="percentile" type="number" min="0" max="100" value="${q.percentile??''}" placeholder="not needed for shares"><span class="btn sec del" data-del="q">Delete</span></div></div>`).join('')}</div><span class="btn sec" id="f_qa">Add requirement</span>
+      <h3>Dispersions</h3><div class="muted" style="margin-bottom:6px">Relative standard deviation, except gusts, lag and fault probability.</div><div id="f_d">${Object.entries(sp.dispersions||{}).map(([k,v])=>`<div class="row item1"><select data-dk>${dispOpts.map(([a,l])=>`<option value="${a}" ${a===k?'selected':''}>${esc(l)}</option>`).join('')}</select><input data-dv type="number" min="0" step="any" value="${v}" style="flex:0 0 76px" aria-label="Amount"><span class="btn sec del" data-del="d">×</span></div>`).join('')}</div><span class="btn sec" id="f_da">Add dispersion</span>
+      <h3>Technology options</h3><div id="f_c">${(sp.technologies||[]).map((t,i)=>{const [k,v]=techParam(t);return `<div class="item" data-i="${i}"><input data-t="name" type="text" value="${esc(t.name||'')}" placeholder="Name"><div class="row"><select data-t="param">${techOpts.map(([a,l])=>`<option value="${a}" ${a===k||(a==='actuator_lag_d'&&k==='actuator_lag'&&t.set_dispersion)?'selected':''}>${esc(l)}</option>`).join('')}</select><input data-t="value" type="number" step="any" value="${v}" style="flex:0 0 84px" aria-label="New value"></div><div class="row">${task==='lander'?`<label>Added mass, kg</label><input data-t="mass" type="number" step="any" value="${t.dry_mass_delta??''}">`:'<span style="flex:1"></span>'}<span class="btn sec del" data-del="c" style="flex:0 0 auto">Delete</span></div></div>`}).join('')}</div><span class="btn sec" id="f_ca">Add option</span>
+      <h3>Vehicle and environment parameters</h3><div id="f_pf"></div>`;
     sp.vehicle = sp.vehicle || {};
-    // площадь винтов в форме одна: перекладываем верхнеуровневое значение примеров в общий раздел
+    // the form has one rotor area: move the top-level value used by the examples into the shared section
     if (sp.rotor_scale != null){ sp.vehicle.rotor_scale = sp.rotor_scale; delete sp.rotor_scale; }
     paramForm($('#f_pf'), schema, task, sp.vehicle, () => this.sync(), this.openGroups||[]);
     $('#f_pf').querySelectorAll('details').forEach(d => d.ontoggle = () => { this.openGroups = [...$('#f_pf').querySelectorAll('details[open] summary')].map(x=>x.firstChild.textContent.trim()); });
@@ -1168,16 +1168,16 @@ const missionTab = {
     $('#f_ca').onclick = () => { const d=defs[0]; (sp.technologies=sp.technologies||[]).push({name:'', set:{[d.name]:d.defaults[task]}}); this.sync(); this.buildForm(); };
     f.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { const w=b.dataset.del, row=b.closest('.item,.item1'); if (w==='q') sp.requirements.splice(+row.dataset.i,1); if (w==='c') sp.technologies.splice(+row.dataset.i,1); if (w==='d'){ row.remove(); readD(); } this.sync(); this.buildForm(); });
   },
-  /* форма держит ссылку на spec.vehicle, поэтому для текста делаем копию без пустого раздела, а сам объект не трогаем */
+  /* the form keeps a reference to spec.vehicle, so the text gets a copy without the empty section and the object itself stays untouched */
   sync(){ const out = {...this.spec}; if (!Object.keys(out.vehicle||{}).length) delete out.vehicle; $('#ml_s').value = JSON.stringify(out, null, 2); store.set('mission_draft', $('#ml_s').value); },
   setMode(m){ this.mode = m; $('#ml_form').style.display = m==='form'?'':'none'; $('#ml_json').style.display = m==='json'?'':'none'; $('#ml_mf').classList.toggle('sec', m!=='form'); $('#ml_mj').classList.toggle('sec', m!=='json');
-    if (m==='form'){ try { this.spec = JSON.parse($('#ml_s').value); $('#ml_err').textContent=''; this.buildForm(); } catch(e){ $('#ml_err').textContent='В тексте ошибка: '+e.message; this.setMode('json'); } } },
+    if (m==='form'){ try { this.spec = JSON.parse($('#ml_s').value); $('#ml_err').textContent=''; this.buildForm(); } catch(e){ $('#ml_err').textContent='Error in the text: '+e.message; this.setMode('json'); } } },
   savedList(){ return store.get('missions', {}); },
-  renderSaved(){ const s=this.savedList(), names=Object.keys(s); $('#ml_sv').innerHTML = names.length ? names.map(n=>`<option>${esc(n)}</option>`).join('') : '<option value="">Нет сохранённых</option>'; },
+  renderSaved(){ const s=this.savedList(), names=Object.keys(s); $('#ml_sv').innerHTML = names.length ? names.map(n=>`<option>${esc(n)}</option>`).join('') : '<option value="">Nothing saved</option>'; },
 
   async calc(){
     const my = epoch; $('#ml_err').textContent=''; let spec;
-    try { this.spec = JSON.parse($('#ml_s').value); spec = JSON.stringify(this.spec); } catch(e){ $('#ml_err').textContent = 'Не удалось разобрать описание: '+e.message; return; }
+    try { this.spec = JSON.parse($('#ml_s').value); spec = JSON.stringify(this.spec); } catch(e){ $('#ml_err').textContent = 'Could not parse the description: '+e.message; return; }
     $('#ml_go').classList.add('off'); $('#ml_x').style.display='';
     try {
       const job = await api('/api/jobs/mission', {method:'POST', body:spec});
@@ -1186,10 +1186,10 @@ const missionTab = {
         await sleep(350);
         const j = await api('/api/jobs/'+job.id);
         if (my !== epoch) return;
-        busy(j.status==='running', `Считаю полёты: ${Math.round(j.fraction*100)}%`);
+        busy(j.status==='running', `Computing flights: ${Math.round(j.fraction*100)}%`);
         if (j.status==='done'){ const r = await api('/api/runs/'+j.run); this.r = r; this.show(r); this.runId = j.run; this.history(); break; }
         if (j.status==='failed'){ $('#ml_err').textContent = j.error; break; }
-        if (j.status==='cancelled'){ $('#ml_err').textContent = 'Расчёт отменён.'; break; }
+        if (j.status==='cancelled'){ $('#ml_err').textContent = 'Calculation cancelled.'; break; }
       }
     } catch(e){ if (my === epoch) $('#ml_err').textContent = e.message; }
     finally { busy(false); $('#ml_go')?.classList.remove('off'); if ($('#ml_x')) $('#ml_x').style.display='none'; this.job = null; }
@@ -1198,17 +1198,17 @@ const missionTab = {
     const pct = x => isFinite(x) && x!=null ? (100*x).toFixed(1)+'%' : '—', num = x => x==null||!isFinite(x) ? '—' : fmt(x, Math.abs(x)<10?2:1);
     const met = r.requirements_met, tot = r.requirements_total, ok = met===tot, tv = q => q.percentile==null ? pct : num;
     const techs = r.technologies, sig = techs.filter(t=>t.delta>t.delta_ci), best = sig[0], maxD = Math.max(.01,...techs.map(t=>Math.abs(t.delta)+t.delta_ci)), maxF = Math.max(.01,...r.drivers.map(d=>Math.abs(d.delta)));
-    const advice = ok ? 'Все требования выполняются, включая запас по доверительным интервалам.' : best ? `Больше всего даёт «${esc(best.name)}»: +${(best.delta*100).toFixed(1)} п.п. успеха${best.dry_mass_delta>0?` за ${best.dry_mass_delta} кг`:''}. С ней требований выполнено ${best.requirements_met} из ${tot}.` : 'Ни одна из заданных технологий не даёт значимого улучшения. Стоит пересмотреть варианты или сами требования.';
-    const names = {gravity:'Гравитация', dry_mass:'Сухая масса', isp:'Удельный импульс', t_max:'Тяга', torque_max:'Момент ориентации', rover_mass:'Масса ровера', motor_force:'Сила моторов', nav_noise:'Шум навигации', gust:'Порывы ветра', actuator_lag:'Задержка приводов', fault:'Отказ привода'};
+    const advice = ok ? 'All requirements are met, including the margin from confidence intervals.' : best ? `The largest gain comes from “${esc(best.name)}”: +${(best.delta*100).toFixed(1)} pp of success${best.dry_mass_delta>0?` for ${best.dry_mass_delta} kg`:''}. With it, requirements met: ${best.requirements_met} of ${tot}.` : 'None of the listed technologies gives a significant improvement. Revisit the options or the requirements.';
+    const names = {gravity:'Gravity', dry_mass:'Dry mass', isp:'Specific impulse', t_max:'Thrust', torque_max:'Attitude torque', rover_mass:'Rover mass', motor_force:'Motor force', nav_noise:'Navigation noise', gust:'Wind gusts', actuator_lag:'Actuator lag', fault:'Actuator fault'};
     $('#mission').innerHTML = `<div class="report">
-      <h2>${esc(r.name)}</h2><div class="sub">${r.runs} запусков, расчёт занял ${fmt(r.seconds,1)} с</div>
-      <div class="verdict"><div class="num ${ok?'ok':''}">${pct(r.success)}</div><div class="txt"><b>Успешных полётов</b><div class="muted">Интервал 95%: ${pct(r.success_ci[0])}–${pct(r.success_ci[1])}</div></div><span class="pill ${ok?'g':'r'}">Требований выполнено: ${met} из ${tot}</span></div>
+      <h2>${esc(r.name)}</h2><div class="sub">${r.runs} runs, computed in ${fmt(r.seconds,1)} s</div>
+      <div class="verdict"><div class="num ${ok?'ok':''}">${pct(r.success)}</div><div class="txt"><b>Successful flights</b><div class="muted">95% interval: ${pct(r.success_ci[0])}–${pct(r.success_ci[1])}</div></div><span class="pill ${ok?'g':'r'}">Requirements met: ${met} of ${tot}</span></div>
       <div class="advice">${advice}</div>
-      <h3>Требования</h3><table><tr><th>Требование</th><th>Цель</th><th>Результат</th><th>Интервал 95%</th><th>Вердикт</th></tr>${r.scorecard.map(q=>`<tr><td>${esc(q.text)} <span class="muted">${esc(q.id)}</span></td><td>${q.op==='<='?'≤':'≥'} ${tv(q)(q.target)}</td><td><b>${tv(q)(q.value)}</b></td><td class="muted">${tv(q)(q.ci_low)}–${tv(q)(q.ci_high)}</td><td><span class="pill ${VERDICT[q.verdict]}">${q.verdict}</span></td></tr>`).join('')}</table>
-      <h3>Как отказывает</h3>${r.failure_modes.length?r.failure_modes.map(f=>`<div class="hbar"><span>${esc(f.mode)}</span><div class="bar"><i class="red" style="width:${100*f.share}%"></i></div><b>${pct(f.share)}</b></div>`).join(''):'<div class="muted">Отказов нет.</div>'}
-      <h3>Что влияет на успех</h3><div class="muted" style="margin-bottom:6px">Каждый разброс включён отдельно. Без разбросов успех ${pct(r.baseline_no_dispersions)}. Изменение в процентных пунктах.</div>${r.drivers.map(d=>`<div class="hbar"><span>${esc(names[d.name]||d.name)}</span><div class="tor"><i class="${d.delta<0?'red':'grn'}" style="width:${50*Math.abs(d.delta)/maxF}%;${d.delta<0?'right:50%':'left:50%'}"></i></div><b>${d.delta>=0?'+':''}${(100*d.delta).toFixed(1)}</b></div>`).join('')}
-      ${techs.length?`<h3>Ценность технологий</h3><div class="muted" style="margin-bottom:6px">Те же условия полёта, поменялась только технология. Жирным отмечен значимый эффект: интервал не включает ноль.</div><table><tr><th>Технология</th><th style="width:30%">Изменение успеха, п.п.</th><th>Спасено / потеряно</th><th>Масса</th><th>Требований</th></tr>${techs.map(t=>{const s=t.delta-t.delta_ci>0||t.delta+t.delta_ci<0;return `<tr class="${s?'':'dim'}"><td>${s?'<b>':''}${esc(t.name)}${s?'</b>':''}</td><td><div class="tor ci"><i class="${t.delta<0?'red':'grn'}" style="width:${50*Math.abs(t.delta)/maxD}%;${t.delta<0?'right:50%':'left:50%'}"></i><u style="left:${50+50*(t.delta-t.delta_ci)/maxD}%;width:${100*t.delta_ci/maxD}%"></u></div>${t.delta>=0?'+':''}${(100*t.delta).toFixed(1)} ± ${(100*t.delta_ci).toFixed(1)}</td><td>${t.saved} / ${t.lost}</td><td>${t.dry_mass_delta?`+${t.dry_mass_delta} кг`:'—'}</td><td>${t.requirements_met} из ${tot}</td></tr>`}).join('')}</table>`:''}
-      <div class="ml-foot">${esc(r.limits)} ${esc(r.generator)}, seed ${r.seed}.<div class="btns"><span class="btn sec" id="ml_md">Скачать отчёт .md</span><span class="btn sec" id="ml_js">Скачать данные .json</span></div></div></div>`;
+      <h3>Requirements</h3><table><tr><th>Requirement</th><th>Target</th><th>Result</th><th>95% interval</th><th>Verdict</th></tr>${r.scorecard.map(q=>`<tr><td>${esc(q.text)} <span class="muted">${esc(q.id)}</span></td><td>${q.op==='<='?'≤':'≥'} ${tv(q)(q.target)}</td><td><b>${tv(q)(q.value)}</b></td><td class="muted">${tv(q)(q.ci_low)}–${tv(q)(q.ci_high)}</td><td><span class="pill ${VERDICT[q.verdict]}">${q.verdict}</span></td></tr>`).join('')}</table>
+      <h3>How it fails</h3>${r.failure_modes.length?r.failure_modes.map(f=>`<div class="hbar"><span>${esc(f.mode)}</span><div class="bar"><i class="red" style="width:${100*f.share}%"></i></div><b>${pct(f.share)}</b></div>`).join(''):'<div class="muted">No failures.</div>'}
+      <h3>What affects success</h3><div class="muted" style="margin-bottom:6px">Each dispersion is enabled on its own. Success without dispersions: ${pct(r.baseline_no_dispersions)}. Change in percentage points.</div>${r.drivers.map(d=>`<div class="hbar"><span>${esc(names[d.name]||d.name)}</span><div class="tor"><i class="${d.delta<0?'red':'grn'}" style="width:${50*Math.abs(d.delta)/maxF}%;${d.delta<0?'right:50%':'left:50%'}"></i></div><b>${d.delta>=0?'+':''}${(100*d.delta).toFixed(1)}</b></div>`).join('')}
+      ${techs.length?`<h3>Value of technologies</h3><div class="muted" style="margin-bottom:6px">Same flight conditions, only the technology changed. Bold marks a significant effect: the interval excludes zero.</div><table><tr><th>Technology</th><th style="width:30%">Change in success, pp.</th><th>Saved / lost</th><th>Mass</th><th>Requirements</th></tr>${techs.map(t=>{const s=t.delta-t.delta_ci>0||t.delta+t.delta_ci<0;return `<tr class="${s?'':'dim'}"><td>${s?'<b>':''}${esc(t.name)}${s?'</b>':''}</td><td><div class="tor ci"><i class="${t.delta<0?'red':'grn'}" style="width:${50*Math.abs(t.delta)/maxD}%;${t.delta<0?'right:50%':'left:50%'}"></i><u style="left:${50+50*(t.delta-t.delta_ci)/maxD}%;width:${100*t.delta_ci/maxD}%"></u></div>${t.delta>=0?'+':''}${(100*t.delta).toFixed(1)} ± ${(100*t.delta_ci).toFixed(1)}</td><td>${t.saved} / ${t.lost}</td><td>${t.dry_mass_delta?`+${t.dry_mass_delta} kg`:'—'}</td><td>${t.requirements_met} of ${tot}</td></tr>`}).join('')}</table>`:''}
+      <div class="ml-foot">${esc(r.limits)} ${esc(r.generator)}, seed ${r.seed}.<div class="btns"><span class="btn sec" id="ml_md">Download report .md</span><span class="btn sec" id="ml_js">Download data .json</span></div></div></div>`;
     const dl = (txt, name, type) => { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([txt],{type})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); };
     $('#ml_md').onclick = () => dl(r.markdown, 'mission_report.md', 'text/markdown');
     $('#ml_js').onclick = () => dl(JSON.stringify(r,null,2), 'mission_report.json', 'application/json');
@@ -1218,15 +1218,15 @@ const missionTab = {
   dispose(){ $('#mission').style.display='none'; },
 };
 
-// ============================================================ настройка: реестр параметров, пресеты, настройки интерфейса
-/* localStorage может быть недоступен (приватный режим): настройка просто не сохранится */
+// ============================================================ customization: parameter registry, presets, interface settings
+/* localStorage may be unavailable (private mode): the setting simply will not be saved */
 const store = { get(k, d){ try { const v = localStorage.getItem('ws_'+k); return v === null ? d : JSON.parse(v); } catch(e){ return d; } }, set(k, v){ try { localStorage.setItem('ws_'+k, JSON.stringify(v)); } catch(e){} } };
 let _schema = null;
 const paramSchema = async () => _schema || (_schema = await api('/api/env/schema'));
 const download = (txt, name, type='application/json') => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt],{type})); a.download = name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); };
 const pickFile = accept => new Promise(res => { const i = document.createElement('input'); i.type='file'; i.accept=accept; i.onchange=async()=>res(i.files[0] ? await i.files[0].text() : null); i.click(); });
 
-/* форма параметров по реестру: группы раскрываются, пустое поле значит значение по умолчанию */
+/* parameter form from the registry: groups expand, an empty field means the default value */
 function paramForm(el, schema, task, vals, onchange, openGroups=[]){
   const defs = schema.filter(d => d.tasks.includes(task)), groups = [...new Set(defs.map(d=>d.group))];
   const changed = g => defs.filter(d=>d.group===g && vals[d.name]!==undefined).length;
@@ -1236,7 +1236,7 @@ function paramForm(el, schema, task, vals, onchange, openGroups=[]){
     if (v === ''){ delete vals[d.name]; i.setCustomValidity(''); }
     else {
       const x = Number(v);
-      if (!isFinite(x) || x < d.min || x > d.max){ i.setCustomValidity(`От ${d.min} до ${d.max}`); i.reportValidity(); return; }
+      if (!isFinite(x) || x < d.min || x > d.max){ i.setCustomValidity(`From ${d.min} to ${d.max}`); i.reportValidity(); return; }
       i.setCustomValidity('');
       if (x === d.defaults[task]) delete vals[d.name]; else vals[d.name] = x;
     }
@@ -1246,7 +1246,7 @@ function paramForm(el, schema, task, vals, onchange, openGroups=[]){
 }
 const paramsQuery = vals => Object.entries(vals).map(([k,v])=>`${k}=${v}`).join(',');
 
-// ============================================================ вкладка: Настройки
+// ============================================================ tab: Settings
 const SETTINGS_DEFAULT = {theme:'dark', text:14, panel:384, chart:216, quality:'high', shadows:true, chartOn:true, motion:true};
 const settings = () => ({...SETTINGS_DEFAULT, ...store.get('settings', {})});
 function applySettings(){
@@ -1263,20 +1263,20 @@ const settingsTab = {
   async init(){
     const el = $('#settings'); el.style.display='block'; panel.style.display='none';
     const s = settings(), opt = (arr,v) => arr.map(([k,l])=>`<option value="${k}" ${k===v?'selected':''}>${l}</option>`).join('');
-    el.innerHTML = `<div class="report" style="max-width:620px"><h2>Настройки</h2><div class="sub">Хранятся только в этом браузере.</div>
-      <h3>Внешний вид</h3>
-      <div class="row"><label>Тема</label><select id="s_th">${opt([['dark','Тёмная'],['light','Светлая'],['auto','Как в системе']],s.theme)}</select></div>
-      <div class="row"><label>Размер текста</label><input id="s_tx" type="range" min="12" max="18" step="1" value="${s.text}"><span id="s_txv" style="flex:0 0 44px;text-align:right">${s.text} px</span></div>
-      <div class="row"><label>Анимация</label><select id="s_mo">${opt([['1','Включена'],['0','Выключена']],s.motion?'1':'0')}</select></div>
-      <h3>Раскладка</h3>
-      <div class="row"><label>Ширина панели</label><input id="s_pw" type="range" min="300" max="560" step="4" value="${s.panel}"><span id="s_pwv" style="flex:0 0 58px;text-align:right">${s.panel} px</span></div>
-      <div class="row"><label>Высота графика</label><input id="s_ch" type="range" min="120" max="420" step="4" value="${s.chart}"><span id="s_chv" style="flex:0 0 58px;text-align:right">${s.chart} px</span></div>
-      <div class="row"><label>График под сценой</label><select id="s_co">${opt([['1','Показывать'],['0','Скрывать']],s.chartOn?'1':'0')}</select></div>
-      <h3>Качество графики</h3>
-      <div class="row"><label>Разрешение</label><select id="s_q">${opt([['high','Высокое'],['medium','Среднее'],['low','Низкое']],s.quality)}</select></div>
-      <div class="row"><label>Тени</label><select id="s_sh">${opt([['1','Включены'],['0','Выключены']],s.shadows?'1':'0')}</select></div>
-      <h3>Данные браузера</h3>
-      <div class="btns"><span class="btn sec" id="s_rs">Сбросить настройки</span><span class="btn sec" id="s_tk">Забыть токен доступа</span></div><div id="s_msg" class="muted" style="margin-top:8px"></div></div>`;
+    el.innerHTML = `<div class="report" style="max-width:620px"><h2>Settings</h2><div class="sub">Stored only in this browser.</div>
+      <h3>Appearance</h3>
+      <div class="row"><label>Theme</label><select id="s_th">${opt([['dark','Dark'],['light','Light'],['auto','Follow the system']],s.theme)}</select></div>
+      <div class="row"><label>Text size</label><input id="s_tx" type="range" min="12" max="18" step="1" value="${s.text}"><span id="s_txv" style="flex:0 0 44px;text-align:right">${s.text} px</span></div>
+      <div class="row"><label>Animation</label><select id="s_mo">${opt([['1','On'],['0','Off']],s.motion?'1':'0')}</select></div>
+      <h3>Layout</h3>
+      <div class="row"><label>Panel width</label><input id="s_pw" type="range" min="300" max="560" step="4" value="${s.panel}"><span id="s_pwv" style="flex:0 0 58px;text-align:right">${s.panel} px</span></div>
+      <div class="row"><label>Chart height</label><input id="s_ch" type="range" min="120" max="420" step="4" value="${s.chart}"><span id="s_chv" style="flex:0 0 58px;text-align:right">${s.chart} px</span></div>
+      <div class="row"><label>Chart below the scene</label><select id="s_co">${opt([['1','Show'],['0','Hide']],s.chartOn?'1':'0')}</select></div>
+      <h3>Graphics quality</h3>
+      <div class="row"><label>Resolution</label><select id="s_q">${opt([['high','High'],['medium','Medium'],['low','Low']],s.quality)}</select></div>
+      <div class="row"><label>Shadows</label><select id="s_sh">${opt([['1','On'],['0','Off']],s.shadows?'1':'0')}</select></div>
+      <h3>Browser data</h3>
+      <div class="btns"><span class="btn sec" id="s_rs">Reset settings</span><span class="btn sec" id="s_tk">Forget the access token</span></div><div id="s_msg" class="muted" style="margin-top:8px"></div></div>`;
     const set = (k,v) => { store.set('settings', {...settings(), [k]:v}); applySettings(); };
     $('#s_th').onchange = e => set('theme', e.target.value);
     $('#s_tx').oninput = e => { $('#s_txv').textContent = e.target.value+' px'; set('text', +e.target.value); };
@@ -1287,25 +1287,25 @@ const settingsTab = {
     $('#s_q').onchange = e => set('quality', e.target.value);
     $('#s_sh').onchange = e => set('shadows', e.target.value==='1');
     $('#s_rs').onclick = () => { store.set('settings', {}); applySettings(); this.init(); };
-    $('#s_tk').onclick = () => { try { sessionStorage.removeItem('ws_token'); } catch(e){} $('#s_msg').textContent = 'Токен забыт.'; };
+    $('#s_tk').onclick = () => { try { sessionStorage.removeItem('ws_token'); } catch(e){} $('#s_msg').textContent = 'Token forgotten.'; };
   },
   update(){},
   dispose(){ $('#settings').style.display='none'; panel.style.display=''; },
 };
 
-// ============================================================ вкладка: Чёрные дыры
+// ============================================================ tab: Black holes
 const blackholeTab = {
   async init(){
     const c = $('#bh'); c.style.display='block'; this.ctx = c.getContext('2d');
-    panel.innerHTML = `<h2>Чёрные дыры</h2><div class="muted">Лучи света идут по настоящим геодезическим Шварцшильда. Спин влияет на таблицу, рендер считается без вращения дыры.</div>
-      <div class="row"><label>Масса, M☉</label><input id="b_m" type="number" min="0.001" value="10"></div>
-      <div class="row"><label>Спин a</label><input id="b_a" type="range" min="0" max="0.998" step="0.002" value="0"><span id="b_av" style="flex:0 0 44px;text-align:right">0</span></div>
-      <h3>Вид</h3>
-      <div class="row"><label>Наклон диска, °</label><input id="b_i" type="range" min="1" max="89" step="1" value="78"><span id="b_iv" style="flex:0 0 32px;text-align:right">78</span></div>
-      <div class="row"><label>Расстояние, M</label><input id="b_d" type="range" min="12" max="120" step="1" value="45"><span id="b_dv" style="flex:0 0 32px;text-align:right">45</span></div>
-      <div class="row"><label>Край диска, M</label><input id="b_o" type="range" min="8" max="40" step="1" value="18"><span id="b_ov" style="flex:0 0 32px;text-align:right">18</span></div>
-      <div class="row"><label>Доплер</label><select id="b_x"><option value="1">Учитывать</option><option value="0">Без него</option></select></div>
-      <h3>Что получается</h3><div id="b_k" class="kv"></div>`;
+    panel.innerHTML = `<h2>Black holes</h2><div class="muted">Light rays follow true Schwarzschild geodesics. Spin affects the table; the render ignores black hole rotation.</div>
+      <div class="row"><label>Mass, M☉</label><input id="b_m" type="number" min="0.001" value="10"></div>
+      <div class="row"><label>Spin a</label><input id="b_a" type="range" min="0" max="0.998" step="0.002" value="0"><span id="b_av" style="flex:0 0 44px;text-align:right">0</span></div>
+      <h3>View</h3>
+      <div class="row"><label>Disk inclination, °</label><input id="b_i" type="range" min="1" max="89" step="1" value="78"><span id="b_iv" style="flex:0 0 32px;text-align:right">78</span></div>
+      <div class="row"><label>Distance, M</label><input id="b_d" type="range" min="12" max="120" step="1" value="45"><span id="b_dv" style="flex:0 0 32px;text-align:right">45</span></div>
+      <div class="row"><label>Disk edge, M</label><input id="b_o" type="range" min="8" max="40" step="1" value="18"><span id="b_ov" style="flex:0 0 32px;text-align:right">18</span></div>
+      <div class="row"><label>Doppler</label><select id="b_x"><option value="1">Include</option><option value="0">Exclude</option></select></div>
+      <h3>Results</h3><div id="b_k" class="kv"></div>`;
     for (const [i,v] of [['b_i','b_iv'],['b_d','b_dv'],['b_o','b_ov'],['b_a','b_av']]) $('#'+i).oninput = e => { $('#'+v).textContent = e.target.value; if (i==='b_a') this.props(); else this.draw(true); };
     $('#b_m').oninput = () => this.props();
     $('#b_x').onchange = () => this.draw();
@@ -1313,13 +1313,13 @@ const blackholeTab = {
   },
   async props(){
     let r; try { r = await api('/api/blackhole/props?'+qs({m_sun:$('#b_m').value, a:$('#b_a').value})); } catch(e){ $('#b_k').innerHTML = `<div class="no" style="grid-column:1/-1;text-align:left">${esc(e.message)}</div>`; return; }
-    const P = (k,v) => `<div>${k}</div><div>${v}</div>`, km = x => x>=1e3 ? fmt(x/1e3,2)+' км' : fmt(x,2)+' м';
-    $('#b_k').innerHTML = P('Радиус Шварцшильда', km(r.rs))+P('Горизонт', fmt(r.horizon,3)+' M')+P('Последняя устойчивая орбита', fmt(r.isco,3)+' M')+P('Фотонная орбита', fmt(r.photon,3)+' M')+P('Радиус тени', fmt(r.shadow,3)+' M')+P('КПД аккреции', fmt(r.efficiency*100,1)+'%')+P('Температура Хокинга', r.t_hawking.toExponential(2)+' К')+P('Время испарения', r.evaporation_yr.toExponential(2)+' лет')+P('Прилив у горизонта', r.tide.toExponential(2)+' 1/с²');
+    const P = (k,v) => `<div>${k}</div><div>${v}</div>`, km = x => x>=1e3 ? fmt(x/1e3,2)+' km' : fmt(x,2)+' m';
+    $('#b_k').innerHTML = P('Schwarzschild radius', km(r.rs))+P('Horizon', fmt(r.horizon,3)+' M')+P('Innermost stable orbit', fmt(r.isco,3)+' M')+P('Photon orbit', fmt(r.photon,3)+' M')+P('Shadow radius', fmt(r.shadow,3)+' M')+P('Accretion efficiency', fmt(r.efficiency*100,1)+'%')+P('Hawking temperature', r.t_hawking.toExponential(2)+' K')+P('Evaporation time', r.evaporation_yr.toExponential(2)+' yr')+P('Tide at the horizon', r.tide.toExponential(2)+' 1/s²');
   },
   async draw(fast){
     const my = this.req = (this.req||0)+1, st = $('#stage'), ep = epoch;
-    if (!fast) busy(true,'Считаю лучи…');
-    // разрешение ограничено: расчёт идёт на процессоре, а пропорции кадра должны совпадать со сценой
+    if (!fast) busy(true,'Tracing rays…');
+    // resolution is capped: this runs on the CPU, and the frame aspect must match the scene
     const k = Math.min(fast ? .35 : Math.min(devicePixelRatio||1, 1.5), 1100/Math.max(st.clientWidth,1), 800/Math.max(st.clientHeight,1)), w = Math.max(160, Math.round(st.clientWidth*k)), h = Math.max(100, Math.round(st.clientHeight*k));
     try {
       const r = await api('/api/blackhole/render?'+qs({w,h,incl:$('#b_i').value,dist:$('#b_d').value,r_out:$('#b_o').value,doppler:$('#b_x').value}), {binary:true}), b = new Uint8Array(await r.arrayBuffer());
@@ -1333,24 +1333,24 @@ const blackholeTab = {
   dispose(){ $('#bh').style.display='none'; clearTimeout(this.t); this.req = (this.req||0)+1; },
 };
 
-// ============================================================ вкладка: Лаборатория
+// ============================================================ tab: Laboratory
 const LAB_TOPICS = {
-  tunnel:{label:'Квант: туннелирование', fields:[['e','Энергия частицы',.5,.05,1.5,.05],['v0','Высота барьера',.8,.1,2,.05],['a','Ширина барьера',1,.2,4,.1]]},
-  levels:{label:'Квант: уровни энергии', fields:[]},
-  hydrogen:{label:'Квант: спектр водорода', fields:[]},
-  sod:{label:'Газ: ударная волна Сода', fields:[['t','Время',.2,.02,.3,.01]]},
-  dam:{label:'Вода: разрушение плотины', fields:[['t','Время, с',4,.5,6,.5],['h0','Глубина, м',1,.2,5,.2]]},
-  chapman:{label:'Химия: озоновый цикл', fields:[['hours','Часов расчёта',2000,100,8000,100]]},
-  nozzle:{label:'Химия: сопло и Isp', fields:[['gamma','Показатель адиабаты',1.2,1.1,1.4,.01],['tc','Температура в камере, К',3600,1500,4000,50],['molar','Молярная масса, г/моль',13.5,2,40,.5]]},
-  crater:{label:'Удары: кратер', fields:[['d','Диаметр тела, м',50,1,20000,1],['v','Скорость, км/с',13,1,70,1],['angle','Угол, °',45,5,90,5],['g','Гравитация, м/с²',9.81,.5,25,.01]]},
-  collide:{label:'Удары: столкновение планет', fields:[['m1','Масса мишени, M⊕',1,.01,20,.01],['m2','Масса снаряда, M⊕',.1,.001,20,.001],['v','Скорость, км/с',12,1,80,1]]},
-  ocean:{label:'Тектоника: дно океана', fields:[]},
+  tunnel:{label:'Quantum: tunneling', fields:[['e','Particle energy',.5,.05,1.5,.05],['v0','Barrier height',.8,.1,2,.05],['a','Barrier width',1,.2,4,.1]]},
+  levels:{label:'Quantum: energy levels', fields:[]},
+  hydrogen:{label:'Quantum: hydrogen spectrum', fields:[]},
+  sod:{label:'Gas: Sod shock tube', fields:[['t','Time',.2,.02,.3,.01]]},
+  dam:{label:'Water: dam break', fields:[['t','Time, s',4,.5,6,.5],['h0','Depth, m',1,.2,5,.2]]},
+  chapman:{label:'Chemistry: ozone cycle', fields:[['hours','Hours to compute',2000,100,8000,100]]},
+  nozzle:{label:'Chemistry: nozzle and Isp', fields:[['gamma','Adiabatic index',1.2,1.1,1.4,.01],['tc','Chamber temperature, K',3600,1500,4000,50],['molar','Molar mass, g/mol',13.5,2,40,.5]]},
+  crater:{label:'Impacts: crater', fields:[['d','Body diameter, m',50,1,20000,1],['v','Speed, km/s',13,1,70,1],['angle','Angle, °',45,5,90,5],['g','Gravity, m/s²',9.81,.5,25,.01]]},
+  collide:{label:'Impacts: planetary collision', fields:[['m1','Target mass, M⊕',1,.01,20,.01],['m2','Projectile mass, M⊕',.1,.001,20,.001],['v','Speed, km/s',12,1,80,1]]},
+  ocean:{label:'Tectonics: ocean floor', fields:[]},
 };
 const labTab = {
   async init(){
     $('main').classList.add('plot');
-    panel.innerHTML = `<h2>Лаборатория</h2><div class="muted">Квантовые эффекты, газ и вода, химия, удары, тектоника. Везде показана и модель, и точный ответ, когда он есть.</div>
-      <div class="row"><label>Опыт</label><select id="l_t">${Object.entries(LAB_TOPICS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}</select></div><div id="l_f"></div><h3>Результат</h3><div id="l_r" class="kv"></div><div id="l_n" class="muted" style="margin-top:10px"></div>`;
+    panel.innerHTML = `<h2>Laboratory</h2><div class="muted">Quantum effects, gas and water, chemistry, impacts, tectonics. The model and the exact answer are shown together when one exists.</div>
+      <div class="row"><label>Experiment</label><select id="l_t">${Object.entries(LAB_TOPICS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}</select></div><div id="l_f"></div><h3>Result</h3><div id="l_r" class="kv"></div><div id="l_n" class="muted" style="margin-top:10px"></div>`;
     $('#l_t').onchange = () => this.topic();
     this.topic();
   },
@@ -1369,36 +1369,36 @@ const labTab = {
       if (my !== this.req) return;
       note('');
       if (id==='tunnel'){
-        res(P('Прохождение, точно', fmt(r.t_exact,4))+P('Прохождение, волновой пакет', fmt(r.t_numeric,4))+P('Норма в конце', fmt(r.norm,6)));
-        note('Классическая частица с энергией ниже барьера не прошла бы вообще.');
-        let f=0, last=0; const scale=Math.max(...r.frames[0]); const loop=(ts)=>{ if (my!==this.req) return; if (ts-last>60){ last=ts; chart([{x:r.x,y:r.frames[f],color:'#5aa2ff',label:'|ψ|²'},{x:r.x,y:r.v.map(v=>v/Math.max(...r.v,1e-9)*scale),color:'#fbbf4b',label:'барьер'}],{title:`Волновой пакет, кадр ${f+1} из ${r.frames.length}`,xlabel:'x, а.е.',yr:[0,scale*1.1]}); f=(f+1)%r.frames.length; } this.raf=requestAnimationFrame(loop); }; this.raf=requestAnimationFrame(loop);
+        res(P('Transmission, exact', fmt(r.t_exact,4))+P('Transmission, wave packet', fmt(r.t_numeric,4))+P('Final norm', fmt(r.norm,6)));
+        note('A classical particle with energy below the barrier would not get through at all.');
+        let f=0, last=0; const scale=Math.max(...r.frames[0]); const loop=(ts)=>{ if (my!==this.req) return; if (ts-last>60){ last=ts; chart([{x:r.x,y:r.frames[f],color:'#5aa2ff',label:'|ψ|²'},{x:r.x,y:r.v.map(v=>v/Math.max(...r.v,1e-9)*scale),color:'#fbbf4b',label:'barrier'}],{title:`Wave packet, frame ${f+1} of ${r.frames.length}`,xlabel:'x, a.u.',yr:[0,scale*1.1]}); f=(f+1)%r.frames.length; } this.raf=requestAnimationFrame(loop); }; this.raf=requestAnimationFrame(loop);
       } else if (id==='levels'){
-        res(r.rows.map(a=>P(esc(a.name), `${fmt(a.value,4)} <span class="muted">/ ${fmt(a.exact,4)}</span>`)).join('')); note('Слева численное решение уравнения Шрёдингера, справа точный ответ. Атомные единицы.');
-        chart(r.series.map((s,i)=>({x:s.n,y:s.e,dots:true,dot:7,color:['#5aa2ff','#fbbf4b'][i],label:s.name})),{title:'Уровни энергии',xlabel:'номер уровня'});
+        res(r.rows.map(a=>P(esc(a.name), `${fmt(a.value,4)} <span class="muted">/ ${fmt(a.exact,4)}</span>`)).join('')); note('Left: numerical solution of the Schrödinger equation; right: exact answer. Atomic units.');
+        chart(r.series.map((s,i)=>({x:s.n,y:s.e,dots:true,dot:7,color:['#5aa2ff','#fbbf4b'][i],label:s.name})),{title:'Energy levels',xlabel:'level number'});
       } else if (id==='hydrogen'){
-        res(r.lines.map(l=>P(esc(l.name), fmt(l.nm,2)+' нм')).join('')); note('Вакуумные длины волн, модель Бора с приведённой массой.');
-        chart([{x:r.levels.map(l=>l.n),y:r.levels.map(l=>l.ev),dots:true,dot:7,color:'#5aa2ff',label:'E, эВ'}],{title:'Уровни атома водорода',xlabel:'n'});
+        res(r.lines.map(l=>P(esc(l.name), fmt(l.nm,2)+' nm')).join('')); note('Vacuum wavelengths, Bohr model with reduced mass.');
+        chart([{x:r.levels.map(l=>l.n),y:r.levels.map(l=>l.ev),dots:true,dot:7,color:'#5aa2ff',label:'E, eV'}],{title:'Hydrogen atom levels',xlabel:'n'});
       } else if (id==='sod'){
-        res(P('Ошибка L1 плотности', fmt(r.l1,5))+P('Ошибка массы', r.mass_error.toExponential(1)));
-        chart([{x:r.x,y:r.exact,color:'#fbbf4b',label:'точно'},{x:r.x,y:r.rho,color:'#5aa2ff',label:'расчёт'}],{title:'Плотность газа',xlabel:'x'});
+        res(P('L1 density error', fmt(r.l1,5))+P('Mass error', r.mass_error.toExponential(1)));
+        chart([{x:r.x,y:r.exact,color:'#fbbf4b',label:'exact'},{x:r.x,y:r.rho,color:'#5aa2ff',label:'computed'}],{title:'Gas density',xlabel:'x'});
       } else if (id==='dam'){
-        res(P('Ошибка глубины', fmt(r.err*100,2)+'%')+P('Скорость фронта, теория', fmt(r.front,2)+' м/с'));
-        chart([{x:r.x,y:r.exact,color:'#fbbf4b',label:'Риттер'},{x:r.x,y:r.h,color:'#5aa2ff',label:'расчёт'}],{title:'Глубина воды, м',xlabel:'x, м'});
+        res(P('Depth error', fmt(r.err*100,2)+'%')+P('Front speed, theory', fmt(r.front,2)+' m/s'));
+        chart([{x:r.x,y:r.exact,color:'#fbbf4b',label:'Ritter'},{x:r.x,y:r.h,color:'#5aa2ff',label:'computed'}],{title:'Water depth, m',xlabel:'x, m'});
       } else if (id==='chapman'){
-        res(P('O₃/O₂ в конце', r.ratio.toExponential(3))+P('O₃/O₂ стационарно', r.steady.toExponential(3))+P('Ошибка по атомам', r.atoms.toExponential(1))); note('Типичные учебные коэффициенты для стратосферы, это не прогноз озона.');
-        chart([{x:r.t,y:r.o3,color:'#5aa2ff',label:'O₃, 1/см³'}],{title:'Накопление озона',xlabel:'часы'});
+        res(P('O₃/O₂ at the end', r.ratio.toExponential(3))+P('O₃/O₂ steady state', r.steady.toExponential(3))+P('Atom balance error', r.atoms.toExponential(1))); note('Typical textbook coefficients for the stratosphere, not an ozone forecast.');
+        chart([{x:r.t,y:r.o3,color:'#5aa2ff',label:'O₃, 1/cm³'}],{title:'Ozone build-up',xlabel:'hours'});
       } else if (id==='nozzle'){
-        res(P('Isp на уровне среза 1 атм', fmt(r.isp_sl,1)+' с')+P('Скорость истечения в пределе', fmt(r.ve_vac,0)+' м/с')); note('Идеальное сопло, без потерь. Результат можно подставить в параметр isp на вкладке Mission Lab.');
-        chart([{x:r.ratio,y:r.isp,color:'#5aa2ff',label:'Isp, с'}],{title:'Импульс от степени расширения',xlabel:'площадь среза / критического сечения',logx:true});
+        res(P('Isp with exit pressure 1 atm', fmt(r.isp_sl,1)+' s')+P('Limiting exhaust velocity', fmt(r.ve_vac,0)+' m/s')); note('Ideal nozzle, no losses. The result can be used as the isp parameter on the Mission Lab tab.');
+        chart([{x:r.ratio,y:r.isp,color:'#5aa2ff',label:'Isp, s'}],{title:'Impulse vs expansion ratio',xlabel:'exit area / throat area',logx:true});
       } else if (id==='crater'){
-        res(P('Переходный кратер', fmt(r.transient/1e3,2)+' км')+P('Итоговый кратер', fmt(r.final/1e3,2)+' км')+P('Энергия удара', r.energy_mt.toExponential(2)+' Мт')); note('Масштабная оценка по Коллинзу и др. (2005), железное тело и скальная мишень.');
-        chart([{x:r.ds,y:r.fs,color:'#5aa2ff',label:'диаметр кратера, км'}],{title:'Кратер от размера тела',xlabel:'диаметр тела, м',logx:true,logy:true});
+        res(P('Transient crater', fmt(r.transient/1e3,2)+' km')+P('Final crater', fmt(r.final/1e3,2)+' km')+P('Impact energy', r.energy_mt.toExponential(2)+' Mt')); note('Scaling estimate after Collins et al. (2005), iron body and rock target.');
+        chart([{x:r.ds,y:r.fs,color:'#5aa2ff',label:'crater diameter, km'}],{title:'Crater vs body size',xlabel:'body diameter, m',logx:true,logy:true});
       } else if (id==='collide'){
-        res(P('Удельная энергия', r.q.toExponential(2)+' Дж/кг')+P('Порог разрушения', r.q_star.toExponential(2)+' Дж/кг')+P('Масса остатка', fmt(r.remnant*100,1)+'%')+P('Исход', esc(r.outcome)));
-        chart([{x:r.vs,y:r.fr,color:'#5aa2ff',label:'доля массы в остатке'}],{title:'Остаток от скорости удара',xlabel:'скорость, км/с',yr:[0,1]});
+        res(P('Specific energy', r.q.toExponential(2)+' J/kg')+P('Disruption threshold', r.q_star.toExponential(2)+' J/kg')+P('Remnant mass', fmt(r.remnant*100,1)+'%')+P('Outcome', esc(r.outcome)));
+        chart([{x:r.vs,y:r.fr,color:'#5aa2ff',label:'mass fraction in the remnant'}],{title:'Remnant vs impact speed',xlabel:'speed, km/s',yr:[0,1]});
       } else if (id==='ocean'){
-        res(P('Опускание, м·√млн лет', fmt(r.slope,0))+P('Поток в плите 80 млн лет', fmt(r.q80,1)+' мВт/м²')+P('Число Рэлея мантии', r.ra.toExponential(2))+P('Скорость конвекции', fmt(r.speed,1)+' см/год')); note('Оценки по порядку величины: остывающая плита и пограничный слой, а не движение реальных плит.');
-        chart([{x:r.age,y:r.depth,color:'#5aa2ff',label:'глубина дна, м'}],{title:'Глубина океана от возраста плиты',xlabel:'млн лет'});
+        res(P('Subsidence, m·√Myr', fmt(r.slope,0))+P('Heat flow in an 80 Myr plate', fmt(r.q80,1)+' mW/m²')+P('Mantle Rayleigh number', r.ra.toExponential(2))+P('Convection speed', fmt(r.speed,1)+' cm/yr')); note('Order-of-magnitude estimates: a cooling plate and a boundary layer, not the motion of real plates.');
+        chart([{x:r.age,y:r.depth,color:'#5aa2ff',label:'seafloor depth, m'}],{title:'Ocean depth vs plate age',xlabel:'Myr'});
       }
     } catch(e){ if (my===this.req) note(`<span class="no">${esc(e.message)}</span>`); }
   },
@@ -1413,17 +1413,17 @@ async function switchTab(name){
   const veil = $('#veil');
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
   if (current && !REDUCED){ veil.classList.add('on'); await sleep(170); }
-  await initChain;              // предыдущая вкладка могла ещё грузиться: не даём ей писать в чужую панель
-  if (my !== epoch) return;     // пока шёл переход, выбрали другую вкладку
+  await initChain;              // the previous tab may still be loading: do not let it write into another panel
+  if (my !== epoch) return;     // another tab was selected during the transition
   if (current){ current.dispose?.(); current.controls?.dispose(); current.scene?.traverse(o=>{ o.geometry?.dispose?.(); }); }
   hud.style.display='none'; chartbox.style.display='none'; panel.style.display=''; panel.innerHTML=''; panel.classList.remove('enter'); lastChart = null;
   current = tabs[name]; if (location.hash !== '#'+name) location.hash = name; intro = null;
-  initChain = (async () => { try { await current.init(); } catch(e){ panel.innerHTML = `<div class="no">Ошибка: ${esc(e.message)}</div>`; console.error(e); } })();
+  initChain = (async () => { try { await current.init(); } catch(e){ panel.innerHTML = `<div class="no">Error: ${esc(e.message)}</div>`; console.error(e); } })();
   await initChain;
   if (my !== epoch) return;
   resize();
   void panel.offsetWidth; panel.classList.add('enter');
-  // плавный наезд камеры; любое движение мышью его отменяет
+  // smooth camera approach; any mouse movement cancels it
   if (current.camera && current.controls && !current.noIntro && !REDUCED){
     const c = current.camera, t = current.controls.target, to = c.position.clone();
     intro = {c, from: to.clone().sub(t).multiplyScalar(1.5).add(t), to, t0: performance.now()};
@@ -1445,7 +1445,7 @@ renderer.setAnimationLoop(() => {
   else { renderer.clear(); }
 });
 applySettings();
-/* клавиши 1–9: быстрый переход между вкладками */
+/* keys 1–9: quick jump between tabs */
 addEventListener('keydown', e => { if (e.metaKey||e.ctrlKey||e.altKey||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; const b = document.querySelectorAll('nav button')[+e.key-1]; if (b && /[1-9]/.test(e.key)) switchTab(b.dataset.tab); });
 addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t in tabs && current !== tabs[t]) switchTab(t); });
 resize();

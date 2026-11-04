@@ -1,12 +1,12 @@
-//! Химия: кинетика и равновесие, озоновый цикл Чепмена, ракетное сопло и удельный импульс.
-//! Коэффициенты скоростей цикла Чепмена — типичные учебные значения для стратосферы, а не инвентарь для прогноза.
+//! Chemistry: kinetics and equilibrium, the Chapman ozone cycle, a rocket nozzle and specific impulse.
+//! Chapman rate coefficients are typical textbook values for the stratosphere, not an inventory for forecasting.
 
 use crate::constants::R_GAS;
 
-/// Закон Аррениуса: k = A·exp(−Ea/RT).
+/// Arrhenius law: k = A·exp(−Ea/RT).
 pub fn arrhenius(a: f64, ea: f64, t: f64) -> f64 { a * (-ea / (R_GAS * t)).exp() }
 
-/// Обратимая реакция A ⇌ B, РК4: (A, B) в момент t. Точное решение проверяется в законах.
+/// Reversible reaction A ⇌ B, RK4: (A, B) at time t. The exact solution is checked in the laws.
 pub fn reversible(a0: f64, b0: f64, kf: f64, kr: f64, t: f64, steps: usize) -> (f64, f64) {
     let h = t / steps as f64;
     let (mut a, mut b) = (a0, b0);
@@ -23,13 +23,13 @@ pub fn reversible(a0: f64, b0: f64, kf: f64, kr: f64, t: f64, steps: usize) -> (
     (a, b)
 }
 
-/// Цикл Чепмена при фиксированной плотности воздуха M.
+/// Chapman cycle at fixed air density M.
 /// O₂ + hν → 2O (j2); O + O₂ + M → O₃ + M (k2); O₃ + hν → O + O₂ (j3); O + O₃ → 2O₂ (k4).
 #[derive(Clone, Copy)]
 pub struct Chapman { pub j2: f64, pub k2: f64, pub j3: f64, pub k4: f64, pub m: f64 }
 
 impl Chapman {
-    /// Типичная стратосфера около 30 км, СГС (см⁻³, с⁻¹).
+    /// Typical stratosphere around 30 km, CGS (cm⁻³, s⁻¹).
     pub fn stratosphere() -> Chapman { Chapman { j2: 1e-11, k2: 1e-33, j3: 1e-3, k4: 1e-15, m: 3.6e17 } }
 
     fn rates(&self, y: [f64; 3]) -> [f64; 3] {
@@ -38,7 +38,7 @@ impl Chapman {
         [2.0 * r1 - r2 + r3 - r4, -r1 - r2 + r3 + 2.0 * r4, r2 - r3 - r4]
     }
 
-    /// Неявный шаг Эйлера с численным якобианом: система очень жёсткая (O живёт секунды, O₃ — часы).
+    /// Implicit Euler step with a numerical Jacobian: the system is very stiff (O lives seconds, O₃ lives hours).
     pub fn implicit_step(&self, y: [f64; 3], dt: f64) -> [f64; 3] {
         let mut x = y;
         for _ in 0..12 {
@@ -58,7 +58,7 @@ impl Chapman {
         x
     }
 
-    /// Стационарное отношение O₃/O₂ в приближении Чепмена: √(j₂ k₂ M / (j₃ k₄)).
+    /// Steady O₃/O₂ ratio in the Chapman approximation: √(j₂ k₂ M / (j₃ k₄)).
     pub fn steady_ratio(&self) -> f64 { (self.j2 * self.k2 * self.m / (self.j3 * self.k4)).sqrt() }
 }
 
@@ -82,17 +82,17 @@ fn solve3(mut a: [[f64; 3]; 3], mut b: [f64; 3]) -> [f64; 3] {
     x
 }
 
-/// Идеальное сопло: скорость истечения, м/с. tc — температура в камере, м — молярная масса, кг/моль, pr = pe/pc.
+/// Ideal nozzle: exhaust velocity, m/s. tc is chamber temperature, m is molar mass, kg/mol, pr = pe/pc.
 pub fn exhaust_velocity(gamma: f64, tc: f64, molar: f64, pr: f64) -> f64 {
     (2.0 * gamma / (gamma - 1.0) * R_GAS * tc / molar * (1.0 - pr.powf((gamma - 1.0) / gamma))).sqrt()
 }
 
-/// Степень расширения сопла при отношении давлений pr.
+/// Nozzle expansion ratio for a pressure ratio pr.
 pub fn area_ratio(gamma: f64, pr: f64) -> f64 {
     let g = gamma;
     let a = ((g + 1.0) / 2.0).powf(1.0 / (g - 1.0)) * pr.powf(1.0 / g);
     1.0 / (a * ((g + 1.0) / (g - 1.0) * (1.0 - pr.powf((g - 1.0) / g))).sqrt())
 }
 
-/// Удельный импульс из химии топлива: связывает реакцию и параметр `isp` посадочного модуля.
+/// Specific impulse from propellant chemistry: links the reaction to the parameter `isp` of the lander.
 pub fn specific_impulse(gamma: f64, tc: f64, molar: f64, pr: f64) -> f64 { exhaust_velocity(gamma, tc, molar, pr) / crate::env::G0 }

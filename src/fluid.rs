@@ -1,9 +1,9 @@
-//! Гидродинамика: 1D уравнения Эйлера и мелкой воды методом конечных объёмов (HLL).
-//! Это эталонные задачи для проверки решателя; трёхмерной турбулентности и глобальной циркуляции здесь нет.
+//! Fluid dynamics: 1D Euler and shallow water equations with the finite volume method (HLL).
+//! These are reference problems for checking the solver; there is no 3D turbulence or global circulation here.
 
 pub const GAMMA: f64 = 1.4;
 
-/// Распад разрыва (Сод): численное решение по закону сохранения, ячейки n, время t.
+/// Riemann problem (Sod): numerical solution from the conservation law, n cells, time t.
 pub struct Euler1D { pub dx: f64, pub rho: Vec<f64>, pub mom: Vec<f64>, pub en: Vec<f64>, pub t: f64 }
 
 impl Euler1D {
@@ -38,7 +38,7 @@ impl Euler1D {
                 f[i][k] = if sl >= 0.0 { fl[k] } else if sr <= 0.0 { fr[k] } else { (sr * fl[k] - sl * fr[k] + sl * sr * (qr[k] - ql[k])) / (sr - sl) };
             }
         }
-        // стенки: непроницаемые, поток импульса — давление у стенки
+        // walls: impermeable, the momentum flux is the wall pressure
         let wall = |r: f64, m: f64, e: f64| (GAMMA - 1.0) * (e - 0.5 * m * m / r);
         f[0][1] = wall(self.rho[0], self.mom[0], self.en[0]);
         f[n][1] = wall(self.rho[n - 1], self.mom[n - 1], self.en[n - 1]);
@@ -56,7 +56,7 @@ impl Euler1D {
     pub fn velocity(&self) -> Vec<f64> { (0..self.rho.len()).map(|i| self.mom[i] / self.rho[i]).collect() }
 }
 
-/// Точное решение задачи Сода в точке x, время t: (ρ, u, p).
+/// Exact solution of the Sod problem at point x, time t: (ρ, u, p).
 pub fn sod_exact(x: f64, t: f64) -> (f64, f64, f64) {
     let g = GAMMA;
     let (rl, pl, rr, pr) = (1.0, 1.0, 0.125, 0.1);
@@ -88,7 +88,7 @@ pub fn sod_exact(x: f64, t: f64) -> (f64, f64, f64) {
     else { (rr, 0.0, pr) }
 }
 
-/// Мелкая вода: разрушение плотины над сухим дном. Точное решение — Риттер (1892).
+/// Shallow water: dam break over a dry bed. Exact solution: Ritter (1892).
 pub struct Shallow1D { pub dx: f64, pub g: f64, pub h: Vec<f64>, pub q: Vec<f64>, pub t: f64 }
 
 impl Shallow1D {
@@ -123,7 +123,7 @@ impl Shallow1D {
     pub fn run_to(&mut self, t: f64) { while self.t < t { self.step(0.4); } }
 }
 
-/// Точная глубина Риттера в точке x от плотины (x0), время t.
+/// Exact Ritter depth at point x from the dam (x0), time t.
 pub fn ritter_depth(x: f64, x0: f64, t: f64, g: f64, h0: f64) -> f64 {
     let c0 = (g * h0).sqrt();
     let xi = (x - x0) / t;

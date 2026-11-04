@@ -1,7 +1,7 @@
-"""Векторная среда без HTTP: вызовы напрямую в библиотеку Rust через ctypes.
+"""Vector environment without HTTP: direct calls into the Rust library through ctypes.
 
-Сборка: `cargo build --release`; путь задаёт WORLDSIM_LIB или ищется в target/release.
-Завершившиеся среды сами начинают новый эпизод; конечное наблюдение — в `info["final_obs"]`.
+Build: `cargo build --release`; the path is set by WORLDSIM_LIB or searched in target/release.
+Finished environments start a new episode on their own; the final observation is in `info["final_obs"]`.
 """
 import ctypes as C
 import json
@@ -20,7 +20,7 @@ def _find_lib():
     p = Path(__file__).resolve().parents[2] / "target" / "release" / name
     if p.exists():
         return str(p)
-    raise FileNotFoundError(f"не найден {name}: выполните cargo build --release или задайте WORLDSIM_LIB")
+    raise FileNotFoundError(f"not found {name}: run cargo build --release or set WORLDSIM_LIB")
 
 
 def _load():
@@ -45,7 +45,7 @@ _F = C.POINTER(C.c_float)
 
 class VectorEnv:
     def __init__(self, task="lander", worlds="moon", n=16, seed=1, noise=1.0, randomize=False, frame_skip=0, max_steps=0, rotor_scale=1.0, gust=0.0, lag=0.0, fault=0.0, threads=1, params=None):
-        """`params`: параметры реестра, например {"throttle_min": 0.1, "gyro_bias": 0.01}."""
+        """`params`: registry parameters, for example {"throttle_min": 0.1, "gyro_bias": 0.01}."""
         self.lib = _load()
         self._p = self.lib.ws_vec_new(task.encode(), worlds.encode(), n, seed, noise, randomize, frame_skip, max_steps, rotor_scale, gust, lag, fault, threads, ",".join(f"{k}={v}" for k, v in (params or {}).items()).encode())
         if not self._p:
@@ -72,7 +72,7 @@ class VectorEnv:
     def step(self, actions):
         a = np.asarray(actions, dtype=np.float32)
         if a.shape != (self.n, self.act_dim):
-            raise ValueError(f"действия: нужна форма {(self.n, self.act_dim)}, получено {a.shape}")
+            raise ValueError(f"actions: required shape {(self.n, self.act_dim)}, got {a.shape}")
         U = C.POINTER(C.c_ubyte)
         self.lib.ws_vec_step(self._p, a.ctypes.data_as(_F), self._obs.ctypes.data_as(_F), self._rew.ctypes.data_as(_F),
                              self._term.ctypes.data_as(U), self._trunc.ctypes.data_as(U), self._final.ctypes.data_as(_F))

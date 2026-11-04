@@ -1,4 +1,4 @@
-"""Клиент HTTP API среды (`worldsim serve`). Интерфейс как у Gymnasium, но без зависимости от него."""
+"""HTTP API client for the environment (`worldsim serve`). Interface like Gymnasium, but without depending on it."""
 import http.client
 import json
 import os
@@ -24,7 +24,7 @@ class Client:
         return self._read()
 
     def run_mission(self, spec, on_progress=None, poll_s=0.3):
-        """Миссия в фоне: ждём результат и возвращаем отчёт. `spec` — словарь или текст JSON."""
+        """Mission in the background: waits for the result and returns the report. `spec` — dictionary or text JSON."""
         body = spec if isinstance(spec, str) else json.dumps(spec, ensure_ascii=False)
         job = self.post("/api/jobs/mission", body.encode())["id"]
         while True:
@@ -34,7 +34,7 @@ class Client:
             if j["status"] == "done":
                 return self.get(f"/api/runs/{j['run']}")
             if j["status"] != "running":
-                raise RuntimeError(j.get("error") or "расчёт отменён")
+                raise RuntimeError(j.get("error") or "calculation cancelled")
             time.sleep(poll_s)
 
     def _read(self):
@@ -49,7 +49,7 @@ class Client:
 
 
 class RemoteEnv:
-    """Сессия среды на сервере: reset, step, fork, state, camera, close."""
+    """Environment session on the server: reset, step, fork, state, camera, close."""
 
     def __init__(self, client, meta):
         self.client, self.meta, self.id = client, meta, meta["id"]
@@ -71,7 +71,7 @@ class RemoteEnv:
         return self.client.get("/api/env/state", id=self.id)
 
     def fork(self):
-        """Копия с тем же состоянием: проиграть другое действие и сравнить с предсказанием модели."""
+        """Copy with the same state: play another action and compare with the model prediction."""
         r = self.client.get("/api/env/fork", id=self.id)
         return RemoteEnv(self.client, {**self.meta, "id": r["id"]})
 

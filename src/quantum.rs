@@ -1,5 +1,5 @@
-//! Квантовая механика: уравнение Шрёдингера, туннелирование, атом водорода, вырождение в белых карликах.
-//! Волновые расчёты — в атомных единицах (ħ = m = 1). Это нерелятивистская одночастичная модель.
+//! Quantum mechanics: Schrödinger equation, tunneling, hydrogen atom, white dwarf degeneracy.
+//! Wave calculations are in atomic units (ħ = m = 1). This is a nonrelativistic single-particle model.
 
 use crate::constants::{E_CHARGE, G, H_PLANCK, K_B, M_E, M_P, C};
 use std::f64::consts::PI;
@@ -8,22 +8,22 @@ pub const HBAR: f64 = H_PLANCK / (2.0 * PI);
 pub const M_SUN: f64 = 1.988_47e30;
 const EPS0: f64 = 8.854_187_8128e-12;
 
-/// Постоянная тонкой структуры.
+/// Fine-structure constant.
 pub fn alpha() -> f64 { E_CHARGE * E_CHARGE / (4.0 * PI * EPS0 * HBAR * C) }
 
-/// Уровень энергии водорода по Бору с приведённой массой, эВ.
+/// Hydrogen energy level, Bohr model with reduced mass, eV.
 pub fn hydrogen_level_ev(n: f64) -> f64 {
     let mu = M_E * M_P / (M_E + M_P);
     -0.5 * mu * (alpha() * C).powi(2) / (n * n) / E_CHARGE
 }
 
-/// Длина волны перехода n2 → n1, нм (в вакууме).
+/// Transition wavelength n2 → n1, nm (in vacuum).
 pub fn hydrogen_line_nm(n1: f64, n2: f64) -> f64 {
     let de = (hydrogen_level_ev(n2) - hydrogen_level_ev(n1)) * E_CHARGE;
     H_PLANCK * C / de * 1e9
 }
 
-/// Собственные значения трёхдиагональной матрицы бисекцией по последовательности Штурма: k-е снизу.
+/// Eigenvalues of a tridiagonal matrix by bisection with a Sturm sequence: the k-th from the bottom.
 fn sturm_eigenvalue(diag: &[f64], off: &[f64], k: usize) -> f64 {
     let count = |x: f64| {
         let (mut c, mut d) = (0, 1.0);
@@ -44,7 +44,7 @@ fn sturm_eigenvalue(diag: &[f64], off: &[f64], k: usize) -> f64 {
     0.5 * (lo + hi)
 }
 
-/// k-й уровень в потенциале V(x) на сетке [-l, l], конечные разности 4-го порядка точности не нужны: шаг мал.
+/// k-th level in the potential V(x) on the grid [-l, l]; 4th-order differences are not needed, the step is small.
 pub fn bound_level_1d(v: impl Fn(f64) -> f64, l: f64, n: usize, k: usize) -> f64 {
     let h = 2.0 * l / (n + 1) as f64;
     let diag: Vec<f64> = (1..=n).map(|i| 1.0 / (h * h) + v(-l + i as f64 * h)).collect();
@@ -52,7 +52,7 @@ pub fn bound_level_1d(v: impl Fn(f64) -> f64, l: f64, n: usize, k: usize) -> f64
     sturm_eigenvalue(&diag, &off, k)
 }
 
-/// Уровни s-состояний водорода, атомные единицы (теория: −1/(2n²)). Сетка равномерная, u(r) = r·R(r).
+/// Hydrogen s-state levels, atomic units (theory: −1/(2n²)). Uniform grid, u(r) = r·R(r).
 pub fn hydrogen_s_level(k: usize, rmax: f64, n: usize) -> f64 {
     let h = rmax / (n + 1) as f64;
     let diag: Vec<f64> = (1..=n).map(|i| 1.0 / (h * h) - 1.0 / (i as f64 * h)).collect();
@@ -60,7 +60,7 @@ pub fn hydrogen_s_level(k: usize, rmax: f64, n: usize) -> f64 {
     sturm_eigenvalue(&diag, &off, k)
 }
 
-/// Волновой пакет на отрезке: неявная схема Кранка–Николсон. Она унитарна, поэтому норма сохраняется точно.
+/// Wave packet on an interval: implicit Crank–Nicolson scheme. It is unitary, so the norm is conserved exactly.
 #[derive(Clone)]
 pub struct Wave {
     pub x: Vec<f64>, pub re: Vec<f64>, pub im: Vec<f64>, pub v: Vec<f64>, pub dx: f64, pub dt: f64, pub t: f64,
@@ -74,16 +74,16 @@ impl Wave {
         let env = |q: f64| a * (-(q - x0) * (q - x0) / (4.0 * sigma * sigma)).exp();
         Wave { re: x.iter().map(|q| env(*q) * (k0 * q).cos()).collect(), im: x.iter().map(|q| env(*q) * (k0 * q).sin()).collect(), v: x.iter().map(|q| v(*q)).collect(), x, dx, dt, t: 0.0 }
     }
-    /// Шаг: (1 + iHdt/2)ψ⁺ = (1 − iHdt/2)ψ, прогонка для комплексной трёхдиагональной матрицы; на краях ψ = 0.
+    /// Step: (1 + iHdt/2)ψ⁺ = (1 − iHdt/2)ψ, Thomas algorithm for a complex tridiagonal matrix; at the edges ψ = 0.
     pub fn step(&mut self) {
         let n = self.x.len();
-        let r = self.dt / (4.0 * self.dx * self.dx); // kin: -½∂² => коэффициент i·dt/2·(−½/dx²)
+        let r = self.dt / (4.0 * self.dx * self.dx); // kin: -½∂² => coefficient i·dt/2·(−½/dx²)
         // b_i = 1 + i(dt/2)(1/dx² + V_i), a = c = −i r
         let (mut rhs_re, mut rhs_im) = (vec![0.0; n], vec![0.0; n]);
         for i in 1..n - 1 {
             let h = 2.0 * r + 0.5 * self.dt * self.v[i];
             let (lr, li) = (self.re[i - 1] + self.re[i + 1], self.im[i - 1] + self.im[i + 1]);
-            // ψ − i(dt/2)Hψ, где Hψ·dt/2 = hψ − r(ψ₋ + ψ₊)
+            // ψ − i(dt/2)Hψ, where Hψ·dt/2 = hψ − r(ψ₋ + ψ₊)
             rhs_re[i] = self.re[i] + h * self.im[i] - r * li;
             rhs_im[i] = self.im[i] - h * self.re[i] + r * lr;
         }
@@ -119,7 +119,7 @@ impl Wave {
     pub fn norm(&self) -> f64 { self.density().iter().sum::<f64>() * self.dx }
     pub fn mean_x(&self) -> f64 { self.density().iter().zip(&self.x).map(|(p, x)| p * x).sum::<f64>() * self.dx / self.norm() }
     pub fn sigma_x(&self) -> f64 { let m = self.mean_x(); (self.density().iter().zip(&self.x).map(|(p, x)| p * (x - m) * (x - m)).sum::<f64>() * self.dx / self.norm()).sqrt() }
-    /// Δp через производную волновой функции.
+    /// Δp through the wave function derivative.
     pub fn sigma_p(&self) -> f64 {
         let n = self.x.len();
         let (mut p1, mut p2) = (0.0, 0.0);
@@ -134,7 +134,7 @@ impl Wave {
     pub fn right_of(&self, x0: f64) -> f64 { self.density().iter().zip(&self.x).filter(|(_, x)| **x > x0).map(|(p, _)| *p).sum::<f64>() * self.dx }
 }
 
-/// Точная вероятность прохождения прямоугольного барьера (атомные единицы).
+/// Exact transmission probability of a rectangular barrier (atomic units).
 pub fn barrier_transmission(e: f64, v0: f64, a: f64) -> f64 {
     if (e - v0).abs() < 1e-12 { return 1.0 / (1.0 + e * a * a / 2.0); }
     if e < v0 {
@@ -146,7 +146,7 @@ pub fn barrier_transmission(e: f64, v0: f64, a: f64) -> f64 {
     }
 }
 
-/// Энергия Гамова и пик Гамова для реакции: туннелирование через кулоновский барьер, без него звёзды бы не горели.
+/// Gamow energy and Gamow peak for a reaction: tunneling through the Coulomb barrier, without which stars would not burn.
 pub fn gamow(z1: f64, z2: f64, m1: f64, m2: f64, temp: f64) -> (f64, f64) {
     let mu = m1 * m2 / (m1 + m2);
     let eg = 2.0 * mu * C * C * (PI * alpha() * z1 * z2).powi(2);
@@ -154,7 +154,7 @@ pub fn gamow(z1: f64, z2: f64, m1: f64, m2: f64, temp: f64) -> (f64, f64) {
     (eg / E_CHARGE / 1e3, (eg * kt * kt / 4.0).powf(1.0 / 3.0) / E_CHARGE / 1e3)
 }
 
-/// Решение Лейна–Эмдена: первый ноль ξ₁ и −ξ²θ'(ξ₁).
+/// Lane–Emden solution: first zero ξ₁ and −ξ²θ'(ξ₁).
 pub fn lane_emden(n: f64) -> (f64, f64) {
     let f = |x: f64, y: [f64; 2]| -> [f64; 2] { [y[1], -y[0].max(0.0).powf(n) - 2.0 / x * y[1]] };
     let (mut x, mut y) = (1e-4, [1.0 - 1e-8 / 6.0, -1e-4 / 3.0]);
@@ -176,7 +176,7 @@ pub fn lane_emden(n: f64) -> (f64, f64) {
     }
 }
 
-/// Предел Чандрасекара, массы Солнца: давление вырожденных электронов (ультрарелятивистский предел, n = 3).
+/// Chandrasekhar limit, solar masses: degenerate electron pressure (ultrarelativistic limit, n = 3).
 pub fn chandrasekhar_mass(mu_e: f64) -> f64 {
     let (_, w) = lane_emden(3.0);
     w * (3.0 * PI).sqrt() / 2.0 * (HBAR * C / G).powf(1.5) / (mu_e * M_P).powi(2) / M_SUN

@@ -1,9 +1,9 @@
-"""Экспорт в LeRobotDataset v3.0 (https://huggingface.co/docs/lerobot/lerobot-dataset-v3). Нужны pyarrow и pandas.
+"""Export to LeRobotDataset v3.0 (https://huggingface.co/docs/lerobot/lerobot-dataset-v3). Requires pyarrow and pandas.
 
     python -m worldsim.export --data runs/moon --out runs/moon_lerobot
 
-Экспортируются наблюдения, действия, награды и признаки конца эпизода. Истинное состояние кладётся в `observation.environment_state`.
-Камера не экспортируется. Частота кадров берётся из шага управления. Загрузка проверена на lerobot 0.6.1.
+Exports observations, actions, rewards and episode end flags. The true state goes into `observation.environment_state`.
+The camera is not exported. Frame rate comes from the control step. Loading was verified on lerobot 0.6.1.
 """
 import argparse
 import json
@@ -22,13 +22,13 @@ def _stats(x):
 
 
 def to_lerobot(ds, out, chunk_rows=1_000_000):
-    """Записывает папку `out` и возвращает путь. Файлы — Parquet, эпизоды идут подряд и описаны в meta/episodes."""
+    """Writes the folder `out` and returns the path. Files are Parquet, episodes run in sequence and are described in meta/episodes."""
     try:
         import pyarrow as pa
         import pyarrow.parquet as pq
         import pandas  # noqa: F401
     except ImportError as e:
-        raise RuntimeError("для экспорта нужны pyarrow и pandas: pip install pyarrow pandas") from e
+        raise RuntimeError("export requires pyarrow and pandas: pip install pyarrow pandas") from e
     out = Path(out)
     (out / "meta" / "episodes" / "chunk-000").mkdir(parents=True, exist_ok=True)
     (out / "data" / "chunk-000").mkdir(parents=True, exist_ok=True)
@@ -39,7 +39,7 @@ def to_lerobot(ds, out, chunk_rows=1_000_000):
     file_index, written, per_file = 0, 0, []
     while written < n:
         end = min(written + chunk_rows, n)
-        # не разрезаем эпизод между файлами: так проще читать и потоково, и с диска
+        # an episode is not split between files: this makes reading simpler, both streaming and from disk
         ep_end = np.searchsorted(ds.starts, end)
         if end < n and ep_end < len(ds.starts) and ds.starts[ep_end] > written:
             end = int(ds.starts[ep_end])
@@ -72,7 +72,7 @@ def to_lerobot(ds, out, chunk_rows=1_000_000):
         "meta/episodes/chunk_index": pa.array(np.zeros(len(e_starts), np.int64)),
         "meta/episodes/file_index": pa.array(np.zeros(len(e_starts), np.int64)),
     }), out / "meta" / "episodes" / "chunk-000" / "file-000.parquet")
-    # LeRobot читает текст задачи из индекса pandas, поэтому файл пишем именно с таким индексом
+    # LeRobot reads the task text from the pandas index, so the file is written with exactly this index
     import pandas as pd
     pd.DataFrame({"task_index": [0]}, index=pd.Index([task_text], name="task")).to_parquet(out / "meta" / "tasks.parquet")
     scalar = lambda dtype: {"dtype": dtype, "shape": [1], "names": None}

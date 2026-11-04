@@ -1,4 +1,4 @@
-//! Опыты для вкладки «Лаборатория»: тонкая обёртка над физическими модулями, все диапазоны проверяются здесь.
+//! Experiments for the Laboratory tab: a thin wrapper over the physics modules, all ranges are checked here.
 
 use crate::{chemistry as ch, collisions as co, fluid as fl, quantum as qm, tectonics as te};
 use crate::constants::YEAR;
@@ -8,8 +8,8 @@ use std::collections::HashMap;
 type Q = HashMap<String, String>;
 
 pub fn num(q: &Q, k: &str, d: f64, lo: f64, hi: f64) -> Result<f64, String> {
-    let x = match q.get(k).filter(|v| !v.is_empty()) { Some(v) => v.parse::<f64>().map_err(|_| format!("{k}: ожидалось число, получено '{v}'"))?, None => d };
-    if !x.is_finite() || x < lo || x > hi { return Err(format!("{k} = {x} вне диапазона [{lo}, {hi}]")); }
+    let x = match q.get(k).filter(|v| !v.is_empty()) { Some(v) => v.parse::<f64>().map_err(|_| format!("{k}: expected a number, got '{v}'"))?, None => d };
+    if !x.is_finite() || x < lo || x > hi { return Err(format!("{k} = {x} out of range [{lo}, {hi}]")); }
     Ok(x)
 }
 
@@ -33,15 +33,15 @@ pub fn run(topic: &str, q: &Q) -> Result<J, String> {
         "levels" => {
             let osc: Vec<f64> = (0..6).map(|k| qm::bound_level_1d(|x| 0.5 * x * x, 8.0, 2000, k)).collect();
             let hyd: Vec<f64> = (0..3).map(|k| qm::hydrogen_s_level(k, 90.0, 6000)).collect();
-            let mut rows: Vec<J> = osc.iter().enumerate().map(|(k, e)| J::obj().set("name", format!("Осциллятор, n = {k}")).set("value", *e).set("exact", k as f64 + 0.5)).collect();
-            rows.extend(hyd.iter().enumerate().map(|(k, e)| J::obj().set("name", format!("Водород, n = {}", k + 1)).set("value", *e).set("exact", -0.5 / ((k + 1) as f64).powi(2))));
+            let mut rows: Vec<J> = osc.iter().enumerate().map(|(k, e)| J::obj().set("name", format!("Oscillator, n = {k}")).set("value", *e).set("exact", k as f64 + 0.5)).collect();
+            rows.extend(hyd.iter().enumerate().map(|(k, e)| J::obj().set("name", format!("Hydrogen, n = {}", k + 1)).set("value", *e).set("exact", -0.5 / ((k + 1) as f64).powi(2))));
             Ok(J::obj().set("rows", J::Arr(rows)).set("series", J::Arr(vec![
-                J::obj().set("name", "Осциллятор").set("n", (0..6).map(|k| k as f64).collect::<Vec<_>>()).set("e", osc),
-                J::obj().set("name", "Водород").set("n", (0..3).map(|k| k as f64).collect::<Vec<_>>()).set("e", hyd),
+                J::obj().set("name", "Oscillator").set("n", (0..6).map(|k| k as f64).collect::<Vec<_>>()).set("e", osc),
+                J::obj().set("name", "Hydrogen").set("n", (0..3).map(|k| k as f64).collect::<Vec<_>>()).set("e", hyd),
             ])))
         }
         "hydrogen" => {
-            let lines = [("Лайман-α", 1.0, 2.0), ("Лайман-β", 1.0, 3.0), ("Бальмер-α", 2.0, 3.0), ("Бальмер-β", 2.0, 4.0), ("Пашен-α", 3.0, 4.0)];
+            let lines = [("Lyman-α", 1.0, 2.0), ("Lyman-β", 1.0, 3.0), ("Balmer-α", 2.0, 3.0), ("Balmer-β", 2.0, 4.0), ("Paschen-α", 3.0, 4.0)];
             Ok(J::obj().set("lines", J::Arr(lines.iter().map(|(n, a, b)| J::obj().set("name", *n).set("nm", qm::hydrogen_line_nm(*a, *b))).collect()))
                 .set("levels", J::Arr((1..=8).map(|n| J::obj().set("n", n as f64).set("ev", qm::hydrogen_level_ev(n as f64))).collect())))
         }
@@ -115,6 +115,6 @@ pub fn run(topic: &str, q: &Q) -> Result<J, String> {
             let ra = te::rayleigh(4000.0, 9.8, 3e-5, 3000.0, 2.9e6, 1e-6, 1e22);
             Ok(J::obj().set("age", age).set("depth", depth).set("slope", l.subsidence(myr)).set("q80", l.heat_flow(80.0 * myr) * 1e3).set("ra", ra).set("speed", te::convection_speed(1e-6, 2.9e6, ra) * YEAR * 100.0))
         }
-        _ => Err(format!("нет такого опыта: {topic}")),
+        _ => Err(format!("no such experiment: {topic}")),
     }
 }

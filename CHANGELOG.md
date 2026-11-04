@@ -1,21 +1,21 @@
-# История изменений
+# Changelog
 
-Формат: [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии по [SemVer](https://semver.org/lang/ru/). До 1.0 API может меняться.
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/). The API may change before 1.0.
 
-## 0.3.0 — не выпущена
+## 0.3.0 — unreleased
 
-### Добавлено
-- Mission Lab: требования, виды отказов, главные факторы, ценность технологий; фоновые задачи с прогрессом и отменой, хранение и сравнение запусков.
-- Квалификация world models: точность, законы физики, отклик на действие, оптимизм, границы применимости.
-- Сбор переходов `collect`, контрфактические ветвления, векторная среда для Python.
-- Реестр параметров: 64 параметра доступны в API, CLI, миссиях и Python.
-- Физика: квантовая механика, чёрные дыры, гидродинамика, химия, столкновения, тектоника; 131 проверка.
-- Свой контроллер в Mission Lab, калибровка по телеметрии, рельеф реальной площадки, экспорт LeRobot.
-- Формы настройки, пресеты, импорт и экспорт, тема, размер текста, ширина панели, качество графики.
-- Токен доступа, лимиты, проверка источника запроса, `/healthz`, `/api/version`, OpenAPI, Docker, CI, релизы.
+### Added
+- Mission Lab: requirements, failure modes, main drivers, value of technologies; background jobs with progress and cancellation, run storage and comparison.
+- World model qualification: accuracy, physical laws, action effect, optimism, applicability boundaries.
+- Transition collection `collect`, counterfactual branching, vector environment for Python.
+- Parameter registry: 64 parameters available in the API, CLI, missions and Python.
+- Physics: quantum mechanics, black holes, fluid dynamics, chemistry, collisions, tectonics; 129 checks.
+- Custom controller in Mission Lab, telemetry calibration, terrain of a real site, export to LeRobot.
+- Settings forms, presets, import and export, theme, text size, panel width, graphics quality.
+- Access token, limits, request origin check, `/healthz`, `/api/version`, OpenAPI, Docker, CI, releases.
 
-### Изменено
-- Новый интерфейс: единая раскладка без плавающих окон.
-- Размеры наблюдений сред выросли: добавлены признаки попадания лучей.
-- Запросы с чужих сайтов теперь отклоняются. Раньше сервер разрешал их всем; нужен прежний режим — используйте `--cors`.
-- Неизвестные ключи CLI и значения вне диапазона теперь дают ошибку, а не подменяются молча.
+### Changed
+- New interface: a single layout without floating windows.
+- Environment observation sizes grew: ray hit flags were added.
+- Requests from other sites are now rejected. The server used to allow them for everyone; for the old mode use `--cors`.
+- Unknown CLI keys and out-of-range values now give an error instead of being silently replaced.

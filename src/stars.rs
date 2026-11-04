@@ -1,6 +1,6 @@
-//! Звёзды: соотношения главной последовательности, закон Стефана–Больцмана,
-//! спектр Планка → цвет (через функции сложения цветов CIE 1931), закон смещения Вина,
-//! обитаемая зона (Kopparapu et al. 2014).
+//! Stars: main sequence relations, Stefan–Boltzmann law,
+//! Planck spectrum → color (through the CIE 1931 color matching functions), Wien displacement law,
+//! habitable zone (Kopparapu et al. 2014).
 
 use crate::constants::{C, H_PLANCK, K_B, L_SUN};
 use std::f64::consts::PI;
@@ -16,11 +16,11 @@ pub struct Star {
     pub mass: f64,       // M☉
     pub radius: f64,     // R☉
     pub luminosity: f64, // L☉
-    pub teff: f64,       // К
+    pub teff: f64,       // K
 }
 
 impl Star {
-    /// Звезда главной последовательности из массы (эмпирические степенные законы).
+    /// Main sequence star from mass (empirical power laws).
     pub fn main_sequence(mass: f64) -> Star {
         let l = if mass < 0.43 { 0.23 * mass.powf(2.3) } else if mass < 2.0 { mass.powi(4) } else if mass < 55.0 { 1.4 * mass.powf(3.5) } else { 32_000.0 * mass };
         let r = if mass < 1.0 { mass.powf(0.8) } else { mass.powf(0.57) };
@@ -44,10 +44,10 @@ impl Star {
         }
     }
 
-    /// Время жизни на главной последовательности, лет: ~10¹⁰ · M/L.
+    /// Main sequence lifetime, years: ~10¹⁰ · M/L.
     pub fn lifetime_years(&self) -> f64 { 1.0e10 * self.mass / self.luminosity }
 
-    /// Обитаемая зона (внутренняя: runaway greenhouse; внешняя: maximum greenhouse), а.е.
+    /// Habitable zone (inner: runaway greenhouse; outer: maximum greenhouse), AU
     pub fn habitable_zone(&self) -> (f64, f64) {
         let t = (self.teff.clamp(2600.0, 7200.0)) - 5780.0;
         let seff = |c: [f64; 5]| c[0] + c[1] * t + c[2] * t * t + c[3] * t.powi(3) + c[4] * t.powi(4);
@@ -56,43 +56,43 @@ impl Star {
         ((self.luminosity / inner).sqrt(), (self.luminosity / outer).sqrt())
     }
 
-    /// Цвет абсолютно чёрного тела при T_eff в sRGB (0..1).
+    /// Black-body color at T_eff in sRGB (0..1).
     pub fn rgb(&self) -> [f64; 3] { blackbody_rgb(self.teff) }
 }
 
 pub const STAR_NAMES: &[&str] = &["sun", "proxima", "barnard", "trappist1", "alpha_cen_a", "sirius_a", "vega", "betelgeuse"];
 
-/// Измеренные параметры известных звёзд (не из соотношений).
+/// Measured parameters of known stars (not from relations).
 pub fn star(name: &str) -> Result<Star, String> {
     let s = |n: &str, m, r, l, t| Star { name: n.into(), mass: m, radius: r, luminosity: l, teff: t };
     Ok(match name {
-        "sun" => s("Солнце", 1.0, 1.0, 1.0, 5772.0),
-        "proxima" => s("Проксима Центавра", 0.122, 0.154, 0.00155, 3042.0),
-        "barnard" => s("Звезда Барнарда", 0.144, 0.196, 0.0035, 3134.0),
+        "sun" => s("Sun", 1.0, 1.0, 1.0, 5772.0),
+        "proxima" => s("Proxima Centauri", 0.122, 0.154, 0.00155, 3042.0),
+        "barnard" => s("Barnard Star", 0.144, 0.196, 0.0035, 3134.0),
         "trappist1" => s("TRAPPIST-1", 0.0898, 0.1192, 0.000553, 2566.0),
-        "alpha_cen_a" => s("α Центавра A", 1.1, 1.22, 1.52, 5790.0),
-        "sirius_a" => s("Сириус A", 2.063, 1.711, 25.4, 9940.0),
-        "vega" => s("Вега", 2.135, 2.36, 40.12, 9602.0),
-        "betelgeuse" => s("Бетельгейзе (сверхгигант)", 16.5, 764.0, 126_000.0, 3600.0),
+        "alpha_cen_a" => s("α Centauri A", 1.1, 1.22, 1.52, 5790.0),
+        "sirius_a" => s("Sirius A", 2.063, 1.711, 25.4, 9940.0),
+        "vega" => s("Vega", 2.135, 2.36, 40.12, 9602.0),
+        "betelgeuse" => s("Betelgeuse (supergiant)", 16.5, 764.0, 126_000.0, 3600.0),
         _ => {
             if let Some(m) = name.strip_prefix("ms:") {
-                let mass: f64 = m.parse().map_err(|_| format!("ms:<масса>, получено {name}"))?;
-                if !(mass.is_finite() && mass > 0.0 && mass <= 1000.0) { return Err(format!("масса звезды {mass} вне диапазона (0, 1000] M☉")); }
+                let mass: f64 = m.parse().map_err(|_| format!("ms:<mass>, got {name}"))?;
+                if !(mass.is_finite() && mass > 0.0 && mass <= 1000.0) { return Err(format!("star mass {mass} out of range (0, 1000] M☉")); }
                 return Ok(Star::main_sequence(mass));
             }
-            return Err(format!("неизвестная звезда '{name}', доступны: {STAR_NAMES:?} или ms:<масса в M☉>"));
+            return Err(format!("unknown star '{name}', available: {STAR_NAMES:?} or ms:<mass in M☉>"));
         }
     })
 }
 
-/// Спектральная плотность энергетической яркости B_λ(T), Вт/(м²·ср·м).
+/// Spectral radiance B_λ(T), W/(m²·sr·m).
 pub fn planck(lambda: f64, t: f64) -> f64 {
     2.0 * H_PLANCK * C * C / lambda.powi(5) / ((H_PLANCK * C / (lambda * K_B * t)).exp() - 1.0)
 }
 
-/// ∫ π B_λ dλ — должно совпасть с σT⁴ (проверка закона Стефана–Больцмана).
+/// ∫ π B_λ dλ — must match σT⁴ (Stefan–Boltzmann law check).
 pub fn planck_integrated(t: f64) -> f64 {
-    // интеграл по x = hc/(λkT): π·∫B dλ = 2πk⁴T⁴/(h³c²) ∫ x³/(eˣ−1) dx
+    // integral over x = hc/(λkT): π·∫B dλ = 2πk⁴T⁴/(h³c²) ∫ x³/(eˣ−1) dx
     let n = 20_000;
     let (a, b) = (1e-6, 60.0);
     let h = (b - a) / n as f64;
@@ -103,7 +103,7 @@ pub fn planck_integrated(t: f64) -> f64 {
     2.0 * PI * K_B.powi(4) * t.powi(4) / (H_PLANCK.powi(3) * C * C) * integral
 }
 
-/// Длина волны максимума B_λ, найденная численно (для проверки закона Вина).
+/// Wavelength of the B_λ maximum, found numerically (to check Wien law).
 pub fn wien_peak(t: f64) -> f64 {
     let (mut lo, mut hi) = (1e-8, 1e-3);
     for _ in 0..200 {
@@ -119,7 +119,7 @@ fn lobe(x: f64, mu: f64, s1: f64, s2: f64) -> f64 {
     (-0.5 * ((x - mu) / s).powi(2)).exp()
 }
 
-/// CIE 1931 2° (аналитическая аппроксимация Wyman, Sloan, Shirley 2013), λ в нм.
+/// CIE 1931 2° (analytic approximation Wyman, Sloan, Shirley 2013), λ in nm.
 fn cie_xyz(nm: f64) -> [f64; 3] {
     [
         1.056 * lobe(nm, 599.8, 37.9, 31.0) + 0.362 * lobe(nm, 442.0, 16.0, 26.7) - 0.065 * lobe(nm, 501.1, 20.4, 26.2),
@@ -151,15 +151,15 @@ pub fn blackbody_rgb(t: f64) -> [f64; 3] {
     out
 }
 
-/// Начальная функция масс Крупы (2001): выборка массы в [m_lo, m_hi] M☉.
+/// Kroupa initial mass function (2001): mass sampling in [m_lo, m_hi] M☉.
 pub fn sample_kroupa(u: f64, v: f64, m_lo: f64, m_hi: f64) -> f64 {
-    // кусочно-степенная: α=1.3 (0.08–0.5), α=2.3 (>0.5); выборка через выбор сегмента + обратную функцию
+    // piecewise power law: α=1.3 (0.08–0.5), α=2.3 (>0.5); sampling by choosing a segment + inverse function
     let seg = |a: f64, lo: f64, hi: f64| -> f64 { if (a - 1.0).abs() < 1e-9 { (hi / lo).ln() } else { (hi.powf(1.0 - a) - lo.powf(1.0 - a)) / (1.0 - a) } };
     let lo1 = m_lo.max(0.08);
     let hi1 = m_hi.min(0.5);
     let w1 = if hi1 > lo1 { seg(1.3, lo1, hi1) } else { 0.0 };
     let lo2 = m_lo.max(0.5);
-    let w2 = if m_hi > lo2 { 0.5 * seg(2.3, lo2, m_hi) } else { 0.0 }; // 0.5 = непрерывность в 0.5 M☉
+    let w2 = if m_hi > lo2 { 0.5 * seg(2.3, lo2, m_hi) } else { 0.0 }; // 0.5 = continuity at 0.5 M☉
     let inv = |a: f64, lo: f64, hi: f64, x: f64| -> f64 {
         let (p, q) = (lo.powf(1.0 - a), hi.powf(1.0 - a));
         (p + x * (q - p)).powf(1.0 / (1.0 - a))

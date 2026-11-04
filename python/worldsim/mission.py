@@ -1,4 +1,4 @@
-"""Свой контроллер в Mission Lab: те же полёты и требования, но управляет ваша система, а не встроенный автопилот.
+"""Custom controller in Mission Lab: same flights and requirements, but your system controls instead of the built-in autopilot.
 
     runner = MissionRunner(json.load(open("missions/lunar_lander.json")))
     report = runner.evaluate(lambda obs: my_policy(obs))
@@ -41,7 +41,7 @@ class MissionRunner:
         self.action_low, self.action_high = np.array(self.spec["act_low"], np.float32), np.array(self.spec["act_high"], np.float32)
 
     def evaluate(self, controller, name="controller", max_steps=None):
-        """`controller(obs N×O) → действия N×A`. Завершённые полёты дальше не считаются, поэтому их действия игнорируются."""
+        """`controller(obs N×O) → actions N×A`. Finished flights are no longer counted, so their actions are ignored."""
         obs = np.zeros((self.n, self.obs_dim), np.float32)
         done = np.zeros(self.n, np.uint8)
         self.lib.ws_mission_reset(self._p, obs.ctypes.data_as(_F))
@@ -50,7 +50,7 @@ class MissionRunner:
         while left > 0 and (max_steps is None or step < max_steps):
             a = np.asarray(controller(obs), dtype=np.float32)
             if a.shape != (self.n, self.act_dim):
-                raise ValueError(f"контроллер вернул форму {a.shape}, нужна {(self.n, self.act_dim)}")
+                raise ValueError(f"the controller returned shape {a.shape}, required {(self.n, self.act_dim)}")
             left = self.lib.ws_mission_step(self._p, a.ctypes.data_as(_F), obs.ctypes.data_as(_F), done.ctypes.data_as(U))
             step += 1
         buf = C.create_string_buffer(1 << 22)

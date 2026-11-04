@@ -1,4 +1,4 @@
-//! Локальный HTTP-сервер (только std): отдаёт 3D-интерфейс и API ко всем симуляциям.
+//! Local HTTP server (std only): serves the 3D interface and the API for all simulations.
 //! `worldsim serve --port 8080` → http://localhost:8080
 
 use crate::ballistics::{self, Launch, Options, Projectile};
@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 const INDEX: &str = include_str!("../web/index.html");
 const MISSION_EXAMPLE: &str = include_str!("../missions/lunar_lander.json");
 
-/// Каталоги читаются с диска: ./data или папка проекта. Собрать: tools/fetch_data.sh
+/// Catalogs are read from disk: ./data or the project folder. Build: tools/fetch_data.sh
 fn data_file(name: &str) -> Option<Vec<u8>> {
     let candidates = [std::path::PathBuf::from("data").join(name), std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data").join(name)];
     candidates.iter().find_map(|p| std::fs::read(p).ok())
@@ -31,7 +31,7 @@ fn data_file(name: &str) -> Option<Vec<u8>> {
 fn data_resp(name: &str) -> Resp {
     match data_file(name) {
         Some(b) => Resp { status: 200, ctype: "application/json", body: b, headers: vec![] },
-        None => Resp::err(404, "каталоги не скачаны: выполните ./tools/fetch_data.sh в папке проекта"),
+        None => Resp::err(404, "catalogs not downloaded: run ./tools/fetch_data.sh in the project folder"),
     }
 }
 
@@ -44,11 +44,11 @@ enum Sim {
 
 struct Slot { sim: Arc<Mutex<Sim>>, last_used: u64, is_env: bool }
 
-/// Сколько сессий держим: среды лёгкие и нужны сотнями, тяжёлые симуляции — десятками.
+/// How many sessions to keep: environments are light and needed by the hundred, heavy simulations by the dozen.
 const MAX_ENV_SESSIONS: usize = 1024;
 const MAX_OTHER_SESSIONS: usize = 64;
 
-/// Настройки сервера.
+/// Server settings.
 #[derive(Clone, Debug)]
 pub struct ServerOpts { pub host: String, pub port: u16, pub open: bool, pub token: Option<String>, pub data_dir: std::path::PathBuf, pub cors: bool, pub log: bool, pub insecure: bool }
 
@@ -59,7 +59,7 @@ const MAX_HEADERS: usize = 100;
 const MAX_ACTIVE_JOBS: usize = 4;
 const MAX_KEPT_JOBS: usize = 200;
 
-/// Фоновая задача.
+/// Background job.
 struct Job { id: String, name: String, spec: String, progress: crate::mission::Progress, state: Mutex<JobState> }
 #[derive(Clone)]
 enum JobState { Running, Done(String), Failed(String), Cancelled }
@@ -75,10 +75,10 @@ struct State {
     heavy: Arc<std::sync::atomic::AtomicUsize>,
 }
 
-/// Сколько тяжёлых синхронных расчётов идёт одновременно: каждый занимает все ядра, а сервер должен отвечать остальным.
+/// How many heavy synchronous calculations run at once: each takes all cores, and the server must still answer others.
 const MAX_HEAVY: usize = 2;
 
-/// Снимает счётчик соединений даже при панике в потоке.
+/// Releases the connection counter even on a thread panic.
 struct ConnGuard(Arc<std::sync::atomic::AtomicUsize>);
 impl Drop for ConnGuard { fn drop(&mut self) { self.0.fetch_sub(1, Ordering::SeqCst); } }
 
@@ -100,11 +100,11 @@ fn is_loopback(host: &str) -> bool { matches!(host, "127.0.0.1" | "localhost" | 
 
 pub fn serve_opts(opts: ServerOpts) -> Result<(), String> {
     if !is_loopback(&opts.host) && opts.token.is_none() && !opts.insecure {
-        return Err(format!("адрес {} виден из сети: задайте токен через WORLDSIM_TOKEN или --token. Запустить без защиты можно только явно: --insecure", opts.host));
+        return Err(format!("address {} is reachable from the network: set a token through WORLDSIM_TOKEN or --token. Running unprotected requires an explicit flag: --insecure", opts.host));
     }
-    let listener = TcpListener::bind((opts.host.as_str(), opts.port)).map_err(|e| format!("порт {}: {e}", opts.port))?;
+    let listener = TcpListener::bind((opts.host.as_str(), opts.port)).map_err(|e| format!("port {}: {e}", opts.port))?;
     let url = format!("http://{}:{}", if is_loopback(&opts.host) { "localhost" } else { &opts.host }, opts.port);
-    println!("worldsim {}: {url}  (Ctrl+C — остановить){}", env!("CARGO_PKG_VERSION"), if opts.token.is_some() { ", нужен токен" } else { "" });
+    println!("worldsim {}: {url}  (Ctrl+C — stop){}", env!("CARGO_PKG_VERSION"), if opts.token.is_some() { ", token required" } else { "" });
     if opts.open {
         let cmd = if cfg!(target_os = "macos") { Some("open") } else if cfg!(target_os = "linux") { Some("xdg-open") } else { None };
         if let Some(c) = cmd { let _ = std::process::Command::new(c).arg(&url).spawn(); }
@@ -125,7 +125,7 @@ pub fn serve_opts(opts: ServerOpts) -> Result<(), String> {
     Ok(())
 }
 
-/// Строка заголовка ограниченной длины: нельзя занять память бесконечной строкой.
+/// Header line of bounded length: an endless line must not take up memory.
 fn read_line_limited(r: &mut BufReader<TcpStream>, out: &mut String) -> std::io::Result<usize> {
     let mut lim = r.by_ref().take(MAX_LINE);
     let mut raw = Vec::new();
@@ -134,7 +134,7 @@ fn read_line_limited(r: &mut BufReader<TcpStream>, out: &mut String) -> std::io:
     Ok(n)
 }
 
-/// Сравнение токена за постоянное время: по времени ответа нельзя подбирать символы.
+/// Constant-time token comparison: response time must not reveal characters.
 fn token_eq(a: &str, b: &str) -> bool {
     if a.len() != b.len() { return false; }
     a.bytes().zip(b.bytes()).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
@@ -159,12 +159,12 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
     stream.set_write_timeout(Some(std::time::Duration::from_secs(60)))?;
     let _ = stream.set_nodelay(true);
     let mut reader = BufReader::new(stream.try_clone()?);
-    // keep-alive: много запросов в одном соединении (важно для обучения агентов)
+    // keep-alive: many requests in one connection (important for agent training)
     loop {
         let mut line = String::new();
         if read_line_limited(&mut reader, &mut line)? == 0 { return Ok(()); }
         if line.trim().is_empty() { continue; }
-        if !line.ends_with('\n') { return send(&mut stream, &st, &Resp::err(431, "слишком длинная строка запроса"), true, false); }
+        if !line.ends_with('\n') { return send(&mut stream, &st, &Resp::err(431, "request line too long"), true, false); }
         let started = std::time::Instant::now();
         let mut content_len = 0usize;
         let mut close = false;
@@ -174,7 +174,7 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
             let mut h = String::new();
             if read_line_limited(&mut reader, &mut h)? == 0 || h == "\r\n" || h == "\n" { break; }
             headers += 1;
-            if headers > MAX_HEADERS || !h.ends_with('\n') { return send(&mut stream, &st, &Resp::err(431, "слишком большие заголовки"), true, false); }
+            if headers > MAX_HEADERS || !h.ends_with('\n') { return send(&mut stream, &st, &Resp::err(431, "headers too large"), true, false); }
             let hl = h.to_ascii_lowercase();
             if let Some(v) = hl.strip_prefix("content-length:") { content_len = v.trim().parse().unwrap_or(usize::MAX); }
             if hl.starts_with("connection:") && hl.contains("close") { close = true; }
@@ -183,11 +183,11 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
             if let Some(v) = hl.strip_prefix("host:") { host = v.trim().to_string(); }
             if let Some(v) = hl.strip_prefix("sec-fetch-site:") { fetch_site = v.trim().to_string(); }
         }
-        // тело больше лимита не читаем и не обрезаем: обрезанное описание миссии дало бы другой результат
+        // a body over the limit is neither read nor truncated: a truncated mission description would give a different result
         if content_len > MAX_BODY {
-            // дочитываем в разумных пределах, иначе клиент получит обрыв вместо понятного ответа
+            // drain within reason, otherwise the client gets a broken connection instead of a clear response
             let _ = std::io::copy(&mut reader.by_ref().take((content_len as u64).min(16 << 20)), &mut std::io::sink());
-            return send(&mut stream, &st, &Resp::err(413, "тело запроса больше 1 МБ"), true, false);
+            return send(&mut stream, &st, &Resp::err(413, "request body over 1 MB"), true, false);
         }
         let mut body = Vec::new();
         if content_len > 0 { body = vec![0; content_len]; reader.read_exact(&mut body)?; }
@@ -197,7 +197,7 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
         let path = path.to_string();
         let mut q = parse_query(query);
-        // POST с телом вида a=1&b=2 (или JSON-массив действия) — для длинных действий
+        // POST with a body of the form a=1&b=2 (or a JSON action array), for long actions
         if method == "POST" && !body.is_empty() {
             let b = String::from_utf8_lossy(&body).to_string();
             let t = b.trim();
@@ -206,21 +206,21 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
             else { q.extend(parse_query(t)); }
         }
         let resp = if !(method == "GET" || method == "POST" || method == "HEAD") {
-            Resp::err(405, "только GET/POST/HEAD")
+            Resp::err(405, "only GET/POST/HEAD")
         } else if let Some(r) = guard(&st, &path, &auth, &origin, &host, &fetch_site) {
             r
         } else if method != "POST" && (path == "/api/mission/run" || path == "/api/jobs/mission" || (path.starts_with("/api/jobs/") && path.ends_with("/cancel"))) {
-            // запуск и отмена меняют состояние: случайная ссылка или предзагрузка не должны их вызывать
-            Resp::err(405, "этот запрос выполняется методом POST")
+            // start and cancel change state: a stray link or prefetch must not trigger them
+            Resp::err(405, "this request uses the method POST")
         } else {
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route(&path, &q, &st))) {
                 Ok(Ok(r)) => r,
                 Ok(Err(e)) => Resp::err(400, &e),
-                Err(_) => Resp::err(500, "внутренняя ошибка симуляции"),
+                Err(_) => Resp::err(500, "internal simulation error"),
             }
         };
         if st.opts.log {
-            // строку запроса не пишем: в параметрах могут быть данные заказчика
+            // the query string is not logged: parameters may contain customer data
             eprintln!("{} {} {} {}b {:.1}ms", method, path, resp.status, resp.body.len(), started.elapsed().as_secs_f64() * 1e3);
         }
         send(&mut stream, &st, &resp, close, method == "HEAD")?;
@@ -228,27 +228,27 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
     }
 }
 
-/// Источник и доступ. None — запрос можно обрабатывать.
+/// Origin and access. None means the request may be processed.
 fn guard(st: &State, path: &str, auth: &str, origin: &str, host: &str, fetch_site: &str) -> Option<Resp> {
     if path == "/healthz" { return None; }
     if !st.opts.cors {
-        // простой GET, например картинка на чужом сайте, приходит без Origin, но с этим заголовком
-        if fetch_site == "cross-site" || fetch_site == "same-site" { return Some(Resp::err(403, "запрос с другого сайта отклонён; разрешить можно ключом --cors")); }
-        // браузер присылает Origin при запросе со страницы: чужому сайту нельзя обращаться к локальному серверу
+        // a simple GET, such as an image on another site, arrives without Origin but with this header
+        if fetch_site == "cross-site" || fetch_site == "same-site" { return Some(Resp::err(403, "cross-site request rejected; can be allowed with the --cors flag")); }
+        // a browser sends Origin for requests from a page: other sites must not reach the local server
         if !origin.is_empty() {
             let o = origin.split("://").nth(1).unwrap_or(origin);
-            if o != host { return Some(Resp::err(403, "запрос с другого сайта отклонён; разрешить можно ключом --cors")); }
+            if o != host { return Some(Resp::err(403, "cross-site request rejected; can be allowed with the --cors flag")); }
         }
-        // без токена отвечаем только на локальные имена: защита от подмены DNS
+        // without a token respond only to local names: protection against DNS rebinding DNS
         if st.opts.token.is_none() && is_loopback(&st.opts.host) {
             let name = if host.starts_with('[') { host.split(']').next().map(|x| format!("{x}]")).unwrap_or_default() } else { host.split(':').next().unwrap_or("").to_string() };
-            if !name.is_empty() && !is_loopback(&name) { return Some(Resp::err(403, "неизвестное имя сервера")); }
+            if !name.is_empty() && !is_loopback(&name) { return Some(Resp::err(403, "unknown server name")); }
         }
     }
     if let Some(t) = &st.opts.token {
-        if path == "/" || path == "/index.html" { return None; } // страница без данных: токен спрашивает она сама
+        if path == "/" || path == "/index.html" { return None; } // page without data: it asks for the token itself
         let given = auth.strip_prefix("Bearer ").unwrap_or("");
-        if !token_eq(given, t) { return Some(Resp::err(401, "нужен токен: Authorization: Bearer <токен>")); }
+        if !token_eq(given, t) { return Some(Resp::err(401, "token required: Authorization: Bearer <token>")); }
     }
     None
 }
@@ -284,7 +284,7 @@ fn decode(s: &str) -> String {
 fn f(q: &Q, k: &str, d: f64) -> f64 { q.get(k).and_then(|v| v.parse().ok()).unwrap_or(d) }
 fn s<'a>(q: &'a Q, k: &str, d: &'a str) -> &'a str { q.get(k).map(|v| v.as_str()).filter(|v| !v.is_empty()).unwrap_or(d) }
 
-/// Допустимые диапазоны числовых параметров: мусор должен давать понятную ошибку, а не NaN в ответе и не молчаливую подмену.
+/// Allowed ranges of numeric parameters: garbage must give a clear error, not NaN in the response or a silent substitution.
 const PARAM_RANGES: &[(&str, f64, f64)] = &[
     ("id", 0.0, 1e15), ("seed", 0.0, 1e15), ("n", 0.0, 1e9), ("steps", 0.0, 1e6), ("repeat", 1.0, 1e6), ("planet", 0.0, 1e6),
     ("gravity_scale", 1e-15, 100.0), ("distance_au", 1e-6, 1e6), ("solar", 0.0, 100.0), ("tau", 0.0, 100.0), ("obliquity", -180.0, 180.0),
@@ -298,14 +298,14 @@ const PARAM_RANGES: &[(&str, f64, f64)] = &[
 fn check_params(q: &Q) -> Result<(), String> {
     for (k, lo, hi) in PARAM_RANGES {
         let Some(v) = q.get(*k).filter(|v| !v.is_empty()) else { continue };
-        let x: f64 = v.parse().map_err(|_| format!("{k}: ожидалось число, получено '{v}'"))?;
-        if !x.is_finite() || x < *lo || x > *hi { return Err(format!("{k} = {v} вне диапазона [{lo}, {hi}]")); }
+        let x: f64 = v.parse().map_err(|_| format!("{k}: expected a number, got '{v}'"))?;
+        if !x.is_finite() || x < *lo || x > *hi { return Err(format!("{k} = {v} out of range [{lo}, {hi}]")); }
     }
     Ok(())
 }
 
 fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
-    // у лаборатории и чёрных дыр свои диапазоны: там `a` — спин и ширина барьера, а не полуось орбиты
+    // the laboratory and black holes have their own ranges: there `a` — is spin and barrier width, not an orbital semi-major axis
     if !path.starts_with("/api/lab/") && !path.starts_with("/api/blackhole/") && !path.starts_with("/api/runs") { check_params(q)?; }
     Ok(match path {
         "/" | "/index.html" => Resp { status: 200, ctype: "text/html; charset=utf-8", body: INDEX.as_bytes().to_vec(),
@@ -349,8 +349,8 @@ fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
             _ => Resp::json(J::parse(MISSION_EXAMPLE)?),
         },
         "/api/mission/run" => {
-            // описание приходит телом POST как JSON; handle() кладёт его в spec
-            let spec = q.get("spec").ok_or("нет описания миссии")?;
+            // the description arrives as a POST JSON body; handle() puts it into spec
+            let spec = q.get("spec").ok_or("no mission description")?;
             heavy(st, || {
                 let report = crate::mission::run(&crate::mission::MissionSpec::parse(spec)?, std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1))?;
                 let md = crate::mission::markdown(&report);
@@ -364,11 +364,11 @@ fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
         "/api/env/fork" => env_fork(q, st)?,
         "/api/env/close" => env_close(q, st)?,
         "/api/validate" => heavy(st, || Ok(Resp::json(J::Arr(validate::all().into_iter().map(|c| J::obj().set("law", c.law).set("test", c.test).set("value", c.value).set("expected", c.expected).set("pass", c.pass)).collect()))))?,
-        _ => Resp::err(404, "нет такого пути"),
+        _ => Resp::err(404, "no such path"),
     })
 }
 
-// ------------------------------------------------------------------ миры
+// ------------------------------------------------------------------ worlds
 
 fn presets_json() -> J {
     let strs = |v: &[&str]| J::Arr(v.iter().map(|x| J::from(*x)).collect());
@@ -382,7 +382,7 @@ fn star_from(q: &Q) -> Result<Star, String> {
         let ts = f(q, "ts", 5772.0);
         let rs = f(q, "rs", 1.0);
         let ms = f(q, "ms", 1.0);
-        Ok(Star { name: s(q, "star_name", "звезда").to_string(), mass: ms, radius: rs, luminosity: rs * rs * (ts / 5772.0).powi(4), teff: ts })
+        Ok(Star { name: s(q, "star_name", "star").to_string(), mass: ms, radius: rs, luminosity: rs * rs * (ts / 5772.0).powi(4), teff: ts })
     } else {
         stars::star(s(q, "star", "sun"))
     }
@@ -398,7 +398,7 @@ fn system_from(q: &Q) -> Result<StarSystem, String> {
 }
 
 fn regenerate_with(star: Star, seed: u64) -> Result<StarSystem, String> {
-    // генерация с произвольной звездой: передаём её через пресет-строку ms:<масса>, затем подменяем измеренными параметрами
+    // generation with an arbitrary star: passed through a preset string ms:<mass>, then replaced with measured parameters
     let mut sys = StarSystem::generate(seed, Some(&format!("ms:{}", star.mass)))?;
     sys.star = star;
     sys.hz = sys.star.habitable_zone();
@@ -410,12 +410,12 @@ fn regenerate_with(star: Star, seed: u64) -> Result<StarSystem, String> {
     Ok(sys)
 }
 
-/// Мир либо из пресетов (physics/atmosphere/surface), либо из параметров планеты (m, r, a, + звезда).
+/// World either from presets (physics/atmosphere/surface) or from planet parameters (m, r, a, + star).
 fn world_from(q: &Q) -> Result<World, String> {
     if q.contains_key("m") {
         let star = star_from(q)?;
         let r = q.get("r").and_then(|v| v.parse().ok());
-        let sys = StarSystem::single(star, f(q, "m", 1.0), r, f(q, "a", 1.0), f(q, "e", 0.0), s(q, "name", "планета"));
+        let sys = StarSystem::single(star, f(q, "m", 1.0), r, f(q, "a", 1.0), f(q, "e", 0.0), s(q, "name", "planet"));
         return sys.world(0);
     }
     if q.contains_key("seed") && q.contains_key("planet") {
@@ -441,7 +441,7 @@ fn world_json(w: &World) -> Result<J, String> {
         .set("distance_au", w.star_distance / AU).set("insolation", w.insolation()).set("albedo", p.bond_albedo)
         .set("t_eq", w.equilibrium_temperature()).set("t_mean", w.mean_surface_temperature()).set("tau", w.greenhouse_tau())
         .set("has_surface", p.has_surface).set("year_days", climate::orbital_period(w) / DAY)
-        // приливный захват: у таких миров sol_day — условное «очень много», показывать его как сутки нельзя
+        // tidal lock: such worlds have a nominal “very long” sol_day, which must not be shown as a day length
         .set("tidally_locked", p.solar_day > 100.0 * climate::orbital_period(w));
     j = match &w.atmosphere {
         None => j.set("atmosphere", J::Null),
@@ -503,7 +503,7 @@ fn throw_json(q: &Q) -> Result<J, String> {
         .set("landed", r.landed).set("energy_error", r.energy_error).set("dissipated", r.dissipated_energy).set("mass", p.mass))
 }
 
-// ------------------------------------------------------------------ системы и N тел
+// ------------------------------------------------------------------ systems and N bodies
 
 fn star_json(st: &Star) -> J {
     let rgb = st.rgb();
@@ -526,7 +526,7 @@ fn store(st: &State, sim: Sim) -> u64 {
     let is_env = matches!(sim, Sim::Env(_));
     let cap = if is_env { MAX_ENV_SESSIONS } else { MAX_OTHER_SESSIONS };
     let mut m = st.sims.lock().unwrap_or_else(|e| e.into_inner());
-    // вытесняем самую давно не использованную сессию того же рода, а не самую старую
+    // evict the least recently used session of the same kind, not the oldest
     if m.values().filter(|s| s.is_env == is_env).count() >= cap {
         if let Some(k) = m.iter().filter(|(_, s)| s.is_env == is_env).min_by_key(|(_, s)| s.last_used).map(|(k, _)| *k) { m.remove(&k); }
     }
@@ -537,7 +537,7 @@ fn store(st: &State, sim: Sim) -> u64 {
 fn get(st: &State, q: &Q) -> Result<Arc<Mutex<Sim>>, String> {
     let id = f(q, "id", 0.0) as u64;
     let mut m = st.sims.lock().unwrap_or_else(|e| e.into_inner());
-    let slot = m.get_mut(&id).ok_or_else(|| "сессия симуляции не найдена — создайте заново".to_string())?;
+    let slot = m.get_mut(&id).ok_or_else(|| "simulation session not found, create it again".to_string())?;
     slot.last_used = st.tick.fetch_add(1, Ordering::Relaxed);
     Ok(slot.sim.clone())
 }
@@ -550,8 +550,8 @@ fn nbody_new(q: &Q, st: &State) -> Result<Resp, String> {
     let (mut sim, meta) = if kind == "solar" {
         let names: Vec<String> = s(q, "bodies", "sun,mercury,venus,earth,moon,mars,jupiter").split(',').map(|x| x.trim().to_string()).collect();
         let refs: Vec<&str> = names.iter().map(|x| x.as_str()).collect();
-        // два одинаковых тела оказались бы в одной точке: сила бесконечна
-        if let Some(d) = names.iter().enumerate().find(|(i, n)| names[..*i].contains(n)) { return Err(format!("тело '{}' указано дважды", d.1)); }
+        // two identical bodies would be at one point: infinite force
+        if let Some(d) = names.iter().enumerate().find(|(i, n)| names[..*i].contains(n)) { return Err(format!("body '{}' specified twice", d.1)); }
         let sim = NBody::from_presets(&refs)?;
         let meta = J::Arr(names.iter().map(|n| {
             let p = presets::physics(n).unwrap();
@@ -579,7 +579,7 @@ fn nbody_new(q: &Q, st: &State) -> Result<Resp, String> {
 fn nbody_step(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
     let mut g = h.lock().unwrap_or_else(|e| e.into_inner());
-    let Sim::NBody { sim, e0 } = &mut *g else { return Err("не N-тел сессия".into()) };
+    let Sim::NBody { sim, e0 } = &mut *g else { return Err("not an N-body session".into()) };
     let total = f(q, "days", 1.0).clamp(0.0, 3650.0) * DAY;
     let dt = (f(q, "dt_hours", 2.0) * 3600.0).clamp(60.0, 30.0 * DAY);
     let n = (total / dt).ceil().max(1.0) as usize;
@@ -589,7 +589,7 @@ fn nbody_step(q: &Q, st: &State) -> Result<Resp, String> {
     Ok(Resp::json(J::obj().set("t_days", sim.t / DAY).set("pos", pos).set("energy_error", err)))
 }
 
-// ------------------------------------------------------------------ галактики
+// ------------------------------------------------------------------ galaxies
 
 fn f32_bytes(it: impl Iterator<Item = f64>) -> Vec<u8> { it.flat_map(|x| (x as f32).to_le_bytes()).collect() }
 
@@ -606,7 +606,7 @@ fn galaxy_new(q: &Q, st: &State) -> Result<Resp, String> {
 fn galaxy_step(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
     let mut g = h.lock().unwrap_or_else(|e| e.into_inner());
-    let Sim::Galaxy(gal) = &mut *g else { return Err("не галактическая сессия".into()) };
+    let Sim::Galaxy(gal) = &mut *g else { return Err("not a galaxy session".into()) };
     let steps = (f(q, "steps", 1.0) as usize).min(50);
     let dt = f(q, "dt", 0.002);
     for _ in 0..steps { gal.step(dt); }
@@ -617,14 +617,14 @@ fn galaxy_step(q: &Q, st: &State) -> Result<Resp, String> {
 fn galaxy_rotation(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
     let g = h.lock().unwrap_or_else(|e| e.into_inner());
-    let Sim::Galaxy(gal) = &*g else { return Err("не галактическая сессия".into()) };
+    let Sim::Galaxy(gal) = &*g else { return Err("not a galaxy session".into()) };
     let rc = gal.rotation_curve(gal.rotation_range(), 25);
     let (k, w) = gal.energy();
     Ok(Resp::json(J::obj().set("r", rc.iter().map(|x| x.0).collect::<Vec<_>>()).set("v", rc.iter().map(|x| x.1).collect::<Vec<_>>())
         .set("virial", 2.0 * k / w.abs()).set("energy", k + w)))
 }
 
-// ------------------------------------------------------------------ космология
+// ------------------------------------------------------------------ cosmology
 
 fn cosmo_new(q: &Q, st: &State) -> Result<Resp, String> {
     let c = Cosmology::preset(s(q, "preset", "planck2018"))?;
@@ -639,12 +639,12 @@ fn cosmo_new(q: &Q, st: &State) -> Result<Resp, String> {
 fn cosmo_step(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
     let mut g = h.lock().unwrap_or_else(|e| e.into_inner());
-    let Sim::Pm(pm) = &mut *g else { return Err("не космологическая сессия".into()) };
+    let Sim::Pm(pm) = &mut *g else { return Err("not a cosmology session".into()) };
     let da = f(q, "da", 0.01).clamp(0.0, 0.05);
     let steps = (f(q, "steps", 1.0) as usize).clamp(0, 10);
     for _ in 0..steps { if pm.a < 1.0 { pm.step(da.min(1.0 - pm.a).max(1e-6)); } }
     let rms = pm.delta_rms();
-    // плотность в ячейке частицы — для раскраски
+    // density in the particle cell, for coloring
     let n = pm.n;
     let cell = pm.box_size / n as f64;
     let half = pm.box_size / 2.0;
@@ -664,7 +664,7 @@ fn cosmo_step(q: &Q, st: &State) -> Result<Resp, String> {
 fn cosmo_power(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
     let mut g = h.lock().unwrap_or_else(|e| e.into_inner());
-    let Sim::Pm(pm) = &mut *g else { return Err("не космологическая сессия".into()) };
+    let Sim::Pm(pm) = &mut *g else { return Err("not a cosmology session".into()) };
     let p = pm.measure_power(16);
     let c = pm.cosmo;
     let d2 = c.growth(pm.a).powi(2);
@@ -691,7 +691,7 @@ fn cosmo_background() -> J {
 }
 
 
-// ------------------------------------------------------------------ среда для агентов
+// ------------------------------------------------------------------ agent environment
 
 use crate::env::{Env, EnvConfig};
 
@@ -722,11 +722,11 @@ fn env_make(q: &Q, st: &State) -> Result<Resp, String> {
     Ok(Resp::json(meta.set("id", id)))
 }
 
-/// Тяжёлый синхронный расчёт с ограничением числа одновременных.
+/// Heavy synchronous calculation with a limit on concurrent ones.
 fn heavy(st: &State, f: impl FnOnce() -> Result<Resp, String>) -> Result<Resp, String> {
     if st.heavy.fetch_add(1, Ordering::SeqCst) >= MAX_HEAVY {
         st.heavy.fetch_sub(1, Ordering::SeqCst);
-        return Ok(Resp::err(429, "сервер занят тяжёлыми расчётами, повторите запрос позже"));
+        return Ok(Resp::err(429, "server is busy with heavy calculations, retry later"));
     }
     struct Release<'a>(&'a std::sync::atomic::AtomicUsize);
     impl Drop for Release<'_> { fn drop(&mut self) { self.0.fetch_sub(1, Ordering::SeqCst); } }
@@ -748,12 +748,12 @@ fn job_json(j: &Job) -> J {
 }
 
 fn job_start(q: &Q, st: &State) -> Result<Resp, String> {
-    let text = q.get("spec").ok_or("нет описания миссии")?.clone();
+    let text = q.get("spec").ok_or("no mission description")?.clone();
     let spec = crate::mission::MissionSpec::parse(&text)?;
     let mut jobs = st.jobs.lock().unwrap_or_else(|e| e.into_inner());
     let running = jobs.iter().filter(|j| matches!(*j.state.lock().unwrap_or_else(|e| e.into_inner()), JobState::Running)).count();
-    if running >= MAX_ACTIVE_JOBS { return Ok(Resp::err(429, &format!("слишком много задач: выполняется {running}, дождитесь завершения"))); }
-    // из истории уходит самая старая завершённая задача, выполняющуюся терять нельзя
+    if running >= MAX_ACTIVE_JOBS { return Ok(Resp::err(429, &format!("too many jobs: running {running}, wait for them to finish"))); }
+    // the oldest finished job leaves the history; a running one must not be lost
     if jobs.len() >= MAX_KEPT_JOBS {
         if let Some(i) = jobs.iter().position(|j| !matches!(*j.state.lock().unwrap_or_else(|e| e.into_inner()), JobState::Running)) { jobs.remove(i); }
     }
@@ -764,7 +764,7 @@ fn job_start(q: &Q, st: &State) -> Result<Resp, String> {
     let root = st.opts.data_dir.clone();
     std::thread::spawn(move || {
         let threads = std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1);
-        // паника внутри расчёта не должна оставить задачу в состоянии «идёт» навсегда
+        // a panic inside a calculation must not leave a job “running” forever
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::mission::run_with(&spec, threads, &job.progress)));
         let next = match result {
             Ok(Ok(r)) => {
@@ -772,7 +772,7 @@ fn job_start(q: &Q, st: &State) -> Result<Resp, String> {
             }
             Ok(Err(_)) if job.progress.cancel.load(Ordering::Relaxed) => JobState::Cancelled,
             Ok(Err(e)) => JobState::Failed(e),
-            Err(_) => JobState::Failed("внутренняя ошибка расчёта".into()),
+            Err(_) => JobState::Failed("internal calculation error".into()),
         };
         *job.state.lock().unwrap_or_else(|e| e.into_inner()) = next;
     });
@@ -781,7 +781,7 @@ fn job_start(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn job_route(rest: &str, st: &State) -> Result<Resp, String> {
     let (id, cancel) = match rest.strip_suffix("/cancel") { Some(x) => (x, true), None => (rest, false) };
-    let Some(job) = st.jobs.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|j| j.id == id).cloned() else { return Ok(Resp::err(404, &format!("задача {id} не найдена"))) };
+    let Some(job) = st.jobs.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|j| j.id == id).cloned() else { return Ok(Resp::err(404, &format!("task {id} not found"))) };
     if cancel { job.progress.cancel.store(true, Ordering::Relaxed); }
     Ok(Resp::json(job_json(&job)))
 }
@@ -802,7 +802,7 @@ fn bh_render(q: &Q) -> Result<Resp, String> {
     Ok(Resp::bin(crate::blackhole::render(&o, threads), vec![("X-Width".into(), w.to_string()), ("X-Height".into(), h.to_string())]))
 }
 
-/// Описание всех параметров для интерфейса и клиентов: форму можно построить без знания о конкретных полях.
+/// Description of all parameters for the interface and clients: a form can be built with no knowledge of specific fields.
 fn param_schema() -> J {
     J::Arr(crate::env::PARAMS.iter().map(|d| {
         let tasks: Vec<String> = [(1u8, "lander"), (2, "drone"), (4, "rover")].iter().filter(|(b, _)| d.tasks & b != 0).map(|(_, n)| n.to_string()).collect();
@@ -816,7 +816,7 @@ fn str_list(v: &[&str]) -> J { J::Arr(v.iter().map(|x| J::from(*x)).collect()) }
 fn with_env<T>(q: &Q, st: &State, f: impl FnOnce(&mut Env) -> Result<T, String>) -> Result<T, String> {
     let h = get(st, q)?;
     let mut g = h.lock().unwrap_or_else(|e| e.into_inner());
-    match &mut *g { Sim::Env(e) => f(e), _ => Err("не сессия среды".into()) }
+    match &mut *g { Sim::Env(e) => f(e), _ => Err("not an environment session".into()) }
 }
 
 fn info_json(e: &Env) -> J {
@@ -849,7 +849,7 @@ fn env_step(q: &Q, st: &State) -> Result<Resp, String> {
                 "random" => { let (lo, hi) = e.act_bounds(); let mut r = crate::rng::Rng::new(e.steps as u64 * 7919 + e.seed); lo.iter().zip(&hi).map(|(l, h)| r.uniform(*l, *h)).collect() }
                 _ => action.clone(),
             };
-            if a.len() != e.act_names().len() { return Err(format!("действие должно иметь {} чисел: {:?}", e.act_names().len(), e.act_names())); }
+            if a.len() != e.act_names().len() { return Err(format!("an action must have {} numbers: {:?}", e.act_names().len(), e.act_names())); }
             res = e.step(&a);
             total += res.1;
             if want_traj { traj.push((a, res.0.clone(), res.1)); }
@@ -857,7 +857,7 @@ fn env_step(q: &Q, st: &State) -> Result<Resp, String> {
         }
         let mut j = J::obj().set("obs", res.0).set("reward", total).set("terminated", res.2).set("truncated", res.3).set("info", info_json(e));
         if want_text { j = j.set("text", e.describe()); }
-        // при repeat > 1 без этого промежуточные переходы теряются
+        // with repeat > 1 without this intermediate transitions are lost
         if want_traj {
             j = j.set("traj_actions", J::Arr(traj.iter().map(|t| J::from(t.0.clone())).collect()))
                 .set("traj_obs", J::Arr(traj.iter().map(|t| J::from(t.1.clone())).collect()))
@@ -906,7 +906,7 @@ fn env_camera(q: &Q, st: &State) -> Result<Resp, String> {
     with_env(q, st, |e| Ok(Resp::json(J::obj().set("w", w).set("h", h).set("depth", e.depth_camera(w, h, fov)))))
 }
 
-/// Копия среды: то же состояние и тот же ГПСЧ. Можно проиграть разные действия из одной точки и сравнить с «воображением» модели.
+/// Environment copy: same state and same PRNG. Different actions can be played from one point and compared with the model “imagination”.
 fn env_fork(q: &Q, st: &State) -> Result<Resp, String> {
     let copy = with_env(q, st, |e| Ok(Box::new(e.clone())))?;
     let id = store(st, Sim::Env(copy));

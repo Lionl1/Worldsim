@@ -1,105 +1,121 @@
-# Mission Lab: продукт для космических компаний
+# Mission Lab: a product for space companies
 
-Рабочий документ: на каких данных основан продукт, что он делает и чего пока не умеет. Состояние на ноябрь 2026.
+Working document: what data the product rests on, what it does and what it cannot do yet. Status as of November 2026.
 
-## Вывод из исследования
+## Research findings
 
-Три области развиваются отдельно, и между ними есть разрыв.
+Three areas develop separately, with a gap between them.
 
-**1. World models научились проверять на физику, но не в космосе.**
-[MiraBench](https://arxiv.org/abs/2605.29360) (май 2026) делит надёжность на три ступени: физическая правдоподобность, следование действию и обнаружение оптимизма. Авторы сообщают, что визуальное качество плохо предсказывает следование действию, а оптимистичное смещение распространено. [CrashTwin](https://arxiv.org/abs/2606.28757) (июнь 2026) проверяет сохранение импульса и энергии и показывает, что высокое качество картинки может скрывать физические нарушения. [Обзор](https://arxiv.org/abs/2606.00133) (май 2026) среди нерешённых проблем называет накопление ошибок, перенос из симуляции в реальность и разрозненность оценки.
+**1. World models have learned to be checked for physics, but not in space.**
+[MiraBench](https://arxiv.org/abs/2605.29360) (May 2026) splits reliability into three levels: physical plausibility, action following and optimism detection. The authors report that visual quality predicts action following poorly and that optimism bias is common. [CrashTwin](https://arxiv.org/abs/2606.28757) (June 2026) checks momentum and energy conservation and shows that high image quality can hide physical violations. A [survey](https://arxiv.org/abs/2606.00133) (May 2026) names error accumulation, sim-to-real transfer and fragmented evaluation among the open problems.
 
-**2. Структура модели важнее для устойчивости, чем её размер.**
-[Работа о сохранении и факторизации](https://www.alphaxiv.org/abs/2609.19674) (сентябрь 2026) сообщает, что устойчивость на длинном горизонте и перенос на изменённые законы обеспечиваются разными структурными решениями и их можно задавать независимо. [Определение и план развития](https://arxiv.org/abs/2607.06401) (июль 2026) подчёркивает: самые важные события в физических системах, такие как аварии и редкие отказы, могут вообще отсутствовать в обучающих данных. Поэтому нужен симулятор, который умеет их порождать.
+**2. Model structure matters more for stability than its size.**
+[A paper on conservation and factorization](https://www.alphaxiv.org/abs/2609.19674) (September 2026) reports that long-horizon stability and transfer to changed laws come from different structural choices, which can be set independently. [A definition and roadmap](https://arxiv.org/abs/2607.06401) (July 2026) stresses that the most important events in physical systems, such as crashes and rare failures, may be absent from training data altogether. So a simulator that can generate them is needed.
 
-**3. В космосе world models появляются, а среды заточены под обучение.**
-[DreamLander](https://arc.aiaa.org/doi/10.2514/6.2026-1035) (AIAA 2026) применяет DreamerV3 к посадке с шестью степенями свободы, пока в симуляции. [Reward-Free Continual Adaptation](https://arxiv.org/abs/2608.23452) (август 2026) использует латентные world models для адаптации космических роботов после поломок. [Space Robotics Bench](https://arxiv.org/abs/2509.23328) даёт процедурные среды на Isaac Lab. [Обзор симуляторов](https://arxiv.org/html/2609.34743v1) (сентябрь 2026) просит общие определения задач и ясные процедуры оценки, а также явный учёт связи, вычислений и энергии.
+**3. World models are appearing in space, while environments are tailored to training.**
+[DreamLander](https://arc.aiaa.org/doi/10.2514/6.2026-1035) (AIAA 2026) applies DreamerV3 to six-degree-of-freedom landing, so far in simulation. [Reward-Free Continual Adaptation](https://arxiv.org/abs/2608.23452) (August 2026) uses latent world models to adapt space robots after failures. [Space Robotics Bench](https://arxiv.org/abs/2509.23328) offers procedural environments on Isaac Lab. A [simulator survey](https://arxiv.org/html/2609.34743v1) (September 2026) asks for shared task definitions and clear evaluation procedures, as well as explicit modeling of communications, computing and power.
 
-**4. Космическая инженерия живёт требованиями.**
-[В анализе посадки в NASA](https://ntrs.nasa.gov/citations/20240006746) статистику Монте-Карло показывают картами показателей (scorecards), а главные факторы ищут перебором по одному (OVAT). [Справочник ECSS-E-HB-40-02A](https://ecss.nl/home/ecss-e-hb-40-02a-15-november-2024/) (2024) описывает, как строить и проверять функции машинного обучения, а [проект ESA](https://vnv-web-1b010b.io.esa.int/) с KP Labs и Airbus разрабатывает план и инструменты такой проверки.
+**4. Space engineering lives by requirements.**
+[In NASA landing analysis](https://ntrs.nasa.gov/citations/20240006746) Monte Carlo statistics are shown as scorecards, and main drivers are found by one-at-a-time sweeps (OVAT). The [ECSS-E-HB-40-02A handbook](https://ecss.nl/home/ecss-e-hb-40-02a-15-november-2024/) (2024) describes how to build and verify machine learning functions, and an [ESA project](https://vnv-web-1b010b.io.esa.int/) with KP Labs and Airbus is developing a plan and tools for such verification.
 
-**Разрыв:** инженер миссии спрашивает «выполняются ли требования и что купить», исследователь отвечает графиком потерь. Инструмента, который на одном описании миссии проводит и анализ, и оценку модели, мы в этом поиске не нашли. Это наблюдение по публичным источникам, а не доказанное отсутствие конкурентов.
+**The gap:** a mission engineer asks “are the requirements met and what should we buy”, a researcher answers with a loss curve. We found no tool in this search that performs both the analysis and the model evaluation on one mission description. This is an observation from public sources, not proof that no competitors exist.
 
-## Что делает продукт
+## What the product does
 
-Описание миссии (`missions/*.json`) содержит аппарат, разбросы, требования и варианты технологий. Дальше три шага.
+Mission description (`missions/*.json`) contains the vehicle, dispersions, requirements and technology options. Then three steps.
 
-### 1. Выполнима ли миссия
+### 1. Is the mission feasible
 
-Карта требований с интервалом 95%: **выполнено**, **не выполнено** или **данных мало**. Последний вердикт важен: при малом числе запусков инструмент не даёт ложной уверенности.
+Requirements scorecard with a 95% interval: **met**, **not met** or **not enough data**. The last verdict matters: with few runs the tool gives no false confidence.
 
-### 2. Что её ломает и что купить
+### 2. What breaks it and what to buy
 
-- **Виды отказов:** не просто «неудача», а большая скорость касания, опрокидывание и так далее.
-- **Главные факторы:** каждый разброс включается отдельно.
-- **Ценность технологий:** парное сравнение на тех же условиях полёта показывает, сколько запусков технология спасла и сколько испортила, и сколько это стоит по массе.
+- **Failure modes:** not just “failure”, but high touchdown speed, tip-over and so on.
+- **Main drivers:** each dispersion is enabled separately.
+- **Value of technologies:** a paired comparison under the same flight conditions shows how many runs a technology saved and how many it spoiled, and what that costs in mass.
 
-### 3. Можно ли доверять обученной модели
+### 3. Can a trained model be trusted
 
-Лестница квалификации `python/worldsim/qualify.py`:
+Qualification ladder `python/worldsim/qualify.py`:
 
-| Ступень | Вопрос | Как измеряется |
+| Level | Question | How it is measured |
 |---|---|---|
-| L1 Точность | Сколько секунд предсказанию можно верить? | Горизонт доверия при допусках миссии |
-| L2 Физика | Нарушает ли модель законы в воображении? | Сравнение с уровнем самого симулятора |
-| L3 Отклик | Верно ли реагирует на действие? | R² эффекта действия против истинных ветвлений |
-| L4 Оптимизм | Видит ли аварию заранее? | Доля пропущенных аварий и ложных тревог |
-| L5 Границы | Где модель применима? | Те же ступени в мирах, которых не было в обучении |
+| L1 Accuracy | How many seconds can a prediction be trusted? | Trust horizon under mission tolerances |
+| L2 Physics | Does the model violate laws in imagination? | Comparison with the level of the simulator itself |
+| L3 Response | Does it respond to actions correctly? | R² of the action effect against true branches |
+| L4 Optimism | Does it see a crash in advance? | Share of missed crashes and false alarms |
+| L5 Boundaries | Where does the model apply? | The same levels in worlds absent from training |
 
-### В чём отличие
+### What sets it apart
 
-1. **Истинные контрфактические данные.** Среду можно скопировать в любой момент и проиграть из этой точки разные действия. На реальном видео такого ответа не существует.
-2. **Смешанные миры как проверка переноса.** Гравитация Марса с воздухом Земли нигде не встречается, поэтому запомнить её модель не может.
-3. **Один язык с инженером.** Метрики модели выражены в допусках миссии.
-4. **Лёгкость.** Rust без зависимостей, расчёт на ноутбуке за секунды.
+1. **True counterfactual data.** The environment can be copied at any moment and different actions played from that point. Real video has no such answer.
+2. **Mixed worlds as a transfer check.** Mars gravity with Earth air occurs nowhere, so a model cannot memorize it.
+3. **One language with the engineer.** Model metrics are expressed in mission tolerances.
+4. **Lightweight.** Rust with no dependencies, calculations on a laptop in seconds.
 
-## Форматы
+## Formats
 
-| Что | Формат | Почему |
+| What | Format | Why |
 |---|---|---|
-| Описание миссии | JSON | Можно хранить в git и сравнивать версии |
-| Переходы | `.npy` + `meta.json` | Читается numpy без зависимостей, большие файлы открываются через memmap |
-| Ветвления | `cf_*.npy` | Истинный ответ на разные действия из одной точки |
-| Среда в Python | `VectorEnv` через ctypes | Без HTTP и без дополнительных пакетов |
-| Интерфейс модели | `init(obs, params)`, `step(state, action)` | Состояние непрозрачно: подойдут RSSM, трансформер, диффузия или физическая модель |
-| Отчёты | `.md` и `.json` | Для обзора проекта и для автоматизации |
+| Mission description | JSON | Can be stored in git and versions compared |
+| Transitions | `.npy` + `meta.json` | Readable by numpy with no dependencies, large files open through memmap |
+| Branches | `cf_*.npy` | True response to different actions from one point |
+| Environment in Python | `VectorEnv` through ctypes | No HTTP and no extra packages |
+| Model interface | `init(obs, params)`, `step(state, action)` | The state is opaque: RSSM, transformer, diffusion or physical model all fit |
+| Reports | `.md` and `.json` | For project review and for automation |
 
-Модели без декодера, такие как JEPA, не выдают наблюдения. Для них нужна обученная поверх латента проба в каналы сенсоров. Этот случай описан в интерфейсе, но на настоящей JEPA ещё не проверен.
+Models without a decoder, such as JEPA, do not output observations. They need a probe trained on top of the latent into sensor channels. This case is described in the interface, but has not been checked on a real JEPA.
 
-Экспорт в [LeRobotDataset v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3): Parquet и метаданные, без камеры. Загрузка проверена на lerobot 0.6.1.
+Export to [LeRobotDataset v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3): Parquet and metadata, no camera. Loading verified on lerobot 0.6.1.
 
-## Проверенные цифры
+## Verified figures
 
-Замеры на MacBook (8 ядер), один seed. Числа показывают порядок и зависят от задачи и машины.
+Measured on a MacBook (8 cores), one seed. The numbers show the order of magnitude and depend on the task and machine.
 
-| Что | Результат |
+| What | Result |
 |---|---|
-| Сбор переходов, `collect`, 8 потоков | 280–425 тыс. шагов/с |
-| Векторная среда из Python, 64 среды | 57 тыс. шагов/с (1 поток), 178 тыс. (8 потоков) |
-| HTTP API, клиент на Python | около 11 тыс. шагов/с на соединение |
-| Базовая MLP, посадка на Луне | горизонт доверия 0,50 с, пропущено 94% аварий |
-| Пример `lunar_lander`, 300 запусков | 89,3% успеха, 0 из 4 требований; лучшая технология: двигатель 7 кН, +6,0 ± 3,2 п.п. |
+| Transition collection, `collect`, 8 threads | lander 271 thousand steps/s (219–252 thousand with branches), rover 297 thousand, drone 860 thousand |
+| Vector environment from Python, 64 environments | 78 thousand steps/s (1 thread), 184 thousand (8 threads) |
+| HTTP API, Python client | about 17 thousand steps/s per connection |
+| Baseline MLP, Moon landing | trust horizon 0.46 s, 94% of crashes missed, 14% false alarms |
+| Example `lunar_lander`, 300 runs | 89.3% success, 0 of 4 requirements; best technology: 7 kN engine, +6.0 ± 3.2 pp. |
 
-Низкий результат базовой MLP ожидаем: это простейшая модель для сравнения. Инструмент показывает, где она ломается, несмотря на R² около 0,99 на одном шаге.
+The low result of the baseline MLP is expected: it is the simplest model for comparison. The tool shows where it breaks, despite a median one-step R² above 0.99 across channels.
 
-## Ограничения
+## Limitations
 
-Об этом стоит говорить заказчику прямо.
+These are worth telling a customer directly.
 
-- **Это не инструмент квалификации полёта.** Физика упрощена: нет деформируемого грунта, топливо не плещется, контакт модельный, ровер движется по упрощённой модели. Результаты годятся для ранних проектных решений и сравнения вариантов.
-- **Не проверено на реальных данных.** Инструмент калибровки проверен только на синтетических записях. Сравнения с телеметрией настоящих аппаратов нет. Абсолютным числам верить нельзя, относительным сравнениям — осторожно.
-- **Автопилот влияет на результат.** Анализ технологий оценивает связку аппарата и встроенного автопилота. Свой контроллер можно подключить через `MissionRunner`, он получает карту требований и сравнение с автопилотом, но анализ факторов и технологий пока считается только на автопилоте.
-- **Соответствие стандартам не заявляется.** Отчёт не является свидетельством соответствия ECSS. Содержание справочника мы знаем по обзорам и ещё не сопоставляли с ним построчно.
-- **Спрос не проверен.** Разговоров с космическими компаниями не было. Описанная ценность — гипотеза.
+- **This is not a flight qualification tool.** The physics is simplified: no deformable soil, no propellant slosh, the contact is a model, the rover moves on a simplified model. The results are suitable for early design decisions and comparing options.
+- **Not verified on real data.** The calibration tool has been checked only on synthetic recordings. There is no comparison with telemetry of real vehicles. Absolute numbers cannot be trusted, relative comparisons only with care.
+- **The autopilot affects the result.** Technology analysis evaluates the vehicle together with the built-in autopilot. A custom controller can be connected through `MissionRunner`, it gets a requirements scorecard and a comparison with the autopilot, but driver and technology analysis still runs only on the autopilot.
+- **No compliance with standards is claimed.** The report is not evidence of ECSS compliance. We know the content of the handbook from reviews and have not yet matched it line by line.
+- **Demand is not verified.** There have been no conversations with space companies. The described value is a hypothesis.
 
-## Что дальше
+## Parameters to add next
 
-| Приоритет | Шаг | Зачем |
+The registry has 64 parameters today. These are not in it yet, and each needs a physics model, not only a new number:
+
+| Parameter group | What it would add | Why it matters |
 |---|---|---|
-| 1 | Поговорить с 5–10 инженерами GNC и автономности | Проверить, та ли это боль, до дальнейших вложений |
-| 2 | Прогнать калибровку на настоящей телеметрии | Без этого доверие заказчика не получить; инструмент есть, данных нет |
-| 3 | L6: планирование в воображении и проверка в симуляторе | Ближе всего к реальному применению |
-| 4 | Анализ факторов и технологий для контроллера заказчика | Сейчас он считается только на автопилоте |
-| 5 | Бюджеты энергии, связи и вычислений | На этот пробел указывает обзор симуляторов |
-| 6 | Сопоставление с ECSS-E-HB-40-02A | Вход в процессы компаний |
-| 7 | Деформируемый грунт ([пример подхода](https://arxiv.org/html/2601.04547)) | Главное физическое упрощение для роверов |
+| Power budget for the lander and drone | Bus load, battery state, power margin | Only the rover and drone track energy now, and neither has a bus load |
+| Thermal limits | Component temperature range, engine duty limits, survival heating | A mission can pass today while overheating |
+| Communications | Link windows, data rate, signal blackout, command latency | Only a fixed observation delay exists |
+| Compute budget | Control loop overrun, inference time for a learned model | Decides whether a trained model fits flight hardware |
+| Terramechanics | Bekker soil constants, wheel sinkage, slip | Rover traction is Coulomb only |
+| Propellant slosh | Slosh mass, frequency and damping | Affects attitude control at low fuel |
+| Engine behavior | Ignition delay, restart count, minimum impulse bit | Throttle limits exist, but start and pulse behavior does not |
+| Structural limits | Maximum acceleration and leg load | The current limits only cover touchdown speed, tilt and slope |
+| Plume and dust | Surface erosion, lidar and camera occlusion near touchdown | Sensors stay clean at touchdown today |
+
+## What is next
+
+| Priority | Step | Why |
+|---|---|---|
+| 1 | Talk to 5–10 GNC and autonomy engineers | Check that this is the right pain before investing further |
+| 2 | Run calibration on real telemetry | Customer trust cannot be earned without it; the tool exists, the data does not |
+| 3 | L6: planning in imagination and checking in the simulator | Closest to real use |
+| 4 | Driver and technology analysis for a customer controller | Currently it runs only on the autopilot |
+| 5 | Power, communications and computing budgets | The simulator survey points to this gap |
+| 6 | Mapping to ECSS-E-HB-40-02A | Entry into company processes |
+| 7 | Deformable soil ([example approach](https://arxiv.org/html/2601.04547)) | The main physical simplification for rovers |

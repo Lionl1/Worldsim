@@ -1,8 +1,8 @@
-//! worldsim — физические модели миров для симуляции и генерации данных.
+//! worldsim — physical models of worlds for simulation and data generation.
 //!
 //! ```no_run
 //! use worldsim::world::{World, WorldSpec};
-//! // Марс с земной атмосферой и лунным реголитом:
+//! // Mars with Earth atmosphere and lunar regolith:
 //! let w = World::build(&WorldSpec { physics: "mars".into(), atmosphere: Some("earth".into()),
 //!     surface: Some("moon".into()), gravity_scale: 1.0, distance_au: None }).unwrap();
 //! println!("{} g={:.2} T={:.1}", w.name(), w.g_surface(), w.mean_surface_temperature());

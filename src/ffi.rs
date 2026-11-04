@@ -1,6 +1,6 @@
-//! Векторная среда для Python через ctypes (`python/worldsim/vec.py`): без HTTP и без зависимостей.
-//! Все функции небезопасны по контракту C: указатели от `ws_vec_new`, буферы нужного размера (см. vec.py).
-//! Все массивы — f32 по строкам; завершившиеся среды сами начинают новый эпизод (как в Gymnasium VectorEnv).
+//! Vector environment for Python via ctypes (`python/worldsim/vec.py`): no HTTP and no dependencies.
+//! All functions are unsafe under the C contract: pointers from `ws_vec_new`, buffers of the right size (see vec.py).
+//! All arrays are f32 by rows; finished environments start a new episode on their own (as in Gymnasium VectorEnv).
 
 use crate::collect::episode_seed;
 use crate::env::{Env, EnvConfig, PARAM_NAMES};
@@ -18,7 +18,7 @@ fn set_error(e: String) { LAST_ERROR.with(|l| *l.borrow_mut() = e); }
 fn write_str(s: &str, buf: *mut u8, cap: usize) -> usize {
     if !buf.is_null() && cap > 0 {
         let n = s.len().min(cap);
-        // Вызывающий передаёт буфер длиной cap
+        // The caller passes a buffer of length cap
         unsafe { std::ptr::copy_nonoverlapping(s.as_ptr(), buf, n); }
     }
     s.len()
@@ -30,7 +30,7 @@ pub unsafe extern "C" fn ws_last_error(buf: *mut u8, cap: usize) -> usize { LAST
 
 #[allow(clippy::too_many_arguments)]
 fn build(task: &str, worlds: &str, n: usize, seed: u64, noise: f64, randomize: bool, frame_skip: usize, max_steps: usize, rotor_scale: f64, gust: f64, lag: f64, fault: f64, threads: usize, params: &str) -> Result<VecEnv, String> {
-    if n == 0 { return Err("нужна хотя бы одна среда".into()); }
+    if n == 0 { return Err("at least one environment is required".into()); }
     let specs: Vec<WorldSpec> = worlds.split(',').map(|w| WorldSpec::parse(w.trim())).collect();
     let mut cfg = EnvConfig::new(task, "earth")?;
     cfg.world = specs[0].clone();
@@ -49,7 +49,7 @@ fn build(task: &str, worlds: &str, n: usize, seed: u64, noise: f64, randomize: b
     Ok(VecEnv { envs: vec![proto; n], seed, episodes: vec![0; n], threads: threads.max(1), nobs, nact, nstate })
 }
 
-/// Возвращает указатель или null; причину даёт `ws_last_error`.
+/// Returns a pointer or null; the reason comes from `ws_last_error`.
 #[no_mangle]
 #[allow(clippy::too_many_arguments, clippy::missing_safety_doc)]
 pub unsafe extern "C" fn ws_vec_new(task: *const c_char, worlds: *const c_char, n: usize, seed: u64, noise: f64, randomize: bool, frame_skip: usize, max_steps: usize, rotor_scale: f64, gust: f64, lag: f64, fault: f64, threads: usize, params: *const c_char) -> *mut VecEnv {
@@ -64,7 +64,7 @@ pub unsafe extern "C" fn ws_vec_new(task: *const c_char, worlds: *const c_char, 
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn ws_vec_free(p: *mut VecEnv) { if !p.is_null() { drop(unsafe { Box::from_raw(p) }); } }
 
-/// Описание среды в JSON: размеры, имена, границы действий.
+/// Environment description in JSON: sizes, names, action bounds.
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn ws_vec_spec(p: *mut VecEnv, buf: *mut u8, cap: usize) -> usize {
@@ -80,7 +80,7 @@ pub unsafe extern "C" fn ws_vec_spec(p: *mut VecEnv, buf: *mut u8, cap: usize) -
 
 fn copy(dst: &mut [f32], src: &[f64]) { for (d, s) in dst.iter_mut().zip(src) { *d = *s as f32; } }
 
-/// Выполнить `f` для каждой среды, параллельно по кускам. Результат не зависит от числа потоков: у сред нет общего состояния.
+/// Run `f` for each environment, in parallel chunks. The result does not depend on thread count: environments share no state.
 fn each<T: Send>(envs: Vec<T>, threads: usize, f: impl Fn(T) + Sync) {
     if threads <= 1 || envs.len() < 2 { envs.into_iter().for_each(f); return; }
     let per = envs.len().div_ceil(threads);
@@ -109,7 +109,7 @@ pub unsafe extern "C" fn ws_vec_reset(p: *mut VecEnv, obs: *mut f32) {
     });
 }
 
-/// `final_obs` — наблюдение в момент конца эпизода: у завершившихся сред `obs` уже от нового эпизода.
+/// `final_obs` — observation at the end of the episode: for finished environments `obs` already belongs to the new episode.
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn ws_vec_step(p: *mut VecEnv, act: *const f32, obs: *mut f32, reward: *mut f32, terminated: *mut u8, truncated: *mut u8, final_obs: *mut f32) {
@@ -156,11 +156,11 @@ exporter!(ws_vec_state, w_state, |e: &Env| e.state());
 exporter!(ws_vec_params, w_params, |e: &Env| e.params());
 exporter!(ws_vec_autopilot, w_act, |e: &Env| e.autopilot());
 
-// ---------------------------------------------------------------- свой контроллер в Mission Lab
+// ---------------------------------------------------------------- custom controller in Mission Lab
 
 pub struct MissionHandle { runner: crate::mission::Runner }
 
-/// Описание миссии в JSON; рельеф из файла разрешён: это локальный вызов из кода пользователя.
+/// Mission description in JSON; terrain from a file is allowed: this is a local call from user code.
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn ws_mission_new(spec: *const c_char, threads: usize) -> *mut MissionHandle {
@@ -194,7 +194,7 @@ pub unsafe extern "C" fn ws_mission_reset(p: *mut MissionHandle, obs: *mut f32) 
     for (o, v) in out.chunks_mut(no).zip(&all) { copy(o, v); }
 }
 
-/// Возвращает число незавершённых полётов. У завершённых `done` = 1, наблюдение остаётся последним.
+/// Returns the number of unfinished flights. For finished ones `done` = 1, the observation stays at its last value.
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn ws_mission_step(p: *mut MissionHandle, act: *const f32, obs: *mut f32, done: *mut u8) -> usize {
@@ -221,7 +221,7 @@ pub unsafe extern "C" fn ws_mission_report(p: *mut MissionHandle, buf: *mut u8, 
     write_str(&text, buf, cap)
 }
 
-// ---------------------------------------------------------------- проигрывание записанных команд (калибровка)
+// ---------------------------------------------------------------- replaying recorded commands (calibration)
 
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
@@ -231,7 +231,7 @@ pub unsafe extern "C" fn ws_replay_names(task: *const c_char, buf: *mut u8, cap:
     write_str(&J::from(names).render(), buf, cap)
 }
 
-/// Начальные позиция и скорость заданы явно, рельеф берётся по параметрам. Возвращает число шагов или −1 при ошибке.
+/// Initial position and velocity are explicit, terrain comes from the parameters. Returns the step count, or −1 on error.
 #[no_mangle]
 #[allow(clippy::too_many_arguments, clippy::missing_safety_doc)]
 pub unsafe extern "C" fn ws_replay(task: *const c_char, world: *const c_char, params: *const c_char, init: *const f32, steps: usize, act_dim: usize, actions: *const f32, states: *mut f32) -> i64 {
@@ -244,7 +244,7 @@ pub unsafe extern "C" fn ws_replay(task: *const c_char, world: *const c_char, pa
         cfg.set_list(&text(params))?;
         let mut e = Env::new(cfg)?;
         let na = e.act_names().len();
-        if na != act_dim { return Err(format!("в записи {act_dim} команд, а аппарат принимает {na}")); }
+        if na != act_dim { return Err(format!("the recording has {act_dim} commands, but the vehicle takes {na}")); }
         e.reset(1);
         let x0 = unsafe { std::slice::from_raw_parts(init, 6) };
         e.set_state(crate::vec3::Vec3::new(x0[0] as f64, x0[1] as f64, x0[2] as f64), crate::vec3::Vec3::new(x0[3] as f64, x0[4] as f64, x0[5] as f64));

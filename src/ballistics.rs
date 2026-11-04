@@ -1,22 +1,22 @@
-//! Полёт тела у поверхности мира во вращающейся системе отсчёта планеты.
-//! Законы: тяготение Ньютона + сжатие J2, сила Кориолиса, центробежная сила,
-//! аэродинамическое сопротивление (½ρC_dAv²), закон Архимеда, атмосфера из гидростатики.
-//! Интегрирование: Дорманд–Принс 5(4) с адаптивным шагом.
-//! Бухгалтерия энергии: E(t) − E(0) = работа неконсервативных сил (первое начало) — проверяется.
+//! Flight near a world surface in the rotating planetary frame.
+//! Laws: Newtonian gravity + J2 oblateness, Coriolis force, centrifugal force,
+//! aerodynamic drag (½ρC_dAv²), Archimedes force, atmosphere from hydrostatics.
+//! Integration: Dormand–Prince 5(4) with an adaptive step.
+//! Energy accounting: E(t) − E(0) = work of non-conservative forces (first law), which is checked.
 
 use crate::vec3::Vec3;
 use crate::world::World;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Projectile {
-    pub mass: f64,   // кг
-    pub area: f64,   // м^2 (миделево сечение)
-    pub cd: f64,     // коэффициент сопротивления
-    pub volume: f64, // м^3 (для силы Архимеда)
+    pub mass: f64,   // kg
+    pub area: f64,   // m^2 (frontal area)
+    pub cd: f64,     // drag coefficient
+    pub volume: f64, // m^3 (for the Archimedes force)
 }
 
 impl Projectile {
-    /// Сфера радиуса r и плотности rho.
+    /// Sphere of radius r and density rho.
     pub fn sphere(radius: f64, density: f64) -> Self {
         let vol = 4.0 / 3.0 * std::f64::consts::PI * radius.powi(3);
         Projectile { mass: vol * density, area: std::f64::consts::PI * radius * radius, cd: 0.47, volume: vol }
@@ -25,12 +25,12 @@ impl Projectile {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Launch {
-    pub lat: f64,       // градусы
-    pub lon: f64,       // градусы
-    pub altitude: f64,  // м
-    pub speed: f64,     // м/с относительно поверхности
-    pub elevation: f64, // градусы над горизонтом
-    pub azimuth: f64,   // градусы от севера по часовой
+    pub lat: f64,       // degrees
+    pub lon: f64,       // degrees
+    pub altitude: f64,  // m
+    pub speed: f64,     // m/s relative to the surface
+    pub elevation: f64, // degrees above the horizon
+    pub azimuth: f64,   // degrees clockwise from north
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -71,11 +71,11 @@ pub struct Result {
     pub max_altitude: f64,
     pub impact_speed: f64,
     pub landed: bool,
-    pub energy_error: f64,      // max |E − E0 − W_nc| / масштаб
-    pub dissipated_energy: f64, // Дж, ушло в тепло (−работа сопротивления)
+    pub energy_error: f64,      // max |E − E0 − W_nc| / scale
+    pub dissipated_energy: f64, // J, lost to heat (minus the work of drag)
 }
 
-type State = [f64; 7]; // r, v, W_nc (на единицу массы)
+type State = [f64; 7]; // r, v, W_nc (per unit mass)
 
 struct Model<'a> {
     w: &'a World,
@@ -150,7 +150,7 @@ fn axpy(y: &State, h: f64, ks: &[(&State, f64)]) -> State {
     o
 }
 
-/// Один шаг Дорманда–Принса: (y5, оценка ошибки)
+/// One Dormand–Prince step: (y5, error estimate)
 fn dopri_step(m: &Model, y: &State, h: f64) -> (State, f64) {
     let k1 = m.deriv(y);
     let k2 = m.deriv(&axpy(y, h, &[(&k1, 1.0 / 5.0)]));
@@ -197,7 +197,7 @@ pub fn simulate(world: &World, proj: Projectile, launch: Launch, opts: Options) 
     let (el, az) = (launch.elevation.to_radians(), launch.azimuth.to_radians());
     let r0 = up * (rr + launch.altitude);
     let mut v0 = (east * az.sin() + north * az.cos()) * (launch.speed * el.cos()) + up * (launch.speed * el.sin());
-    if !opts.rotating { v0 += omega.cross(r0); } // в инерциальной системе добавляем скорость поверхности
+    if !opts.rotating { v0 += omega.cross(r0); } // in the inertial frame add the surface velocity
     let mut y: State = [r0.x, r0.y, r0.z, v0.x, v0.y, v0.z, 0.0];
     let e0 = m.energy(&y);
     let ke0 = 0.5 * v0.norm2();
@@ -238,7 +238,7 @@ pub fn simulate(world: &World, proj: Projectile, launch: Launch, opts: Options) 
             continue;
         }
         let mut h_used = h;
-        // событие касания поверхности: бисекция по шагу
+        // surface contact event: bisection within the step
         if m.altitude(Vec3::new(y1[0], y1[1], y1[2])) < 0.0 {
             let (mut lo, mut hi) = (0.0, h);
             for _ in 0..60 {

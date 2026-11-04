@@ -1,5 +1,5 @@
 {
-  "name": "Вертолёт на Марсе",
+  "name": "Mars helicopter",
   "task": "drone",
   "world": "mars",
   "runs": 300,
@@ -14,14 +14,14 @@
   "requirements": [
     {
       "id": "REQ-01",
-      "text": "Долетел до точки и завис",
+      "text": "Reached the point and hovered",
       "metric": "success",
       "op": ">=",
       "value": 0.9
     },
     {
       "id": "REQ-02",
-      "text": "Энергия за полёт, 95-й перцентиль",
+      "text": "Flight energy, 95th percentile",
       "metric": "energy_used_kj",
       "percentile": 95,
       "op": "<=",
@@ -30,25 +30,25 @@
   ],
   "technologies": [
     {
-      "name": "Винты площадью ×20",
+      "name": "Rotors with area ×20",
       "set_top": {
         "rotor_scale": 20
       }
     },
     {
-      "name": "Винты площадью ×14",
+      "name": "Rotors with area ×14",
       "set_top": {
         "rotor_scale": 14
       }
     },
     {
-      "name": "Точнее навигация (шум ×0.25)",
+      "name": "Better navigation (noise ×0.25)",
       "set_dispersion": {
         "nav_noise": 0.25
       }
     },
     {
-      "name": "Быстрые приводы (задержка 0.02 с)",
+      "name": "Fast actuators (lag 0.02 s)",
       "set_dispersion": {
         "actuator_lag": 0.02
       }

@@ -1,9 +1,9 @@
-//! Суточный ход температуры поверхности.
-//! Законы: закон обратных квадратов для инсоляции, геометрия освещения (зенитный угол),
-//! Стефан–Больцман для излучения, закон Фурье для теплопроводности грунта,
-//! первое начало термодинамики (метод конечных объёмов сохраняет энергию дискретно),
-//! парниковое противоизлучение атмосферы из серой модели Эддингтона.
-//! Схема: неявная (обратный Эйлер) + Ньютон по нелинейному члену T⁴ — безусловно устойчива.
+//! Diurnal surface temperature cycle.
+//! Laws: inverse-square law for insolation, illumination geometry (zenith angle),
+//! Stefan–Boltzmann for radiation, Fourier law for soil heat conduction,
+//! first law of thermodynamics (the finite volume method conserves energy discretely),
+//! atmospheric back radiation from the gray Eddington model.
+//! Scheme: implicit (backward Euler) + Newton on the nonlinear T⁴ term, unconditionally stable.
 
 use crate::constants::SIGMA_SB;
 use crate::world::World;
@@ -11,8 +11,8 @@ use std::f64::consts::PI;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ThermalOptions {
-    pub latitude: f64,     // градусы
-    pub declination: f64,  // склонение Солнца, градусы (сезон)
+    pub latitude: f64,     // degrees
+    pub declination: f64,  // solar declination, degrees (season)
     pub steps_per_day: usize,
     pub spinup_days: usize,
     pub cells: usize,
@@ -24,13 +24,13 @@ impl Default for ThermalOptions {
 
 #[derive(Clone, Debug)]
 pub struct ThermalResult {
-    pub local_time_h: Vec<f64>, // местное солнечное время, часы (0..24)
+    pub local_time_h: Vec<f64>, // local solar time, hours (0..24)
     pub surface_t: Vec<f64>,
     pub t_min: f64,
     pub t_max: f64,
     pub t_mean: f64,
     pub skin_depth: f64,
-    /// |ΔH − ∫(поглощено − излучено)dt| / ∫поглощено dt за последние сутки
+    /// |ΔH − ∫(absorbed − emitted)dt| / ∫absorbed dt over the last day
     pub energy_residual: f64,
     pub depth_profile: Vec<(f64, f64)>,
 }
@@ -64,18 +64,18 @@ pub fn simulate(world: &World, o: ThermalOptions) -> ThermalResult {
     let s0 = world.insolation() * (1.0 - world.physics.bond_albedo);
     let (phi, dec) = (o.latitude.to_radians(), o.declination.to_radians());
     let t_eq = world.equilibrium_temperature();
-    let f_down = SIGMA_SB * t_eq.powi(4) * 0.75 * world.greenhouse_tau(); // противоизлучение
+    let f_down = SIGMA_SB * t_eq.powi(4) * 0.75 * world.greenhouse_tau(); // back radiation
     let q_geo = s.geothermal_flux;
     let absorbed = |t: f64| -> f64 {
-        let hour = 2.0 * PI * t / period - PI; // t=0 — полночь
+        let hour = 2.0 * PI * t / period - PI; // t=0 — midnight
         let cz = phi.sin() * dec.sin() + phi.cos() * dec.cos() * hour.cos();
         s0 * cz.max(0.0)
     };
-    // начальное условие: радиационное равновесие со среднесуточным потоком
+    // initial condition: radiative equilibrium with the diurnal mean flux
     let mean_abs: f64 = (0..o.steps_per_day).map(|i| absorbed(i as f64 * dt)).sum::<f64>() / o.steps_per_day as f64;
     let t_init = ((mean_abs + f_down + q_geo) / (eps * SIGMA_SB)).powf(0.25).max(30.0);
     let mut temp = vec![t_init; n];
-    let cap = rho * cp * dz; // теплоёмкость ячейки на м^2
+    let cap = rho * cp * dz; // cell heat capacity per m^2
     let g = k / dz;
     let total_steps = o.steps_per_day * (o.spinup_days + 1);
     let mut out_t = Vec::new();

@@ -1,4 +1,4 @@
-//! Инструменты world model: данные, Mission Lab, разбор JSON, поведение CLI.
+//! World model tools: data, Mission Lab, JSON parsing, behavior CLI.
 
 use std::process::Command;
 use worldsim::env::{Env, EnvConfig};
@@ -15,17 +15,17 @@ fn cli(args: &[&str]) -> (bool, String) {
 fn spec(extra: &str) -> String {
     format!(r#"{{"task":"lander","world":"moon","runs":24,"seed":3,"vehicle":{{"t_max":6000,"fuel":100}},
       "dispersions":{{"t_max":0.05,"nav_noise":1}},"requirements":[{{"metric":"success","op":">=","value":0.5}}],
-      "technologies":[{{"name":"Сильнее","set":{{"t_max":8000}},"dry_mass_delta":10}}]{extra}}}"#)
+      "technologies":[{{"name":"Stronger","set":{{"t_max":8000}},"dry_mass_delta":10}}]{extra}}}"#)
 }
 
 #[test]
 fn json_round_trip_and_errors() {
-    let j = J::parse(r#"{"a":[1,2.5,-3e2],"b":{"c":"т\"е\nкстЖ"},"d":true,"e":null}"#).unwrap();
+    let j = J::parse(r#"{"a":[1,2.5,-3e2],"b":{"c":"t\"e\nxtΩ"},"d":true,"e":null}"#).unwrap();
     assert_eq!(j.get("a").unwrap().as_arr().unwrap()[2].as_f64(), Some(-300.0));
-    assert_eq!(j.get("b").unwrap().get("c").unwrap().as_str(), Some("т\"е\nкстЖ"));
+    assert_eq!(j.get("b").unwrap().get("c").unwrap().as_str(), Some("t\"e\nxtΩ"));
     assert!(J::parse(&j.render()).is_ok());
     for bad in ["", "{", "[1,", "{\"a\"}", "{\"a\":1,}", "tru", "\"abc", "1 2", "{a:1}"] { assert!(J::parse(bad).is_err(), "{bad}"); }
-    // глубокая вложенность не должна ронять процесс
+    // deep nesting must not crash the process
     assert!(J::parse(&"[".repeat(100_000)).is_err());
 }
 
@@ -51,7 +51,7 @@ fn mission_result_does_not_depend_on_threads() {
     let strip = |j: &J| format!("{}{}{}", j.get("scorecard").unwrap().render(), j.get("drivers").unwrap().render(), j.get("technologies").unwrap().render());
     let (a, b) = (mission::run(&s, 1).unwrap(), mission::run(&s, 8).unwrap());
     assert_eq!(strip(&a), strip(&b));
-    assert!(mission::markdown(&a).contains("Ценность технологий"));
+    assert!(mission::markdown(&a).contains("Value of technologies"));
 }
 
 #[test]
@@ -76,14 +76,14 @@ fn wilson_interval_is_sane() {
     let (l, h) = wilson(50.0, 100.0);
     assert!((l - 0.404).abs() < 0.01 && (h - 0.596).abs() < 0.01);
     let (l, h) = wilson(0.0, 10.0);
-    assert!(l == 0.0 && h > 0.2 && h < 0.35); // ноль отказов из десяти ещё ничего не доказывает
+    assert!(l == 0.0 && h > 0.2 && h < 0.35); // zero failures out of ten still proves nothing
     let (l, h) = wilson(10.0, 10.0);
     assert!(h == 1.0 && l < 0.8);
 }
 
 #[test]
 fn technology_saving_is_paired_on_same_conditions() {
-    // при отсутствии разницы парное сравнение обязано дать ровно ноль
+    // with no difference a paired comparison must give exactly zero
     let s = MissionSpec::parse(&spec("").replace("\"t_max\":8000", "\"t_max\":6000").replace(",\"dry_mass_delta\":10", "")).unwrap();
     let r = mission::run(&s, 4).unwrap();
     let t = &r.get("technologies").unwrap().as_arr().unwrap()[0];
@@ -173,7 +173,7 @@ fn lander_contact_is_observed_before_episode_ends() {
         if t || c { break; }
     }
     assert!(e.info.success, "{}", e.info.reason);
-    assert!(in_contact_steps > 10); // модель видит сам контакт, а не только конец эпизода
+    assert!(in_contact_steps > 10); // the model sees the contact itself, not only the episode end
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn every_parameter_works_at_both_limits() {
     for task in ["lander", "drone", "rover"] {
         for d in PARAMS {
             let probe = EnvConfig::new(task, "mars").unwrap();
-            if probe.clone().set(d.name, d.min).is_err() { continue; } // не применим к этой задаче
+            if probe.clone().set(d.name, d.min).is_err() { continue; } // does not apply to this task
             for v in [d.min, d.max] {
                 let mut c = EnvConfig::new(task, "mars").unwrap();
                 c.set(d.name, v).unwrap();
@@ -193,9 +193,9 @@ fn every_parameter_works_at_both_limits() {
                     assert!(o.iter().all(|x| x.is_finite()), "{task} {} = {v}: reset {o:?}", d.name);
                     for _ in 0..150 {
                         let a = e.autopilot();
-                        assert!(a.iter().all(|x| x.is_finite()), "{task} {} = {v}: действие {a:?}", d.name);
+                        assert!(a.iter().all(|x| x.is_finite()), "{task} {} = {v}: action {a:?}", d.name);
                         let (o, r, t, c) = e.step(&a);
-                        assert!(o.iter().all(|x| x.is_finite()) && r.is_finite(), "{task} {} = {v}: шаг {o:?} {r}", d.name);
+                        assert!(o.iter().all(|x| x.is_finite()) && r.is_finite(), "{task} {} = {v}: step {o:?} {r}", d.name);
                         if t || c { break; }
                     }
                 }
@@ -210,7 +210,7 @@ fn parameters_reject_bad_values_and_names() {
     assert!(c.set("isp", -1.0).is_err());
     assert!(c.set("isp", f64::NAN).is_err());
     assert!(c.set("warp_drive", 1.0).is_err());
-    assert!(c.set("rover_mass", 100.0).is_err()); // не та задача
+    assert!(c.set("rover_mass", 100.0).is_err()); // wrong task
     assert!(c.set_list("isp=320,throttle_min=0.2").is_ok());
     assert_eq!(c.get("isp"), Some(320.0));
     assert!(c.set_list("isp").is_err());
@@ -233,12 +233,12 @@ fn new_parameters_change_behaviour() {
     };
     let base = run("");
     assert_eq!(base, run(""));
-    // смещение центра масс закручивает, перекос тяги сдвигает, минимальный газ не даёт работать ниже порога
+    // center of mass offset spins, thrust misalignment shifts, minimum throttle prevents operating below the threshold
     assert!((run("cg_offset=0.2")[10] - base[10]).abs() > 1e-3);
     assert!((run("thrust_misalign=5")[3] - base[3]).abs() > 1e-3);
     assert!((run("throttle_min=0.8")[5] - base[5]).abs() > 1e-3);
     assert!((run("gravity=5")[5] - base[5]).abs() > 1e-3);
-    // смещение гироскопа видно в наблюдении, а задержка отдаёт прошлое значение
+    // gyro bias shows in the observation, and delay returns a past value
     assert!((run("gyro_bias=0.2")[9] - base[9]).abs() > 1e-3);
     assert!((run("obs_delay=10")[5] - base[5]).abs() > 1e-3);
 }
@@ -260,7 +260,7 @@ fn run_store_saves_lists_and_rejects_bad_ids() {
     let r = mission::run(&MissionSpec::parse(&text).unwrap(), 2).unwrap();
     let a = store::save_run(&d, &text, &r).unwrap();
     let b = store::save_run(&d, &text, &r).unwrap();
-    assert_ne!(a, b); // тот же отчёт не перезаписывает прошлый запуск
+    assert_ne!(a, b); // the same report does not overwrite a previous run
     assert_eq!(store::list_runs(&d).as_arr().unwrap().len(), 2);
     assert!(store::load_report(&d, &a).is_ok());
     for bad in ["../x", "..", "a/b", "", "ZZZ"] { assert!(store::load_report(&d, bad).is_err(), "{bad}"); }
@@ -278,9 +278,9 @@ fn openapi_lists_every_route() {
     for (i, _) in src.match_indices("\"/api/") {
         let rest = &src[i + 1..];
         let lit = &rest[..rest.find('"').unwrap()];
-        if lit.ends_with('/') || lit.contains(' ') { continue; } // префиксы и текст описаны через {id}
+        if lit.ends_with('/') || lit.contains(' ') { continue; } // prefixes and text are written through {id}
         seen += 1;
-        assert!(paths.iter().any(|p| p == lit), "{lit} нет в openapi.json");
+        assert!(paths.iter().any(|p| p == lit), "{lit} missing in openapi.json");
     }
     assert!(seen > 20);
 }

@@ -1,7 +1,7 @@
 [project]
 name = "worldsim"
 version = "0.3.0"
-description = "Python-инструменты worldsim: среды, данные и квалификация world models по законам физики"
+description = "worldsim Python tools: environments, data and world model qualification against physical laws"
 requires-python = ">=3.9"
 dependencies = ["numpy>=1.24"]
 license = { text = "MIT" }

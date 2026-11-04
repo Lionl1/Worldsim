@@ -1,64 +1,64 @@
-# Сравнение с аналогами и разрывы
+# Comparison with alternatives and gaps
 
-Состояние на ноябрь 2026. Сведения взяты из публичных страниц и статей, ссылки приведены ниже. Цены закрытых продуктов найти не удалось, поэтому они не указаны. Инструменты мы не запускали, таблица отражает их описания, а не собственные замеры.
+Status as of November 2026. Information comes from public pages and papers, linked below. Prices of closed products could not be found, so they are not given. We did not run these tools; the table reflects their descriptions, not our own measurements.
 
-## Коротко
+## In short
 
-worldsim не заменяет эти инструменты и не должен пытаться. По точности орбит, опыту полётов и фотореализму он заметно отстаёт, и часть этого разрыва кодом не закрывается. Его ниша уже: **раннее сравнение вариантов миссии и проверка обученных моделей против точной физики на одном описании миссии**.
+worldsim does not replace these tools and should not try to. In orbit accuracy, flight heritage and photorealism it is far behind, and part of that gap cannot be closed with code. Its niche is narrower: **early comparison of mission options and checking trained models against exact physics on a single mission description**.
 
-## Кто что делает
+## Who does what
 
-| Инструмент | Что это | Сильная сторона | Лицензия |
+| Tool | What it is | Strength | License |
 |---|---|---|---|
-| [STK](https://www.refontelearning.com/blog/astrodynamics-software-tools-gmat-stk-poliastro) | коммерческая платформа сценариев миссии | доступ и покрытие, сенсоры, связь, рельеф | закрытая |
-| [GMAT](https://wikipedia.com/wiki/General_Mission_Analysis_Tool) | инструмент NASA для анализа траекторий | оптимизация траекторий, применялся на LCROSS, OSIRIS-REx, TESS | Apache 2.0 |
-| [FreeFlyer](https://au.mathworks.com/products/connections/product_detail/freeflyer.html) | коммерческая система для спутников и группировок | покрытие и контакты, манёвры, определение орбит | закрытая |
-| [Basilisk](https://hanspeterschaub.info/basilisk/) | модульный фреймворк динамики аппарата | побитово повторяемый Монте-Карло, разработка наведения, синхронизация с оборудованием | открытая, проверять в репозитории |
-| [POST2](https://ntrs.nasa.gov/citations/20240006746) | траекторный инструмент NASA для посадки | статистика Монте-Карло против требований, опыт реальных миссий | по условиям NASA |
-| [Sedaro](https://satnews.com/2026/06/24/digital-twins-for-space-command-sedaro-tapped-by-space-force-to-build-federated-engineering-platform/) | облачные цифровые двойники аппаратов | связанные подсистемы, контракты Space Force | закрытая |
-| [OmniLRS](https://github.com/OmniLRS/OmniLRS) | лунный симулятор на Isaac Sim | фотореализм, процедурные среды, ROS 1 и 2 | открытая |
-| [Space Robotics Bench](https://arxiv.org/abs/2509.23328) | среды для обучения роботов в космосе | массовая параллельность на GPU, перенос на реального робота | открытая |
-| worldsim | анализ миссии и квалификация моделей | требования, ценность технологий, истинные ветвления, запуск без GPU | MIT |
+| [STK](https://www.refontelearning.com/blog/astrodynamics-software-tools-gmat-stk-poliastro) | commercial mission scenario platform | access and coverage, sensors, communications, terrain | closed |
+| [GMAT](https://wikipedia.com/wiki/General_Mission_Analysis_Tool) | NASA tool for trajectory analysis | trajectory optimization, used on LCROSS, OSIRIS-REx, TESS | Apache 2.0 |
+| [FreeFlyer](https://au.mathworks.com/products/connections/product_detail/freeflyer.html) | commercial system for satellites and constellations | coverage and contacts, maneuvers, orbit determination | closed |
+| [Basilisk](https://hanspeterschaub.info/basilisk/) | modular vehicle dynamics framework | bit-for-bit repeatable Monte Carlo, guidance development, hardware synchronization | open, check the repository |
+| [POST2](https://ntrs.nasa.gov/citations/20240006746) | NASA trajectory tool for landing | Monte Carlo statistics against requirements, real mission heritage | on NASA terms |
+| [Sedaro](https://satnews.com/2026/06/24/digital-twins-for-space-command-sedaro-tapped-by-space-force-to-build-federated-engineering-platform/) | cloud digital twins of spacecraft | coupled subsystems, Space Force contracts | closed |
+| [OmniLRS](https://github.com/OmniLRS/OmniLRS) | lunar simulator on Isaac Sim | photorealism, procedural environments, ROS 1 and 2 | open |
+| [Space Robotics Bench](https://arxiv.org/abs/2509.23328) | environments for training robots in space | massive GPU parallelism, sim-to-real transfer | open |
+| worldsim | mission analysis and model qualification | requirements, value of technologies, true branches, runs without GPU | MIT |
 
-## Сравнение возможностей
+## Capability comparison
 
-«Да» и «нет» означают: так сказано в найденных описаниях. Прочерк значит, что сведений не нашли, и это не утверждение об отсутствии возможности.
+“Yes” and “no” mean: that is what the descriptions we found say. A dash means we found no information, which is not a claim that the capability is missing.
 
-| Возможность | worldsim | GMAT, STK, FreeFlyer | Basilisk | POST2 | Sedaro | OmniLRS, SRB |
+| Capability | worldsim | GMAT, STK, FreeFlyer | Basilisk | POST2 | Sedaro | OmniLRS, SRB |
 |---|---|---|---|---|---|---|
-| Точные орбиты и эфемериды | **слабо**: N тел, J2 | да | да | да | — | нет |
-| Проверено на реальных миссиях | **нет** | да (GMAT) | — | да | — | **частично** (перенос на робота, SRB) |
-| Карта требований по Монте-Карло | да | — | Монте-Карло есть | да | — | нет |
-| Ценность технологий, парное сравнение | да | — | — | — | — | нет |
-| Связанные подсистемы: энергия, связь, тепло | **слабо**: батарея ровера | частично | да | — | да | в планах OmniLRS |
-| Работа с настоящим бортовым ПО и оборудованием | **нет** | — | да | — | да | ROS (OmniLRS) |
-| Фотореализм | **нет** | STK визуализация | Vizard | нет | CesiumJS | да |
-| Деформируемый грунт | **нет** | нет | нет | нет | — | в развитии |
-| Массовая параллельность | CPU | — | многопроцессный Монте-Карло | — | облако | GPU |
-| Квалификация обученных моделей | да | нет | нет | нет | — | нет |
-| Истинные контрфактические ветвления | да | нет | — | нет | — | нет |
-| Смешанные миры | да | нет | — | нет | — | нет |
-| Автоматические проверки законов физики | да, 131 | тесты кода | тесты кода | — | — | — |
-| Запуск без установки зависимостей | да | установщик | Python и сборка | ограничен NASA | облако | GPU и Isaac Sim |
+| Exact orbits and ephemerides | **weak**: N bodies, J2 | yes | yes | yes | — | no |
+| Proven on real missions | **no** | yes (GMAT) | — | yes | — | **partial** (transfer to a robot, SRB) |
+| Monte Carlo requirements scorecard | yes | — | has Monte Carlo | yes | — | no |
+| Value of technologies, paired comparison | yes | — | — | — | — | no |
+| Coupled subsystems: power, communications, thermal | **weak**: rover battery | partial | yes | — | yes | planned (OmniLRS) |
+| Working with real flight software and hardware | **no** | — | yes | — | yes | ROS (OmniLRS) |
+| Photorealism | **no** | STK visualization | Vizard | no | CesiumJS | yes |
+| Deformable soil | **no** | no | no | no | — | in development |
+| Massive parallelism | CPU | — | multiprocess Monte Carlo | — | cloud | GPU |
+| Qualification of trained models | yes | no | no | no | — | no |
+| True counterfactual branches | yes | no | — | no | — | no |
+| Mixed worlds | yes | no | — | no | — | no |
+| Automatic checks of physical laws | yes, 129 | code tests | code tests | — | — | — |
+| Running without installing dependencies | yes | installer | Python and a build | limited, NASA | cloud | GPU and Isaac Sim |
 
-## Разрывы и что с ними делаем
+## Gaps and what we do about them
 
-| № | Разрыв | Важность для компаний | Решение | Статус |
+| # | Gap | Importance for companies | Solution | Status |
 |---|---|---|---|---|
-| 1 | Нет сверки с реальными данными | **критично** | Калибровка по телеметрии | инструмент есть, проверен на синтетике; **сверки с настоящим полётом нет** |
-| 2 | Оценивается наш автопилот, а не система заказчика | **критично** | `MissionRunner`: свой контроллер, карта требований, сравнение с автопилотом | закрыт частично: анализ технологий пока на автопилоте |
-| 3 | Рельеф только процедурный | высокая | Загрузка `.asc`, `.csv`, `.npy` | закрыт |
-| 4 | Нет промышленной поставки: CI, образ, версии, API | высокая | CI, Docker, релизы, OpenAPI | сделано, результат CI см. в репозитории; релизов ещё не выпускалось |
-| 5 | Нет доступа по токену и лимитов; сервер открыт для запросов с чужих сайтов | высокая | Токен, лимиты, проверка источника | закрыт; TLS и роли не сделаны, независимого аудита не было |
-| 6 | Длинные расчёты блокируют запрос, запуски не сохраняются | высокая | Фоновые задачи, хранение и сравнение запусков | закрыт |
-| 7 | Настройка только через JSON | средняя | Формы из реестра параметров, пресеты | закрыт |
-| 8 | Обмен данными с экосистемой обучения | средняя | Экспорт LeRobot, проверен на lerobot 0.6.1 | закрыт, без камеры |
-| 9 | Энергия, связь, тепло у посадочного модуля и дрона | средняя | Отдельная работа, на неё указывает и [обзор симуляторов](https://arxiv.org/html/2609.34743v1) | **не закрыт** |
-| 10 | Нет работы с бортовым ПО и оборудованием | средняя, для поздних этапов | Вход в реальном времени, мост ROS 2 | **не закрыт** |
-| 11 | Точные орбиты | низкая для ниши | Не конкурировать; импортировать траекторию из GMAT или STK | **не закрыт** |
-| 12 | Фотореализм | низкая для ниши | Использовать OmniLRS там, где нужно зрение | **не закрыт** |
-| 13 | Опыт полётов, сертификация, поддержка | **критично для доверия** | Кодом не закрывается: нужны пилотные проекты с компаниями | **не закрыт** |
+| 1 | No check against real data | **critical** | Telemetry calibration | tool exists, verified on synthetic data; **no check against a real flight** |
+| 2 | Our autopilot is evaluated, not the customer system | **critical** | `MissionRunner`: custom controller, requirements scorecard, comparison with the autopilot | partly closed: technology analysis still uses the autopilot |
+| 3 | Terrain is procedural only | high | Loading `.asc`, `.csv`, `.npy` | closed |
+| 4 | No industrial delivery: CI, image, versions, API | high | CI, Docker, releases, OpenAPI | done, see the repository for CI results; no releases published yet |
+| 5 | No token access or limits; server open to requests from other sites | high | Token, limits, origin check | closed; TLS and roles not done, no independent audit |
+| 6 | Long calculations block a request, runs are not saved | high | Background jobs, run storage and comparison | closed |
+| 7 | Configuration only through JSON | medium | Forms from the parameter registry, presets | closed |
+| 8 | Data exchange with the training ecosystem | medium | LeRobot export, verified on lerobot 0.6.1 | closed, without camera |
+| 9 | Power, communications, thermal for the lander and drone | medium | Separate work, also pointed out by the [simulator survey](https://arxiv.org/html/2609.34743v1) | **not closed** |
+| 10 | No work with flight software and hardware | medium, for later stages | Real-time input, a ROS 2 bridge | **not closed** |
+| 11 | Exact orbits | low for the niche | Do not compete; import a trajectory from GMAT or STK | **not closed** |
+| 12 | Photorealism | low for the niche | Use OmniLRS where vision is needed | **not closed** |
+| 13 | Flight heritage, certification, support | **critical for trust** | Cannot be closed with code: needs pilot projects with companies | **not closed** |
 
-## Что это значит для продаж
+## What this means for sales
 
-Честная позиция: «Используйте нас до того, как включать высокоточные инструменты: чтобы отбросить слабые варианты и понять, можно ли доверять модели. Финальную проверку делайте инструментами с опытом полётов». Обещать замену STK или POST2 нельзя.
+Honest position: “Use us before bringing in high-fidelity tools: to discard weak options and learn whether a model can be trusted. Do the final check with flight-proven tools”. Promising a replacement for STK or POST2 is not possible.

@@ -1,6 +1,6 @@
-//! Заряженная частица в дипольном магнитном поле планеты (радиационные пояса).
-//! Законы: сила Лоренца, специальная теория относительности (γ), поле магнитного диполя.
-//! Интегратор Бориса (релятивистский) сохраняет |p| в чистом магнитном поле точно.
+//! Charged particle in the dipole magnetic field of a planet (radiation belts).
+//! Laws: Lorentz force, special relativity (γ), magnetic dipole field.
+//! The Boris integrator (relativistic) conserves |p| exactly in a pure magnetic field.
 
 use crate::constants::{C, E_CHARGE, MEV, MU_0, M_ALPHA, M_E, M_P};
 use crate::vec3::Vec3;
@@ -15,11 +15,11 @@ pub fn species(name: &str) -> Result<Species, String> {
         "proton" | "p" => Species { mass: M_P, charge: E_CHARGE },
         "electron" | "e" => Species { mass: M_E, charge: -E_CHARGE },
         "alpha" => Species { mass: M_ALPHA, charge: 2.0 * E_CHARGE },
-        _ => return Err(format!("неизвестная частица '{name}' (proton, electron, alpha)")),
+        _ => return Err(format!("unknown particle '{name}' (proton, electron, alpha)")),
     })
 }
 
-/// Поле диполя с моментом m = −M ẑ (как у Земли: северный магнитный полюс у южного географического).
+/// Dipole field with moment m = −M ẑ (as on Earth: the magnetic north pole is near the geographic south).
 pub fn dipole_field(moment: f64, r: Vec3) -> Vec3 {
     let m = Vec3::new(0.0, 0.0, -moment);
     let rn = r.norm();
@@ -29,24 +29,24 @@ pub fn dipole_field(moment: f64, r: Vec3) -> Vec3 {
 
 #[derive(Clone, Copy, Debug)]
 pub struct ParticleLaunch {
-    pub l_shell: f64,       // экваториальное расстояние в радиусах планеты
-    pub energy_mev: f64,    // кинетическая энергия
-    pub pitch_angle: f64,   // градусы, угол между v и B на экваторе
+    pub l_shell: f64,       // equatorial distance in planetary radii
+    pub energy_mev: f64,    // kinetic energy
+    pub pitch_angle: f64,   // degrees, angle between v and B at the equator
 }
 
 #[derive(Clone, Debug)]
 pub struct ParticleResult {
     pub t: Vec<f64>,
     pub pos: Vec<Vec3>,
-    pub max_abs_lat: f64,          // широта зеркальной точки, численно
-    pub mirror_lat_theory: f64,    // из сохранения магнитного момента μ
+    pub max_abs_lat: f64,          // mirror point latitude, numerically
+    pub mirror_lat_theory: f64,    // from conservation of the magnetic moment μ
     pub energy_drift: f64,         // |ΔE_k|/E_k
-    pub drift_longitude: f64,      // градусы, на которые частица сместилась по долготе
+    pub drift_longitude: f64,      // degrees of longitude the particle drifted
     pub hit_surface: bool,
     pub trapped: bool,
 }
 
-/// Теоретическая зеркальная широта: sin²α_eq = cos⁶λ / sqrt(1 + 3 sin²λ).
+/// Theoretical mirror latitude: sin²α_eq = cos⁶λ / sqrt(1 + 3 sin²λ).
 pub fn mirror_latitude(pitch_deg: f64) -> f64 {
     let s2 = pitch_deg.to_radians().sin().powi(2);
     let f = |l: f64| l.cos().powi(6) / (1.0 + 3.0 * l.sin().powi(2)).sqrt() - s2;
@@ -67,7 +67,7 @@ pub fn simulate(world: &World, sp: Species, l: ParticleLaunch, duration: f64, sa
     let gamma = 1.0 + ek / mc2;
     let p = sp.mass * C * (gamma * gamma - 1.0).sqrt();
     let a = l.pitch_angle.to_radians();
-    // на экваторе B ∥ z; перпендикулярная компонента — вдоль y
+    // at the equator B ∥ z; the perpendicular component is along y
     let mut u = Vec3::new(0.0, a.sin(), a.cos()) * (p / sp.mass); // u = γv
     let mut r = r0;
     let mut t = 0.0;
@@ -85,7 +85,7 @@ pub fn simulate(world: &World, sp: Species, l: ParticleLaunch, duration: f64, sa
         let g = (1.0 + u.norm2() / (C * C)).sqrt();
         let gyro = if bn > 0.0 { 2.0 * PI * g * sp.mass / (sp.charge.abs() * bn) } else { duration / 1e4 };
         let dt = (gyro / 40.0).min(duration - t).max(1e-12);
-        // Борис: поворот u в поле B
+        // Boris: rotate u in the field B
         let tv = b * (sp.charge * dt / (2.0 * g * sp.mass));
         let sv = tv * (2.0 / (1.0 + tv.norm2()));
         let up = u + u.cross(tv);

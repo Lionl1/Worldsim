@@ -1,4 +1,4 @@
-"""Базовая модель для сравнения: MLP предсказывает приращение наблюдения. Каналы рельефа не предсказывает: рельеф ей неизвестен.
+"""Baseline model for comparison: an MLP predicts the observation increment. It does not predict terrain channels: terrain is unknown to it.
 
     python -m worldsim.baseline train --data runs/moon runs/earth --out runs/baseline.pt
     python -m worldsim.baseline qualify --model runs/baseline.pt --world moon=runs/moon --world mix=runs/mix --out runs/report
@@ -69,7 +69,7 @@ class Baseline(WorldModel):
         import torch
         from torch import nn
         self.torch = torch
-        # weights_only: чужой файл модели не может выполнить код при загрузке
+        # weights_only: a foreign model file cannot run code on load
         c = torch.load(path, weights_only=True)
         for k in ("mx", "sx", "my", "sy"):
             c[k] = np.asarray(c[k], np.float64)
@@ -86,7 +86,7 @@ class Baseline(WorldModel):
     def step(self, state, action):
         c = self.c
         o = _transform(state[:, c["keep"]], c["ip"])
-        # вход держим в области обучения: вне её сеть экстраполирует и расхождение идёт лавиной
+        # input is kept within the training region: outside it the network extrapolates and the divergence avalanches
         x = np.clip((np.hstack([o, action, self.ctx]) - c["mx"]) / c["sx"], -6, 6)
         with self.torch.no_grad():
             d = self.net(self.torch.tensor(x, dtype=self.torch.float32)).numpy() * c["sy"] + c["my"]
@@ -107,7 +107,7 @@ def main():
     t.add_argument("--epochs", type=int, default=12)
     q = sub.add_parser("qualify")
     q.add_argument("--model", required=True)
-    q.add_argument("--world", action="append", required=True, help="название=папка данных")
+    q.add_argument("--world", action="append", required=True, help="name=data folder")
     q.add_argument("--out", required=True)
     a = ap.parse_args()
     if a.cmd == "train":

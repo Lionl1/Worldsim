@@ -1,8 +1,8 @@
-//! Генератор планетных систем.
-//! Звезда — из начальной функции масс Крупы (или пресет), планеты — с разносом в 10–25
-//! взаимных радиусах Хилла (критерий динамической устойчивости, Chambers et al. 1996),
-//! радиусы — из соотношения масса–радиус (Chen & Kipping 2017), температура — из баланса излучения.
-//! Каждую планету можно превратить в полноценный `World` и запустить на ней климат/баллистику.
+//! Planetary system generator.
+//! Star from the Kroupa initial mass function (or a preset), planets spaced by 10–25
+//! mutual Hill radii (dynamical stability criterion, Chambers et al. 1996),
+//! radii from the mass–radius relation (Chen & Kipping 2017), temperature from radiative balance.
+//! Each planet can be turned into a full `World` and run climate/ballistics on it.
 
 use crate::constants::{AU, G};
 use crate::nbody::{Body, NBody};
@@ -22,9 +22,9 @@ pub struct Planet {
     pub name: String,
     pub mass: f64,   // M⊕
     pub radius: f64, // R⊕
-    pub a: f64,      // а.е.
+    pub a: f64,      // AU
     pub e: f64,
-    pub inc: f64,    // градусы
+    pub inc: f64,    // degrees
     pub node: f64,
     pub argp: f64,
     pub mean_anom: f64,
@@ -42,18 +42,18 @@ pub struct StarSystem {
     pub seed: u64,
 }
 
-/// R(M) в земных единицах, непрерывная кусочно-степенная форма Chen & Kipping (2017).
+/// R(M) in Earth units, continuous piecewise power form Chen & Kipping (2017).
 pub fn mass_radius(m: f64) -> f64 {
     if m < 2.04 { m.powf(0.279) } else if m < 132.0 { 1.22 * (m / 2.04).powf(0.589) } else { 14.2 * (m / 132.0).powf(-0.044) }
 }
 
 pub fn classify(m: f64, t_eq: f64) -> &'static str {
     match m {
-        m if m < 0.1 => "карликовая",
-        m if m < 2.0 => if t_eq > 400.0 { "горячая каменная" } else { "каменная" },
-        m if m < 10.0 => "суперземля / мини-нептун",
-        m if m < 50.0 => if t_eq < 150.0 { "ледяной гигант" } else { "тёплый нептун" },
-        _ => if t_eq > 1000.0 { "горячий юпитер" } else { "газовый гигант" },
+        m if m < 0.1 => "dwarf",
+        m if m < 2.0 => if t_eq > 400.0 { "hot rocky" } else { "rocky" },
+        m if m < 10.0 => "super-Earth / mini-Neptune",
+        m if m < 50.0 => if t_eq < 150.0 { "ice giant" } else { "warm Neptune" },
+        _ => if t_eq > 1000.0 { "hot Jupiter" } else { "gas giant" },
     }
 }
 
@@ -70,15 +70,15 @@ impl StarSystem {
         let mut a = rng.log_uniform(0.02, 0.15) * star.mass.powf(0.5).max(0.3);
         let mut prev_m: Option<f64> = None;
         for k in 0..n {
-            // ближе — мелкие, дальше — шанс на гиганта (линия льда ~2.7 а.е. · √L)
+            // closer in small ones, farther out a chance of a giant (ice line ~2.7 AU · √L)
             let snow = 2.7 * star.luminosity.sqrt();
-            // масса гиганта ограничена ~1% массы звезды
+            // giant mass is limited to ~1% of the star mass
             let m_max = (3000.0 * star.mass).min(1000.0).max(20.0);
             let m = if a > snow && rng.f64() < 0.5 { rng.log_uniform(15.0, m_max) } else { rng.log_uniform(0.05, 12.0) };
             if let Some(pm) = prev_m {
                 let delta = rng.uniform(10.0, 25.0);
                 let kh = ((pm + m) * M_EARTH / (3.0 * star.mass * stars::M_SUN)).powf(1.0 / 3.0);
-                // a₂ − a₁ = Δ · R_H, R_H ≈ kh·a₁ (взаимный радиус Хилла)
+                // a₂ − a₁ = Δ · R_H, R_H ≈ kh·a₁ (mutual Hill radius)
                 a *= 1.0 + delta * kh;
             }
             prev_m = Some(m);
@@ -96,7 +96,7 @@ impl StarSystem {
         Ok(StarSystem { star, planets, hz, seed })
     }
 
-    /// Солнечная система как StarSystem (реальные данные, для сравнения с генератором).
+    /// Solar system as a StarSystem (real data, for comparison with the generator).
     pub fn solar() -> StarSystem {
         let star = stars::star("sun").unwrap();
         let mut planets = Vec::new();
@@ -115,7 +115,7 @@ impl StarSystem {
         StarSystem { star, planets, hz, seed: 0 }
     }
 
-    /// Система из одной реальной/заданной планеты (например, из каталога экзопланет).
+    /// System of one real or specified planet (e.g. from an exoplanet catalog).
     pub fn single(star: Star, mass_e: f64, radius_e: Option<f64>, a: f64, e: f64, name: &str) -> StarSystem {
         let hz = star.habitable_zone();
         let albedo: f64 = if mass_e > 15.0 { 0.34 } else { 0.3 };
@@ -138,12 +138,12 @@ impl StarSystem {
         s
     }
 
-    /// Превратить планету в мир: физика из массы/радиуса, атмосфера и грунт — по типу и температуре.
+    /// Turn a planet into a world: physics from mass/radius, atmosphere and soil from type and temperature.
     pub fn world(&self, idx: usize) -> Result<World, String> {
         let p = &self.planets[idx];
         let gm = p.mass * GM_EARTH;
         let radius = p.radius * R_EARTH;
-        // приливный захват: время ~ a⁶ — грубо считаем захваченными планеты ближе 0.1·√L а.е.
+        // tidal lock: time ~ a⁶; roughly, planets closer than 0.1·√L AU are locked.
         let locked = p.a < 0.1 * self.star.luminosity.sqrt().max(0.3);
         let year = 2.0 * std::f64::consts::PI * ((p.a * AU).powi(3) / (self.star.gm() + gm)).sqrt();
         let rot = if locked { year } else { 86_400.0 * (0.5 + p.mass.sqrt()) };
@@ -154,7 +154,7 @@ impl StarSystem {
             j2: 0.0, bond_albedo: p.albedo, obliquity: if locked { 0.0 } else { 23.0 }, dipole_moment: 0.0,
             moment_of_inertia: 0.33, has_surface: p.mass < 10.0, luminosity: 0.0, orbit: None,
         };
-        // > ~6 M⊕ планеты обычно удерживают водород-гелиевую оболочку (мини-нептуны и гиганты)
+        // > ~6 M⊕ planets usually keep a hydrogen-helium envelope (mini-Neptunes and giants)
         let (atmo, surf) = if p.mass > 6.0 {
             (Some("jupiter"), "earth")
         } else if p.t_eq > 330.0 && p.mass > 0.5 {

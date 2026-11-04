@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Собирает компактные данные для визуализатора из открытых каталогов.
+"""Builds compact data for the visualizer from open catalogs.
 
-  python3 tools/build_data.py <путь к hygdata_v41.csv> <путь к open_exoplanet_catalogue.txt>
+  python3 tools/build_data.py <path to hygdata_v41.csv> <path to open_exoplanet_catalogue.txt>
 
-Источники:
+Sources:
   * HYG Database v4.1 (astronexus/HYG-Database) — CC BY-SA 4.0  → data/stars_hyg.json
   * Open Exoplanet Catalogue (oec_tables, H. Rein) — MIT          → data/exoplanets_oec.json
-Скачать: git clone https://github.com/astronexus/HYG-Database ; git clone https://github.com/OpenExoplanetCatalogue/oec_tables
+Download: git clone https://github.com/astronexus/HYG-Database ; git clone https://github.com/OpenExoplanetCatalogue/oec_tables
 """
 import csv, json, math, sys, os
 
@@ -56,7 +56,7 @@ def planets(path):
             mj, rj, a, p = f_("mass"), f_("radius"), f_("semimajoraxis"), f_("period")
             ms, ts, d = f_("hoststar_mass"), f_("hoststar_temperature"), f_("system_distance")
             if a is None and p is not None and ms:
-                a = (ms * (p / 365.25) ** 2) ** (1 / 3)  # 3-й закон Кеплера
+                a = (ms * (p / 365.25) ** 2) ** (1 / 3)  # 3rd Kepler law
             xyz = None
             if d and r["system_rightascension"] and r["system_declination"]:
                 ra, de = hms(r["system_rightascension"], True), hms(r["system_declination"], False)
@@ -75,6 +75,6 @@ if __name__ == "__main__":
               open(os.path.join(ROOT, "data", "stars_hyg.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     p = planets(sys.argv[2])
     json.dump({"source": "Open Exoplanet Catalogue (oec_tables), MIT, https://github.com/OpenExoplanetCatalogue/oec_tables",
-               "units": {"m": "M_J", "r": "R_J", "a": "AU", "p": "days", "t": "K", "ms": "M_sun", "rs": "R_sun", "ts": "K", "d": "pc", "xyz": "pc (экваториальные)"},
+               "units": {"m": "M_J", "r": "R_J", "a": "AU", "p": "days", "t": "K", "ms": "M_sun", "rs": "R_sun", "ts": "K", "d": "pc", "xyz": "pc (equatorial)"},
                "planets": p}, open(os.path.join(ROOT, "data", "exoplanets_oec.json"), "w"), ensure_ascii=False, separators=(",", ":"))
-    print(f"звёзд: {len(s)}, экзопланет: {len(p)}")
+    print(f"stars: {len(s)}, exoplanets: {len(p)}")

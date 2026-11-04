@@ -1,4 +1,4 @@
-//! Детерминированный ГПСЧ xoshiro256** (воспроизводимые датасеты по seed).
+//! Deterministic xoshiro256** PRNG (reproducible datasets by seed).
 
 #[derive(Clone)]
 pub struct Rng { s: [u64; 4] }
@@ -26,7 +26,7 @@ impl Rng {
         self.s[3] = self.s[3].rotate_left(45);
         r
     }
-    /// равномерно в [0, 1)
+    /// uniform in [0, 1)
     pub fn f64(&mut self) -> f64 { (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64 }
     pub fn uniform(&mut self, lo: f64, hi: f64) -> f64 { lo + (hi - lo) * self.f64() }
     pub fn log_uniform(&mut self, lo: f64, hi: f64) -> f64 { (lo.ln() + (hi.ln() - lo.ln()) * self.f64()).exp() }

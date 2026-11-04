@@ -1,10 +1,10 @@
-"""Калибровка: подбираем параметры модели так, чтобы она повторила записанный полёт.
+"""Calibration: fit model parameters so it reproduces a recorded flight.
 
     python -m worldsim.calibrate --task lander --world moon --csv flight.csv --fit isp:200:400 --fit t_max:1000:50000 --out params.json
 
-В CSV нужны столбцы `act_0…` с командами и хотя бы один столбец истинного состояния (`z`, `vz`, `mass`…, см. `state_names`).
-Первая строка задаёт начальные x, y, z, vx, vy, vz. Шаг таблицы должен совпадать с шагом управления среды.
-Калибровка уточняет параметры, но не проверяет, что сама физика worldsim верна для вашего аппарата: смотрите остаток.
+The CSV needs columns `act_0…` with commands and at least one true state column (`z`, `vz`, `mass`…, cm. `state_names`).
+The first row sets the initial x, y, z, vx, vy, vz. The table step must match the environment control step.
+Calibration refines parameters but does not verify that worldsim physics is right for your vehicle: check the residual.
 """
 import argparse
 import csv
@@ -17,7 +17,7 @@ from .vec import _F, _load
 
 
 def replay(task, world, params, init, actions):
-    """Проигрывает команды и возвращает состояние на каждом шаге: (T×S, имена). Эпизод может кончиться раньше."""
+    """Replays commands and returns the state at each step: (T×S, names). The episode may end earlier."""
     lib = _load()
     lib.ws_replay_names.restype = C.c_size_t
     lib.ws_replay_names.argtypes = [C.c_char_p, C.c_char_p, C.c_size_t]
@@ -70,19 +70,19 @@ def _nelder_mead(f, x0, step=0.15, iters=400, tol=1e-7):
 
 
 def calibrate(task, world, actions, measured, init, fit, fixed=None, restarts=3, seed=0):
-    """`measured`: {имя состояния: массив}; `fit`: {параметр: (мин, макс)}. Возвращает значения, погрешности и остатки."""
+    """`measured`: {state name: array}; `fit`: {parameter: (min, max)}. Returns values, uncertainties and residuals."""
     fixed = dict(fixed or {})
     names = list(fit)
     if not names:
-        raise ValueError("нет параметров для подбора")
+        raise ValueError("no parameters to fit")
     lo, hi = np.array([fit[n][0] for n in names], float), np.array([fit[n][1] for n in names], float)
     if np.any(hi <= lo):
-        raise ValueError("диапазон подбора: максимум должен быть больше минимума")
+        raise ValueError("fit range: the maximum must be greater than the minimum")
     channels = list(measured)
     T = len(actions)
     for c in channels:
         if len(measured[c]) != T:
-            raise ValueError(f"{c}: длина {len(measured[c])} не совпадает с числом команд {T}")
+            raise ValueError(f"{c}: length {len(measured[c])} does not match the number of commands {T}")
     meas = {c: np.asarray(measured[c], float) for c in channels}
     scale = {c: max(float(np.nanstd(meas[c])), 1e-6) for c in channels}
 
@@ -100,7 +100,7 @@ def calibrate(task, world, actions, measured, init, fit, fixed=None, restarts=3,
         return np.concatenate(out)
 
     def cost_u(u):
-        p = lo + (hi - lo) * (0.5 + 0.5 * np.sin(u))  # синус удерживает значения в границах без штрафов
+        p = lo + (hi - lo) * (0.5 + 0.5 * np.sin(u))  # a sine keeps values within bounds without penalties
         r = residual(p)
         return 1e6 if r is None or not np.all(np.isfinite(r)) else float(np.nanmean(r ** 2))
 
@@ -113,7 +113,7 @@ def calibrate(task, world, actions, measured, init, fit, fixed=None, restarts=3,
             best = (u, v)
     p = lo + (hi - lo) * (0.5 + 0.5 * np.sin(best[0]))
     r0 = residual(p)
-    # погрешности из линеаризации: показывают, что данные вообще позволяют определить
+    # uncertainties from linearization: they show what the data can determine at all
     span = hi - lo
     J = np.zeros((len(r0), len(names)))
     for i in range(len(names)):
@@ -121,8 +121,8 @@ def calibrate(task, world, actions, measured, init, fit, fixed=None, restarts=3,
         d[i] = max(abs(p[i]) * 1e-3, (hi[i] - lo[i]) * 1e-4)
         rp, rm = residual(np.minimum(p + d, hi)), residual(np.maximum(p - d, lo))
         if rp is None or rm is None:
-            raise ValueError("полёт кончается сразу: проверьте начальные условия и диапазоны подбора")
-        # производная по доле диапазона: иначе число обусловленности отражает единицы измерения, а не данные
+            raise ValueError("the flight ends immediately: check the initial conditions and fit ranges")
+        # derivative per fraction of the range: otherwise the condition number reflects measurement units, not the data
         J[:, i] = (rp - rm) / (np.minimum(p + d, hi)[i] - np.maximum(p - d, lo)[i]) * span[i]
     dof = max(len(r0) - len(names), 1)
     sigma2 = float(np.nansum(r0 ** 2)) / dof
@@ -143,17 +143,17 @@ def load_csv(path):
     with open(path, encoding="utf8", newline="") as f:
         rows = list(csv.DictReader(f))
     if not rows:
-        raise ValueError(f"{path}: нет строк")
+        raise ValueError(f"{path}: no rows")
     acts = sorted((k for k in rows[0] if k.startswith("act_")), key=lambda x: int(x[4:]))
     if not acts:
-        raise ValueError(f"{path}: нет столбцов act_0, act_1…")
+        raise ValueError(f"{path}: no columns act_0, act_1…")
     a = np.array([[float(r[k]) for k in acts] for r in rows])
     st = {k: np.array([float(r[k]) for r in rows]) for k in rows[0] if not k.startswith("act_") and k != "t"}
     return a, st
 
 
 def align_table(actions, states):
-    """Строка таблицы — состояние до команды этой строки. Replay отдаёт состояние после команды, поэтому сдвигаем на один шаг."""
+    """A table row is the state before that row command. Replay returns the state after the command, so shift by one step."""
     return actions[:-1], {k: v[1:] for k, v in states.items()}
 
 
@@ -162,14 +162,14 @@ def main():
     ap.add_argument("--task", required=True)
     ap.add_argument("--world", required=True)
     ap.add_argument("--csv", required=True)
-    ap.add_argument("--fit", action="append", required=True, help="имя:мин:макс")
-    ap.add_argument("--set", default="", help="постоянные параметры, например frame_skip=4,terrain_scale=0")
+    ap.add_argument("--fit", action="append", required=True, help="name:min:max")
+    ap.add_argument("--set", default="", help="fixed parameters, for example frame_skip=4,terrain_scale=0")
     ap.add_argument("--out")
     a = ap.parse_args()
     actions, st = load_csv(a.csv)
     missing = [k for k in ("x", "y", "z", "vx", "vy", "vz") if k not in st]
     if missing:
-        ap.error(f"в CSV нет начальных условий: {missing}")
+        ap.error(f"the CSV has no initial conditions: {missing}")
     init = [st[k][0] for k in ("x", "y", "z", "vx", "vy", "vz")]
     fit = {f.split(":")[0]: (float(f.split(":")[1]), float(f.split(":")[2])) for f in a.fit}
     fixed = {kv.split("=")[0]: float(kv.split("=")[1]) for kv in a.set.split(",") if kv}

@@ -1,13 +1,13 @@
-//! Галактики и скопления: N тел с деревом Барнса–Хата (O(N log N)), многопоточный расчёт сил.
-//! Единицы: кпк, 10¹⁰ M☉, км/с; единица времени = кпк/(км/с) ≈ 0.978 млрд лет.
-//! Начальные условия: сфера Пламмера (функция распределения Аарсета–Энона–Уилена),
-//! галактика = живое гало Пламмера + экспоненциальный диск + балдж; столкновение двух галактик.
+//! Galaxies and clusters: N bodies with a Barnes–Hut tree (O(N log N)), multithreaded force computation.
+//! Units: kpc, 10¹⁰ M☉, km/s; time unit = kpc/(km/s) ≈ 0.978 Gyr.
+//! Initial conditions: Plummer sphere (Aarseth–Hénon–Wielen distribution function),
+//! galaxy = live Plummer halo + exponential disk + bulge; collision of two galaxies.
 
 use crate::rng::Rng;
 use crate::vec3::Vec3;
 use std::f64::consts::PI;
 
-pub const G_GAL: f64 = 43_009.1; // кпк·(км/с)²/(10¹⁰ M☉)
+pub const G_GAL: f64 = 43_009.1; // kpc·(km/s)²/(10¹⁰ M☉)
 pub const TIME_GYR: f64 = 0.977_8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -20,21 +20,21 @@ pub struct Galaxy {
     pub vel: Vec<Vec3>,
     pub mass: Vec<f64>,
     pub kind: Vec<Kind>,
-    pub eps: f64,   // смягчение, кпк
-    pub theta: f64, // критерий раскрытия
+    pub eps: f64,   // softening, kpc
+    pub theta: f64, // opening criterion
     pub t: f64,
     acc: Vec<Vec3>,
 }
 
-// ---------------------------------------------------------------- октодерево
+// ---------------------------------------------------------------- octree
 #[derive(Clone, Copy)]
 struct Node {
     center: Vec3,
     half: f64,
     com: Vec3,
     mass: f64,
-    child: [u32; 8], // 0 = нет
-    body: i32,       // >=0 — лист с одной частицей
+    child: [u32; 8], // 0 = no
+    body: i32,       // >=0 — leaf with one particle
 }
 
 struct Tree { nodes: Vec<Node>, next: Vec<i32> }
@@ -62,13 +62,13 @@ impl Tree {
         n.center + Vec3::new(if o & 1 != 0 { h } else { -h }, if o & 2 != 0 { h } else { -h }, if o & 4 != 0 { h } else { -h })
     }
 
-    // body: -1 пусто, >=0 лист (голова списка частиц), -2 внутренний узел
+    // body: -1 empty, >=0 leaf (head of particle list), -2 internal node
     fn insert(&mut self, ni: usize, i: usize, pos: &[Vec3], depth: usize) {
         match self.nodes[ni].body {
             -1 => self.nodes[ni].body = i as i32,
             b if b >= 0 => {
                 if depth > 48 {
-                    // совпадающие точки: держим списком в одном листе
+                    // coincident points: kept as a list in one leaf
                     self.next[i] = b;
                     self.nodes[ni].body = i as i32;
                     return;
@@ -128,7 +128,7 @@ impl Tree {
         (m, com)
     }
 
-    /// Ускорение и потенциал в точке p (частица `skip` исключается).
+    /// Acceleration and potential at point p (particle `skip` is excluded).
     fn field(&self, p: Vec3, skip: usize, theta2: f64, eps2: f64, posv: &[Vec3], massv: &[f64]) -> (Vec3, f64) {
         let pos_of = |j: usize| posv[j];
         let mass_of = |j: usize| massv[j];
@@ -170,7 +170,7 @@ impl Tree {
     }
 }
 
-// ---------------------------------------------------------------- система
+// ---------------------------------------------------------------- system
 impl Galaxy {
     pub fn new(pos: Vec<Vec3>, vel: Vec<Vec3>, mass: Vec<f64>, kind: Vec<Kind>, eps: f64) -> Galaxy {
         let n = pos.len();
@@ -222,7 +222,7 @@ impl Galaxy {
 
     fn compute_acc(&mut self) { self.acc = self.par_field(false).0; }
 
-    /// Шаг leapfrog KDK (симплектический).
+    /// Leapfrog KDK step (symplectic).
     pub fn step(&mut self, dt: f64) {
         for i in 0..self.len() { self.vel[i] += self.acc[i] * (0.5 * dt); }
         for i in 0..self.len() { self.pos[i] += self.vel[i] * dt; }
@@ -231,7 +231,7 @@ impl Galaxy {
         self.t += dt;
     }
 
-    /// (кинетическая, потенциальная) энергия; потенциал — по дереву.
+    /// (kinetic, potential) energy; potential from the tree.
     pub fn energy(&self) -> (f64, f64) {
         let (_, phi) = self.par_field(true);
         let k: f64 = (0..self.len()).map(|i| 0.5 * self.mass[i] * self.vel[i].norm2()).sum();
@@ -241,7 +241,7 @@ impl Galaxy {
 
     pub fn momentum(&self) -> Vec3 { (0..self.len()).fold(Vec3::ZERO, |a, i| a + self.vel[i] * self.mass[i]) }
 
-    /// Прямое суммирование ускорения (для проверки точности дерева).
+    /// Direct summation of acceleration (to check tree accuracy).
     pub fn direct_acc(&self, i: usize) -> Vec3 {
         let e2 = self.eps * self.eps;
         let mut a = Vec3::ZERO;
@@ -256,8 +256,8 @@ impl Galaxy {
 
     pub fn tree_acc(&self) -> Vec<Vec3> { self.par_field(false).0 }
 
-    /// Профиль круговой скорости √(r·|a_r|) — кривая вращения.
-    /// Диапазон кривой вращения: 25 кпк для дисков, иначе от размера самой системы.
+    /// Circular velocity profile √(r·|a_r|) — rotation curve.
+    /// Rotation curve range: 25 kpc for disks, otherwise from the size of the system itself.
     pub fn rotation_range(&self) -> f64 {
         if self.kind.iter().any(|k| *k == Kind::Disk) { return 25.0; }
         let mut r: Vec<f64> = self.pos.iter().map(|p| (p.x * p.x + p.y * p.y).sqrt()).collect();
@@ -266,7 +266,7 @@ impl Galaxy {
     }
 
     pub fn rotation_curve(&self, r_max: f64, bins: usize) -> Vec<(f64, f64)> {
-        // без диска считаем круговую скорость по всем частицам (сфера Пламмера, шаровое скопление)
+        // without a disk compute circular velocity from all particles (Plummer sphere, globular cluster)
         let any_disk = self.kind.iter().any(|k| *k == Kind::Disk);
         let mut sum = vec![0.0; bins];
         let mut cnt = vec![0usize; bins];
@@ -285,9 +285,9 @@ impl Galaxy {
     }
 }
 
-// ---------------------------------------------------------------- начальные условия
+// ---------------------------------------------------------------- initial conditions
 
-/// Сфера Пламмера: масса m, масштаб a, центр, скорость. Равновесная (вириальная).
+/// Plummer sphere: mass m, scale a, center, velocity. In equilibrium (virial).
 pub fn plummer(rng: &mut Rng, n: usize, m: f64, a: f64, kind: Kind) -> (Vec<Vec3>, Vec<Vec3>, Vec<f64>, Vec<Kind>) {
     let mut pos = Vec::with_capacity(n);
     let mut vel = Vec::with_capacity(n);
@@ -303,7 +303,7 @@ pub fn plummer(rng: &mut Rng, n: usize, m: f64, a: f64, kind: Kind) -> (Vec<Vec3
             let r = a / (x.powf(-2.0 / 3.0) - 1.0).sqrt();
             if r < 30.0 * a { break r; }
         };
-        // скорость: выборка q = v/v_esc из g(q) = q²(1−q²)^{7/2} отбором
+        // speed: sampling q = v/v_esc of g(q) = q²(1−q²)^{7/2} by rejection
         let q = loop {
             let q = rng.f64();
             if rng.f64() * 0.1 < q * q * (1.0 - q * q).powf(3.5) { break q; }
@@ -320,7 +320,7 @@ pub struct DiskParams {
     pub n_bulge: usize,
     pub n_halo: usize,
     pub m_disk: f64,  // 10¹⁰ M☉
-    pub r_disk: f64,  // масштаб, кпк
+    pub r_disk: f64,  // scale, kpc
     pub z_disk: f64,
     pub m_bulge: f64,
     pub a_bulge: f64,
@@ -329,7 +329,7 @@ pub struct DiskParams {
 }
 
 impl DiskParams {
-    /// Похоже на Млечный Путь (в пределах ~30 кпк).
+    /// Similar to the Milky Way (within ~30 kpc).
     pub fn milky_way(n: usize) -> Self {
         DiskParams { n_disk: n * 5 / 10, n_bulge: n / 10, n_halo: n * 4 / 10, m_disk: 5.0, r_disk: 2.6, z_disk: 0.3,
                      m_bulge: 1.0, a_bulge: 0.6, m_halo: 40.0, a_halo: 20.0 }
@@ -338,13 +338,13 @@ impl DiskParams {
 
 fn plummer_mass(m: f64, a: f64, r: f64) -> f64 { m * r.powi(3) / (r * r + a * a).powf(1.5) }
 
-/// Дисковая галактика: гало + балдж + экспоненциальный диск на круговых орбитах с дисперсией.
+/// Disk galaxy: halo + bulge + exponential disk on circular orbits with dispersion.
 pub fn disk_galaxy(rng: &mut Rng, p: &DiskParams) -> (Vec<Vec3>, Vec<Vec3>, Vec<f64>, Vec<Kind>) {
     let (mut pos, mut vel, mut mass, mut kind) = plummer(rng, p.n_halo, p.m_halo, p.a_halo, Kind::Halo);
     let (bp, bv, bm, bk) = plummer(rng, p.n_bulge, p.m_bulge, p.a_bulge, Kind::Bulge);
     pos.extend(bp); vel.extend(bv); mass.extend(bm); kind.extend(bk);
     for _ in 0..p.n_disk {
-        // экспоненциальный профиль Σ ∝ e^{−R/Rd}: R из гамма(2) распределения
+        // exponential profile Σ ∝ e^{−R/Rd}: R from the gamma(2) distribution
         let r = -p.r_disk * (rng.f64().max(1e-12) * rng.f64().max(1e-12)).ln();
         let r = r.min(8.0 * p.r_disk);
         let ph = rng.uniform(0.0, 2.0 * PI);
@@ -373,7 +373,7 @@ pub fn preset(name: &str, n: usize, seed: u64) -> Result<Galaxy, String> {
             Galaxy::new(p, v, m, k, 0.1)
         }
         "collision" => {
-            // две галактики на почти параболической встрече (как Млечный Путь и Андромеда)
+            // two galaxies on a nearly parabolic encounter (like the Milky Way and Andromeda)
             let (mut p1, mut v1, mut m1, mut k1) = disk_galaxy(&mut rng, &DiskParams::milky_way(n / 2));
             let (p2, v2, m2, k2) = disk_galaxy(&mut rng, &DiskParams::milky_way(n / 2));
             let tilt = |q: Vec3| { let (s, c) = (60f64.to_radians().sin(), 60f64.to_radians().cos()); Vec3::new(q.x, c * q.y - s * q.z, s * q.y + c * q.z) };
@@ -394,13 +394,13 @@ pub fn preset(name: &str, n: usize, seed: u64) -> Result<Galaxy, String> {
             Galaxy::new(p, v, m, k, 0.02)
         }
         "globular" => {
-            // шаровое скопление: 10⁵·… M☉ (~ M13), a = 3 пк
+            // globular cluster: 10⁵·… M☉ (~ M13), a = 3 pc
             let (p, v, m, k) = plummer(&mut rng, n, 6.0e-5, 0.003, Kind::Star);
             Galaxy::new(p, v, m, k, 0.0002)
         }
-        _ => return Err(format!("неизвестный пресет галактики '{name}', доступны: {PRESETS:?}")),
+        _ => return Err(format!("unknown galaxy preset '{name}', available: {PRESETS:?}")),
     })
 }
 
-/// Время пересечения для пламмеровской сферы: t_cr = (G M)^{-1/2} · a^{3/2} · ~
+/// Crossing time for a Plummer sphere: t_cr = (G M)^{-1/2} · a^{3/2} · ~
 pub fn crossing_time(m: f64, a: f64) -> f64 { (a.powi(3) / (G_GAL * m)).sqrt() }
