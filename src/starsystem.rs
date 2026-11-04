@@ -115,6 +115,16 @@ impl StarSystem {
         StarSystem { star, planets, hz, seed: 0 }
     }
 
+    /// Система из одной реальной/заданной планеты (например, из каталога экзопланет).
+    pub fn single(star: Star, mass_e: f64, radius_e: Option<f64>, a: f64, e: f64, name: &str) -> StarSystem {
+        let hz = star.habitable_zone();
+        let albedo: f64 = if mass_e > 15.0 { 0.34 } else { 0.3 };
+        let t_eq = star.teff * (star.radius * stars::R_SUN / (2.0 * a * AU)).sqrt() * (1.0 - albedo).powf(0.25);
+        let p = Planet { name: name.into(), mass: mass_e, radius: radius_e.unwrap_or_else(|| mass_radius(mass_e)), a, e,
+            inc: 0.0, node: 0.0, argp: 0.0, mean_anom: 0.0, kind: classify(mass_e, t_eq), t_eq, in_hz: a >= hz.0 && a <= hz.1, albedo };
+        StarSystem { star, planets: vec![p], hz, seed: 0 }
+    }
+
     pub fn nbody(&self) -> NBody {
         let gm_star = self.star.gm();
         let mut bodies = vec![Body { name: "star".into(), gm: gm_star, r: Vec3::ZERO, v: Vec3::ZERO }];
@@ -144,7 +154,8 @@ impl StarSystem {
             j2: 0.0, bond_albedo: p.albedo, obliquity: if locked { 0.0 } else { 23.0 }, dipole_moment: 0.0,
             moment_of_inertia: 0.33, has_surface: p.mass < 10.0, luminosity: 0.0, orbit: None,
         };
-        let (atmo, surf) = if p.mass > 15.0 {
+        // > ~6 M⊕ планеты обычно удерживают водород-гелиевую оболочку (мини-нептуны и гиганты)
+        let (atmo, surf) = if p.mass > 6.0 {
             (Some("jupiter"), "earth")
         } else if p.t_eq > 330.0 && p.mass > 0.5 {
             (Some("venus"), "venus")

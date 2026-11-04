@@ -27,6 +27,7 @@ const HELP: &str = "worldsim — физические модели миров
   system    --bodies sun,earth,moon,mars --years 1 --dt-hours 1 [--gr] [--leapfrog] [--out sys.csv]
   dataset   --task projectile|orbit|thermal|particle|system --n 1000
             --worlds earth,moon,mars --out data/ --seed 42 [--points 100] [--noise 0.01] [--strict]
+  serve     [--port 8080] [--no-open]   3D-интерфейс в браузере (все модели)
   validate                      прогнать проверку всех законов
 
 МИР (для любой команды)
@@ -38,7 +39,9 @@ const HELP: &str = "worldsim — физические модели миров
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.is_empty() || args[0] == "-h" || args[0] == "--help" { print!("{HELP}"); return ExitCode::SUCCESS; }
+    if args.first().map(|a| a == "-h" || a == "--help").unwrap_or(false) { print!("{HELP}"); return ExitCode::SUCCESS; }
+    // без аргументов — сразу запускаем интерфейс
+    let args = if args.is_empty() { vec!["serve".to_string()] } else { args };
     let cmd = args[0].clone();
     let (pos, kv) = parse(&args[1..]);
     match run(&cmd, &pos, &kv) {
@@ -193,6 +196,7 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
             println!("задача {}: создано {} сэмплов, валидных {} ({:.1}%), max ошибка {:.2e}, {:.1} с → {}/",
                 cfg.task, st.generated, st.valid, 100.0 * st.valid as f64 / st.generated.max(1) as f64, st.max_error, t0.elapsed().as_secs_f64(), cfg.out_dir);
         }
+        "serve" => worldsim::server::serve(num(kv, "port", 8080.0)? as u16, !flag(kv, "no-open"))?,
         "validate" => {
             let t0 = std::time::Instant::now();
             let checks = validate::all();
