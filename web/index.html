@@ -34,13 +34,42 @@ table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,t
 #tip{position:absolute;pointer-events:none;background:#0b1120ee;border:1px solid var(--line);padding:6px 8px;border-radius:6px;display:none;font-size:12px}
 #busy{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:#14223b;padding:6px 12px;border-radius:999px;display:none}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+
+/* движение и глубина */
+#gl{transition:opacity .28s ease}#veil{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,#0a1020 0%,#05070d 75%);transition:opacity .2s ease;z-index:6}#veil.on{opacity:1}
+nav button{transition:background .18s ease,color .18s ease,box-shadow .22s ease,transform .18s ease}nav button:hover{transform:translateX(2px)}nav button:active{transform:translateX(2px) scale(.98)}
+nav .grp{color:#5d6880;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;margin:10px 10px 2px}
+nav button.on{background:linear-gradient(90deg,#17305a,#101c33);box-shadow:inset 3px 0 0 var(--accent),0 0 18px rgba(111,183,255,.12)}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}@keyframes pop{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}@keyframes spin{to{transform:rotate(360deg)}}
+.panel.enter{animation:rise .36s cubic-bezier(.2,.8,.2,1) both}.chartbox.enter{animation:rise .42s .05s cubic-bezier(.2,.8,.2,1) both}.hud{animation:pop .3s ease both}
+.panel,.hud,.chartbox{box-shadow:0 12px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04)}.btn{transition:background .16s ease,transform .1s ease,box-shadow .16s ease}.btn:hover{box-shadow:0 0 0 1px rgba(111,183,255,.35)}.btn:active{transform:translateY(1px)}.btn.off{opacity:.5;pointer-events:none}
+input[type=range]{transition:filter .15s}input[type=range]:hover{filter:brightness(1.2)}select,input[type=number],input[type=text],textarea{transition:border-color .15s,box-shadow .15s}select:focus,input:focus,textarea:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 2px rgba(111,183,255,.18)}
+#busy{display:flex;align-items:center;gap:8px;opacity:0;visibility:hidden;transition:opacity .15s;z-index:8;box-shadow:0 6px 24px rgba(0,0,0,.4)}#busy.on{opacity:1;visibility:visible}#busy::before{content:"";width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.2);border-top-color:var(--accent);animation:spin .7s linear infinite}
+.cam{width:100%;image-rendering:pixelated;border-radius:6px;border:1px solid var(--line);background:#000;display:block}
+.pill.y{background:#3a2f12;color:var(--warn)}
+/* Mission Lab */
+#mission{position:absolute;inset:0;overflow:auto;padding:22px 26px 30px;display:none;background:radial-gradient(1200px 600px at 80% -10%,#13203c 0%,transparent 60%)}.ml-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-bottom:14px;animation:rise .35s both}.ml-head h2{margin:0 0 3px;font-size:21px}.ml-head .muted{max-width:680px}
+.ml-grid{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:14px;align-items:start}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px;box-shadow:0 8px 30px rgba(0,0,0,.3);animation:rise .4s cubic-bezier(.2,.8,.2,1) both}.card h3{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
+.ml-editor{position:sticky;top:0}.ml-editor textarea{width:100%;height:calc(100vh - 170px);min-height:320px;background:#0b1120;color:#cfe0ff;border:1px solid var(--line);border-radius:8px;padding:9px;font:12px/1.5 ui-monospace,Menlo,monospace;resize:vertical}
+.ml-res{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ml-res>.card:nth-child(2){animation-delay:.05s}.ml-res>.card:nth-child(3){animation-delay:.1s}.ml-res>.card:nth-child(4){animation-delay:.15s}.ml-res>.card:nth-child(5){animation-delay:.2s}.ml-wide,.hero,.ml-res>.card:nth-child(2){grid-column:1/-1}.ml-empty{grid-column:1/-1;text-align:center;padding:60px 20px;display:flex;flex-direction:column;gap:6px;align-items:center}.ml-big{font-size:42px}
+.hero{display:grid;grid-template-columns:auto 1fr auto;gap:4px 16px;align-items:center}.hero.good{border-color:#23553b;background:linear-gradient(120deg,rgba(40,110,75,.28),var(--panel) 55%)}.hero.bad{border-color:#5c2c33;background:linear-gradient(120deg,rgba(130,45,55,.26),var(--panel) 55%)}.ml-num{font-size:36px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.5px}.ml-advice{grid-column:1/-1;margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
+.hbar{display:grid;grid-template-columns:minmax(120px,42%) 1fr 48px;gap:8px;align-items:center;margin:5px 0;font-size:12px}.hbar b{text-align:right;font-variant-numeric:tabular-nums}.hbar .bar{height:8px}.bar i.red,.tor i.red{background:linear-gradient(90deg,#c9535f,#ff6b6b)}.tor{position:relative;height:9px;background:#1a2236;border-radius:3px;overflow:hidden}.tor::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:#54607c}.tor i{position:absolute;top:0;bottom:0;display:block;animation:grow .6s cubic-bezier(.2,.8,.2,1) both;transform-origin:left}.tor i.grn{background:linear-gradient(90deg,#3f9e6c,#5fd38d)}.tor u{position:absolute;top:3px;height:3px;background:rgba(255,255,255,.55);z-index:1}.tor.ci{margin-bottom:3px}@keyframes grow{from{opacity:.2;transform:scaleX(.2)}to{opacity:1;transform:none}}tr.dim td{color:var(--muted)}.ml-foot{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+@media (max-width:1100px){.ml-grid{grid-template-columns:minmax(0,1fr)}.ml-editor{position:static}.ml-editor textarea{height:240px;min-height:0}}
+@media (max-width:760px){#app{grid-template-columns:1fr;grid-template-rows:auto 1fr}nav{flex-direction:row;padding:6px;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;gap:2px;scrollbar-width:none}nav h1,nav .sub,nav .foot,nav .grp{display:none}nav button{white-space:nowrap;padding:8px 10px;flex:0 0 auto}nav button:hover{transform:none}nav button.on{box-shadow:inset 0 -2px 0 var(--accent)}
+.panel{top:auto;left:0;right:0;bottom:0;width:100%;max-height:46%;border-radius:14px 14px 0 0;border-width:1px 0 0}.chartbox{display:none!important}.hud{left:8px;right:8px;top:8px;font-size:12px}#laws,#mission{padding:14px}#laws table{font-size:11px}.ml-grid,.ml-res{grid-template-columns:minmax(0,1fr)}.ml-editor{position:static}.ml-editor textarea{height:220px;min-height:0}.hero{grid-template-columns:auto 1fr}.ml-count{grid-column:1/-1}.card{overflow-x:auto}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
 </head>
 <body>
 <div id="app">
 <nav>
-  <h1>🌌 worldsim</h1><div class="sub">модель вселенной · законы проверяются</div>
+  <h1>🌌 worldsim</h1><div class="sub">физика для миссий и world models</div>
+  <div class="grp">Инженерия</div>
+  <button data-tab="mission">🚀 Mission Lab</button>
+  <button data-tab="robots">🤖 Роботы</button>
+  <button data-tab="laws">✅ Законы</button>
+  <div class="grp">Вселенная</div>
   <button data-tab="world">🪐 Миры</button>
   <button data-tab="climate">🌡️ Климат</button>
   <button data-tab="solar">☀️ Солнечная система</button>
@@ -48,7 +77,6 @@ table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,t
   <button data-tab="starmap">🔭 Карта звёзд и экзопланет</button>
   <button data-tab="galaxy">🌀 Галактики</button>
   <button data-tab="cosmo">🕸️ Космология</button>
-  <button data-tab="laws">✅ Законы</button>
   <div class="foot">Данные: HYG v4.1 (CC BY-SA 4.0), Open Exoplanet Catalogue (MIT), Planck 2018, NASA Fact Sheets.<br>Мышь: вращение, колесо — масштаб.</div>
 </nav>
 <main>
@@ -57,8 +85,10 @@ table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,t
   <div id="panel" class="panel"></div>
   <div id="chartbox" class="chartbox" style="display:none"><canvas id="chart" width="460" height="230"></canvas></div>
   <div id="laws"></div>
+  <div id="mission"></div>
+  <div id="veil"></div>
   <div id="tip"></div>
-  <div id="busy">считаю…</div>
+  <div id="busy"><span id="busy_t">считаю…</span></div>
 </main>
 </div>
 <script type="module">
@@ -78,7 +108,12 @@ const api = async (path, opts={}) => {
   return opts.binary ? r : r.json();
 };
 const qs = o => new URLSearchParams(Object.entries(o).filter(([k,v]) => v !== undefined && v !== null && v !== '')).toString();
-const busy = on => $('#busy').style.display = on ? 'block' : 'none';
+const busy = (on, text='считаю…') => { $('#busy_t').textContent = text; $('#busy').classList.toggle('on', !!on); };
+const esc = t => String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* время в подходящих единицах: млрд лет … лет */
+const fmtTime = g => { const a=Math.abs(g); return a>=1 ? g.toFixed(3)+' млрд лет' : a>=1e-3 ? (g*1e3).toFixed(2)+' млн лет' : a>=1e-6 ? (g*1e6).toFixed(1)+' тыс. лет' : (g*1e9).toFixed(0)+' лет'; };
 const fmt = (x, d=2) => x == null || !isFinite(x) ? '—' : (Math.abs(x) >= 1e5 || (Math.abs(x) < 1e-3 && x !== 0)) ? x.toExponential(d) : x.toFixed(d);
 function resize(){ const m = canvas.parentElement; renderer.setSize(m.clientWidth, m.clientHeight, false); if (current?.camera){ current.camera.aspect = m.clientWidth/m.clientHeight; current.camera.updateProjectionMatrix(); } }
 addEventListener('resize', resize);
@@ -256,7 +291,7 @@ const worldTab = {
       const ac = atmoColor(w); if (ac) this.group.add(atmosphereShell(1, ac[0], ac[1]));
       const P = (k,v) => `<div>${k}</div><div>${v}</div>`;
       let h = `<h3>${w.name.replaceAll(' ', ' · ')}</h3><div class="kv">${P('Масса', fmt(w.mass_earth,3)+' M⊕')}${P('Радиус', fmt(w.radius_km,0)+' км')}${P('g', fmt(w.g,3)+' м/с²')}
-        ${P('1-я / 2-я косм.', fmt(w.v_orb/1e3,2)+' / '+fmt(w.v_esc/1e3,2)+' км/с')}${P('Сутки', fmt(w.day_h,2)+' ч')}${P('Год', fmt(w.year_days,1)+' сут')}
+        ${P('1-я / 2-я косм.', fmt(w.v_orb/1e3,2)+' / '+fmt(w.v_esc/1e3,2)+' км/с')}${P('Сутки', w.tidally_locked ? 'приливной захват' : fmt(w.day_h,2)+' ч')}${P('Год', fmt(w.year_days,1)+' сут')}
         ${P('Инсоляция', fmt(w.insolation,1)+' Вт/м²')}${P('T равновесная', fmt(w.t_eq,1)+' К')}${P('T поверхности', fmt(w.t_mean,1)+' К ('+fmt(w.t_mean-273.15,1)+' °C)')}
         ${P('Парниковая τ', fmt(w.tau,3))}${P('Магн. диполь', w.dipole? fmt(w.dipole,2)+' А·м²':'нет')}</div>`;
       if (w.atmosphere){ const a=w.atmosphere; h += `<h3>Атмосфера (${a.name})</h3><div class="kv">${P('Давление', fmt(a.pressure,0)+' Па')}${P('Шкала высот', fmt(a.scale_height_km,2)+' км')}${P('M, γ', fmt(a.molar_mass*1e3,2)+' г/моль, '+fmt(a.gamma,3))}${P('Масса столба', fmt(a.column_kg_m2,0)+' кг/м²')}</div>
@@ -300,20 +335,27 @@ const climateTab = {
       <div class="row"><label>Доля океана</label><input id="c_oc" type="number" step="0.1" placeholder="авто"></div>
       <div class="row"><label>Старт</label><select id="c_cold"><option value="0">тёплый</option><option value="1">холодный («снежок»)</option></select></div>
       <div class="row"><label>Раскраска</label><select id="c_map"><option value="1">температура</option><option value="0">реалистичная + лёд</option></select></div>
-      <div class="btns"><span class="btn" id="c_go">Рассчитать</span></div><div id="c_info"></div>`;
+      <div class="btns"><span class="btn" id="c_go">Рассчитать</span></div><div id="c_base" class="muted" style="margin-top:6px"></div><div id="c_info"></div>`;
     $('#c_s').oninput = e => $('#c_sv').textContent = Math.round(e.target.value*100)+'%';
     $('#c_tau').oninput = e => $('#c_tv').textContent = '×'+(+e.target.value).toFixed(2);
-    $('#c_go').onclick = () => this.run();
+    $('#c_go').onclick = () => this.run(this.base);
+    // мир из другой вкладки (смешанный или экзопланета) остаётся выбранным, пока пользователь не сменит его сам
+    const clearBase = () => { this.base = null; $('#c_base').innerHTML = ''; };
+    $('#c_phys').onchange = clearBase; $('#c_atm').onchange = clearBase;
     $('#c_map').onchange = () => { if (this.mat) this.mat.uniforms.uMap.value = +$('#c_map').value; };
     const pend = this.pending; this.pending = null;
-    await this.run(pend);
+    this.base = pend && (pend.m != null || pend.seed != null || pend.surface || pend.gravity_scale != null || pend.distance_au) ? pend : null;
+    if (pend?.physics && [...$('#c_phys').options].some(o=>o.value===pend.physics)) $('#c_phys').value = pend.physics;
+    if (pend?.atmosphere && [...$('#c_atm').options].some(o=>o.value===pend.atmosphere)) $('#c_atm').value = pend.atmosphere;
+    await this.run(this.base || pend || undefined);
   },
   async run(base){
     busy(true);
     try {
-      const q = Object.assign(base || {physics:$('#c_phys').value, atmosphere:$('#c_atm').value}, {solar:$('#c_s').value, tau:$('#c_tau').value, obliquity:$('#c_obl').value, ecc:$('#c_ecc').value, ocean:$('#c_oc').value, cold:$('#c_cold').value});
+      const q = Object.assign({}, base || {physics:$('#c_phys').value, atmosphere:$('#c_atm').value}, {solar:$('#c_s').value, tau:$('#c_tau').value, obliquity:$('#c_obl').value, ecc:$('#c_ecc').value, ocean:$('#c_oc').value, cold:$('#c_cold').value});
       const [r, w] = await Promise.all([api('/api/climate?'+qs(q)), api('/api/world?'+qs(q))]);
       this.r = r;
+      if ($('#c_base')) $('#c_base').innerHTML = base ? `Считается мир из другой вкладки: <b>${esc(w.name)}</b>. Смените поле «Мир», чтобы вернуться к пресетам.` : '';
       if (this.mesh) this.scene.remove(this.mesh);
       const nl = r.lat.length;
       this.tex = new THREE.DataTexture(new Float32Array(nl*4), 1, nl, THREE.RGBAFormat, THREE.FloatType);
@@ -383,8 +425,10 @@ const solarTab = {
     await this.start();
   },
   async start(){
+    let meta;
+    try { meta = await api('/api/nbody/new?' + qs({kind:'solar', bodies:$('#s_b').value, gr:$('#s_gr').value})); $('#s_info').innerHTML = ''; }
+    catch(e){ $('#s_info').innerHTML = `<span class="no">${esc(e.message)}</span>`; return; }
     this.scene.children.filter(o=>o.type!=='Points').forEach(o=>this.scene.remove(o));
-    const meta = await api('/api/nbody/new?' + qs({kind:'solar', bodies:$('#s_b').value, gr:$('#s_gr').value}));
     this.meta = meta; this.id = meta.id; this.bodies = nbodyView(this, meta); this.loop(epoch);
   },
   async loop(ep){
@@ -426,7 +470,7 @@ const systemTab = {
       <div class="row"><label>Seed</label><input id="g_seed" type="number" value="${1+Math.floor(Math.random()*9999)}"></div>
       <div class="row"><label>Дней за кадр</label><input id="g_v" type="range" min="0.05" max="20" step="0.05" value="1"></div>
       <div class="btns"><span class="btn" id="g_go">Сгенерировать</span><span class="btn sec" id="g_rnd">🎲 Случайная</span></div><div id="g_info"></div>`;
-    $('#g_go').onclick = () => this.start();
+    $('#g_go').onclick = () => this.start().catch(e => { busy(false); alert(e.message); });
     $('#g_rnd').onclick = () => { $('#g_seed').value = 1+Math.floor(Math.random()*99999); this.start(); };
     await this.start();
   },
@@ -450,7 +494,7 @@ const systemTab = {
       <h3>Планеты</h3><table><tr><th></th><th>M⊕</th><th>а.е.</th><th>T, К</th><th>тип</th><th></th></tr>${rows}</table>
       <div class="muted" style="margin-top:6px">«мир» откроет планету в конструкторе: атмосфера и грунт подбираются по массе и температуре.</div>`;
     $('#g_info').querySelectorAll('[data-p]').forEach(b => b.onclick = () => {
-      const qq = {seed:this.q.seed, star:this.q.star, planet:b.dataset.p};
+      const qq = {seed:this.q.seed || 1, star:this.q.star, planet:b.dataset.p};
       if (this.q.star === 'solar'){ const names=['mercury','venus','earth','mars','jupiter']; worldTab.pending = {physics:names[b.dataset.p]}; }
       else worldTab.pending = qq;
       switchTab('world');
@@ -558,13 +602,15 @@ const galaxyTab = {
     panel.innerHTML = `<h2>Галактики (Барнс–Хат)</h2><div class="muted">Живое тёмное гало + балдж + экспоненциальный диск. Сила — деревом O(N log N), многопоточно.</div>
       <div class="row"><label>Пресет</label><select id="x_p"><option value="milky_way">Млечный Путь</option><option value="collision">Столкновение двух галактик</option><option value="plummer">Сфера Пламмера</option><option value="globular">Шаровое скопление</option></select></div>
       <div class="row"><label>Частиц</label><select id="x_n"><option>10000</option><option selected>20000</option><option>40000</option><option>80000</option></select></div>
-      <div class="row"><label>Шаг, млн лет</label><input id="x_dt" type="range" min="0.25" max="5" step="0.25" value="1"><span id="x_dtv" style="flex:0 0 40px">1</span></div>
+      <div class="row"><label>Шаг</label><input id="x_dt" type="range" min="0.25" max="5" step="0.25" value="1"><span id="x_dtv" style="flex:0 0 76px;white-space:nowrap">1 млн лет</span></div>
       <div class="row"><label>Тёмное гало</label><select id="x_h"><option value="0">скрыть</option><option value="1">показать</option></select></div>
       <div class="btns"><span class="btn" id="x_go">Создать</span><span class="btn sec" id="x_pp">Пауза</span><span class="btn sec" id="x_rc">Кривая вращения</span></div>
       <div class="legend" style="margin-top:8px"><span><i style="background:#9ab8ff"></i>диск</span><span><i style="background:#ffc27a"></i>балдж</span><span><i style="background:#6a4fa3"></i>тёмная материя</span></div>
       <div id="x_info" class="muted" style="margin-top:6px"></div>`;
-    $('#x_dt').oninput = e => $('#x_dtv').textContent = e.target.value;
-    $('#x_go').onclick = () => this.start();
+    $('#x_dt').oninput = () => this.showStep();
+    $('#x_p').onchange = () => { this.scaleKpc = {plummer:1, globular:.003}[$('#x_p').value] || 10; this.showStep(); };
+    this.scaleKpc = 10;
+    $('#x_go').onclick = () => this.start().catch(e => { busy(false); alert(e.message); });
     $('#x_pp').onclick = () => { this.paused = !this.paused; $('#x_pp').textContent = this.paused?'Продолжить':'Пауза'; };
     $('#x_rc').onclick = () => this.rot();
     $('#x_h').onchange = () => this.recolor();
@@ -573,7 +619,7 @@ const galaxyTab = {
   async start(){
     busy(true);
     const meta = await api('/api/galaxy/new?' + qs({preset:$('#x_p').value, n:$('#x_n').value, seed:Math.floor(Math.random()*1e6)})); busy(false);
-    this.id = meta.id; this.meta = meta;
+    this.id = meta.id; this.meta = meta; this.scaleKpc = meta.scale_kpc; this.showStep();
     if (this.pts) this.scene.remove(this.pts);
     const n = meta.n, g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3),3)); g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n*3),3));
@@ -583,6 +629,9 @@ const galaxyTab = {
     this.camera.position.set(0, 20, 30); this.controls.target.set(0,0,0);
     this.loop(epoch);
   },
+  /* шаг в млрд лет: компактным системам нужен меньший, иначе интегратор неустойчив */
+  stepGyr(){ const s = this.scaleKpc; return +$('#x_dt').value / 1000 * (s < 1 ? (s < .01 ? 1e-4 : .05) : s < 5 ? .05 : 1); },
+  showStep(){ $('#x_dtv').textContent = fmtTime(this.stepGyr()); },
   recolor(){
     const k = this.meta.kinds, c = this.pts.geometry.attributes.color.array, halo = $('#x_h').value === '1';
     const pal = {0: halo?[.16,.1,.3]:[0,0,0], 1:[1,.66,.35], 2:[.55,.68,1], 3:[1,.9,.75]};
@@ -593,20 +642,20 @@ const galaxyTab = {
     const myId = this.id;
     while (ep === epoch && myId === this.id){
       if (this.paused){ await new Promise(r=>setTimeout(r,100)); continue; }
-      const dtGyr = +$('#x_dt').value / 1000, dt = dtGyr / 0.9778 * (this.meta.scale_kpc < 1 ? (this.meta.scale_kpc<0.01? 1e-4 : 0.05) : 1);
+      const dt = this.stepGyr() / 0.9778;
       try {
         const r = await api('/api/galaxy/step?' + qs({id:this.id, steps:1, dt}), {binary:true});
         const buf = new Float32Array(await r.arrayBuffer());
         if (ep !== epoch || myId !== this.id) return;
         this.pts.geometry.attributes.position.array.set(buf); this.pts.geometry.attributes.position.needsUpdate = true;
-        hud.style.display='block'; hud.innerHTML = `<span class="k">t =</span> <b>${(+r.headers.get('X-T-Gyr')).toFixed(3)} млрд лет</b> <span class="k">· N =</span> ${this.meta.n.toLocaleString('ru')}`;
+        hud.style.display='block'; hud.innerHTML = `<span class="k">t =</span> <b>${fmtTime(+r.headers.get('X-T-Gyr'))}</b> <span class="k">· N =</span> ${this.meta.n.toLocaleString('ru')}`;
       } catch(e){ return; }
     }
   },
   async rot(){
     const r = await api('/api/galaxy/rotation?id=' + this.id);
     $('#x_info').innerHTML = `Вириальное отношение 2K/|W| = <b>${fmt(r.virial,3)}</b> (равновесие = 1)`;
-    chart([{x:r.r, y:r.v, color:'#9ab8ff', label:'v_c(R) диска'}, {x:[8,8], y:[0,300], color:'#ffc361', label:'Солнце, 8 кпк', width:1}], {title:'Кривая вращения: скорость (км/с) от радиуса (кпк)', xlabel:'кпк', yr:[0,300]});
+    chart([{x:r.r, y:r.v, color:'#9ab8ff', label:'v_c(R) диска'}].concat(this.meta.scale_kpc >= 10 ? [{x:[8,8], y:[0,300], color:'#ffc361', label:'Солнце, 8 кпк', width:1}] : []), {title:'Кривая вращения: скорость (км/с) от радиуса (кпк)', xlabel:'кпк', yr:[0,300]});
   },
   update(){},
 };
@@ -622,7 +671,7 @@ const cosmoTab = {
       <div class="row"><label>Δa за шаг</label><input id="k_da" type="range" min="0.002" max="0.03" step="0.002" value="0.01"></div>
       <div class="btns"><span class="btn" id="k_go">Большой взрыв ↺</span><span class="btn sec" id="k_pp">Пауза</span><span class="btn sec" id="k_pk">Спектр P(k)</span><span class="btn sec" id="k_bg">История a(t)</span></div>
       <div id="k_info" class="muted" style="margin-top:8px"></div>`;
-    $('#k_go').onclick = () => this.start();
+    $('#k_go').onclick = () => this.start().catch(e => { busy(false); alert(e.message); });
     $('#k_pp').onclick = () => { this.paused = !this.paused; $('#k_pp').textContent = this.paused?'Продолжить':'Пауза'; };
     $('#k_pk').onclick = () => this.power();
     $('#k_bg').onclick = () => this.background();
@@ -700,23 +749,227 @@ const lawsTab = {
 };
 
 // ============================================================ переключение и цикл
-const tabs = {world:worldTab, climate:climateTab, solar:solarTab, system:systemTab, starmap:starmapTab, galaxy:galaxyTab, cosmo:cosmoTab, laws:lawsTab};
+// ============================================================ вкладка: Роботы
+const SKY = {none:0x05070d, earth:0x7fa8d8, mars:0xc99a72, venus:0xd0ad66, jupiter:0xb89c78};
+const GROUND = {moon:[.36,.35,.33], moon_mare:[.26,.25,.24], mercury:[.34,.31,.28], mars:[.55,.30,.17], venus:[.55,.42,.22], earth:[.27,.34,.19]};
+const robotsTab = {
+  noIntro: true,
+  async init(){
+    const S = makeScene(50, .1, 2e4); Object.assign(this, S); starfield(S.scene, 2500, 9000);
+    this.scene.add(new THREE.HemisphereLight(0xbcd0ff, 0x302820, .9));
+    this.sun = new THREE.DirectionalLight(0xfff2dd, 2.4); this.sun.position.set(400, 700, 300); this.scene.add(this.sun);
+    const pr = await api('/api/presets');
+    const opt = (a, sel) => a.map(x=>`<option ${x===sel?'selected':''}>${x}</option>`).join('');
+    panel.innerHTML = `<h2>Роботы: среда для world model</h2><div class="muted">Истинная физика в реальном времени: модуль, дрон или ровер в любом мире, включая смешанные.</div>
+      <div class="row"><label>Задача</label><select id="r_t"><option value="lander">посадочный модуль</option><option value="drone">дрон</option><option value="rover">ровер</option></select></div>
+      <div class="row"><label>Гравитация</label><select id="r_w">${opt(pr.physics.filter(x=>x!=='sun'),'moon')}</select></div>
+      <div class="row"><label>Атмосфера</label><select id="r_a"><option>auto</option>${opt(pr.atmosphere)}</select></div>
+      <div class="row"><label>Винты ×</label><input id="r_r" type="number" min="1" value="1" title="на Марсе нужно около 16"></div>
+      <div class="row"><label>Порывы, м/с</label><input id="r_g" type="range" min="0" max="10" step="0.5" value="0"><span id="r_gv" style="flex:0 0 32px">0</span></div>
+      <div class="row"><label>Управление</label><select id="r_m"><option value="auto">автопилот</option><option value="random">случайное</option></select></div>
+      <div class="row"><label>Скорость</label><input id="r_s" type="range" min="1" max="10" step="1" value="2"><span id="r_sv" style="flex:0 0 32px">×2</span></div>
+      <div class="btns"><span class="btn" id="r_go">Новый эпизод</span><span class="btn sec" id="r_p">Пауза</span></div>
+      <div id="r_info" style="margin-top:10px"></div>
+      <h3>Камера аппарата</h3><canvas id="r_cam" width="96" height="64" class="cam"></canvas>
+      <h3>Параметры, скрытые от агента</h3><div id="r_hidden" class="kv"></div>`;
+    $('#r_g').oninput = e => $('#r_gv').textContent = e.target.value;
+    $('#r_s').oninput = e => $('#r_sv').textContent = '×'+e.target.value;
+    $('#r_go').onclick = () => { this.seed = (this.seed||1)+1; this.start(); };
+    $('#r_p').onclick = () => { this.paused = !this.paused; $('#r_p').textContent = this.paused?'Продолжить':'Пауза'; };
+    for (const id of ['r_t','r_w','r_a']) $('#'+id).onchange = () => this.start();
+    this.seed = 1; this.paused = false;
+    await this.start();
+  },
+  buildBody(task){
+    const g = new THREE.Group(), m = (c,o={}) => new THREE.MeshStandardMaterial({color:c, metalness:.5, roughness:.45, ...o});
+    if (task === 'lander'){
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.5,2.4,16), m(0xc9ccd4)); b.position.y=.9; g.add(b);
+      const t = new THREE.Mesh(new THREE.ConeGeometry(1.1,1,16), m(0xe8b45a)); t.position.y=2.6; g.add(t);
+      for (const [x,z] of [[1.5,0],[-1.5,0],[0,1.5],[0,-1.5]]){
+        const l = new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,2.2,6), m(0x777c88)); l.position.set(x*.7,-.6,z*.7); l.rotation.set(z*.3,0,-x*.3); g.add(l);
+        const f = new THREE.Mesh(new THREE.CylinderGeometry(.3,.3,.08,10), m(0x777c88)); f.position.set(x,-1.6,z); g.add(f);
+      }
+      this.flame = new THREE.Mesh(new THREE.ConeGeometry(.7,1,12), new THREE.MeshBasicMaterial({color:0xffa84d, transparent:true, opacity:.85})); this.flame.rotation.x=Math.PI; this.flame.position.y=-.6; g.add(this.flame);
+    } else if (task === 'drone'){
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(.28,.1,.28), m(0x3f4656)));
+      for (const [x,z] of [[.25,0],[-.25,0],[0,.25],[0,-.25]]){
+        const a = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(x)*2+.03,.02,Math.abs(z)*2+.03), m(0x8d94a5)); a.position.set(x/2,0,z/2); g.add(a);
+        const r = new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,.012,20), new THREE.MeshBasicMaterial({color:0x8fc7ff, transparent:true, opacity:.45})); r.position.set(x,.05,z); g.add(r);
+      }
+      this.flame = null; g.scale.setScalar(4);
+    } else {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(1.6,.5,1.2), m(0xd9dde6)); b.position.y=.6; g.add(b);
+      const p = new THREE.Mesh(new THREE.BoxGeometry(1.5,.05,1.5), m(0x24406f,{metalness:.8})); p.position.y=.95; g.add(p);
+      for (const [x,z] of [[.7,.7],[.7,-.7],[-.7,.7],[-.7,-.7]]){ const w = new THREE.Mesh(new THREE.CylinderGeometry(.3,.3,.2,14), m(0x2a2d33)); w.rotation.x=Math.PI/2; w.position.set(x,.3,z); g.add(w); }
+      this.flame = null; g.scale.setScalar(1.6);
+    }
+    return g;
+  },
+  async start(){
+    const my = this.run = (this.run||0)+1; const ep0 = epoch;
+    const task = $('#r_t').value;
+    const q = {task, physics:$('#r_w').value, atmosphere:$('#r_a').value, rotor_scale:$('#r_r').value||1, gust:$('#r_g').value, seed:this.seed};
+    let meta, ter;
+    try { meta = await api('/api/env/make?'+qs(q)); ter = await api(`/api/env/terrain?id=${meta.id}&n=129`); }
+    catch(e){ $('#r_info').innerHTML = `<div class="no">${esc(e.message)}</div>`; return; }
+    if (my !== this.run || ep0 !== epoch) return;
+    if (this.id) fetch('/api/env/close?id='+this.id).catch(()=>{});
+    this.id = meta.id; this.meta = meta; this.hist = {t:[],a:[],v:[]}; this.frame = 0;
+    for (const o of [this.ground,this.body,this.goal,this.rays,this.trail]) if (o) this.scene.remove(o);
+    // рельеф
+    const n = ter.n, geo = new THREE.PlaneGeometry(ter.size, ter.size, n-1, n-1); geo.rotateX(-Math.PI/2);
+    const pos = geo.attributes.position, col = new Float32Array(pos.count*3), base = GROUND[ter.surface] || GROUND.earth;
+    let lo=1e9, hi=-1e9; for (const h of ter.h){ lo=Math.min(lo,h); hi=Math.max(hi,h); }
+    for (let r=0;r<n;r++) for (let i=0;i<n;i++){ const k=r*n+i, h=ter.h[(n-1-r)*n+i]; pos.setY(k,h); const s=.72+.5*(h-lo)/Math.max(hi-lo,1); col.set([base[0]*s,base[1]*s,base[2]*s],k*3); }
+    geo.setAttribute('color', new THREE.BufferAttribute(col,3)); geo.computeVertexNormals();
+    this.ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({vertexColors:true, roughness:.95, flatShading:true})); this.scene.add(this.ground);
+    const atm = q.atmosphere!=='auto' ? q.atmosphere : (ter.has_air ? q.physics : 'none');
+    const sky = new THREE.Color(ter.has_air ? (SKY[atm] ?? 0x7fa8d8) : SKY.none);
+    this.scene.background = sky; this.scene.fog = ter.has_air ? new THREE.Fog(sky, ter.size*.5, ter.size*1.6) : null;
+    this.body = this.buildBody(task); this.scene.add(this.body);
+    const st = await api('/api/env/state?id='+meta.id);
+    if (my !== this.run || ep0 !== epoch) return;
+    const v3 = p => new THREE.Vector3(p[0],p[2],-p[1]);
+    this.goal = new THREE.Group();
+    const gp = v3(st.goal); const ring = new THREE.Mesh(new THREE.TorusGeometry(task==='lander'?25:3,task==='lander'?.5:.12,8,48), new THREE.MeshBasicMaterial({color:0x5fd38d})); ring.rotation.x=Math.PI/2; ring.position.copy(gp); this.goal.add(ring);
+    const beacon = new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,60,6), new THREE.MeshBasicMaterial({color:0x5fd38d, transparent:true, opacity:.5})); beacon.position.copy(gp).add(new THREE.Vector3(0,30,0)); this.goal.add(beacon);
+    this.scene.add(this.goal);
+    this.rays = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({color:0xff6b6b, transparent:true, opacity:.35})); this.scene.add(this.rays);
+    this.trailPts = []; this.trail = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({color:0x6fb7ff})); this.scene.add(this.trail);
+    const dist = {lander:90, drone:30, rover:18}[task], p = v3(st.pos);
+    this.controls.target.copy(p); this.camera.position.copy(p).add(new THREE.Vector3(dist*.7,dist*.45,dist));
+    const P = (k,v) => `<div>${k}</div><div>${v}</div>`, nm = meta.param_names, pv = meta.params, g = k => pv[nm.indexOf(k)];
+    $('#r_hidden').innerHTML = P('g', fmt(g('g'),3)+' м/с²')+P('ρ у поверхности', fmt(g('rho0'),3)+' кг/м³')+(task==='lander'?P('Сухая масса', fmt(g('dry_mass'),0)+' кг')+P('Isp', fmt(g('isp'),0)+' с'):'')+P('Трение грунта', fmt(g('friction'),2))+P('Шаг управления', fmt(g('control_dt')*1000,0)+' мс');
+    this.place(st); this.loop(ep0, my);
+  },
+  place(st){
+    const v3 = p => new THREE.Vector3(p[0],p[2],-p[1]), p = v3(st.pos), d = p.clone().sub(this.controls.target);
+    this.body.position.copy(p); const q = st.quat; this.body.quaternion.set(q[1],q[3],-q[2],q[0]);
+    if (this.flame){ const th = (st.action?.[0]||0); this.flame.visible = th>.01 && !st.done; this.flame.scale.set(.5+th*.6, .4+th*3, .5+th*.6); this.flame.position.y = -.9-th*1.5; }
+    this.controls.target.add(d); this.camera.position.add(d);
+    const seg = st.lidar.flatMap(l => [l[0],l[2],-l[1],l[3],l[5],-l[4]]);
+    this.rays.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(seg),3));
+    if (!this.trailPts.length || this.trailPts.at(-1).distanceTo(p)>.5){ this.trailPts.push(p); if (this.trailPts.length>600) this.trailPts.shift(); this.trail.geometry.setFromPoints(this.trailPts); }
+    const v = Math.hypot(...st.vel), i = st.info, sn = st.state_names, sv = k => st.state[sn.indexOf(k)];
+    hud.style.display='block';
+    hud.innerHTML = `<span class="k">t =</span> <b>${fmt(i.t,1)} с</b> <span class="k">· v =</span> <b>${fmt(v,2)} м/с</b> <span class="k">· шаг</span> ${i.steps} <span class="k">· награда</span> <b>${fmt(i.episode_return,1)}</b>`;
+    $('#r_info').innerHTML = st.done ? `<span class="pill ${i.success?'g':'r'}">${i.success?'успех':'отказ'}</span> ${esc(i.reason)}` : `<div class="muted">${esc(st.text)}</div>`;
+    const h = this.hist; h.t.push(i.t); h.a.push(sv('z')-this.meta.params[this.meta.param_names.indexOf('goal_z')]); h.v.push(v);
+    if (h.t.length>800) for (const k of ['t','a','v']) h[k].shift();
+    if (this.frame++ % 6 === 0) chart([{x:h.t, y:h.a, color:'#6fb7ff', label:'высота над целью, м'},{x:h.t, y:h.v.map(x=>x*5), color:'#ffc361', label:'скорость ×5, м/с'}], {title:'Истинное состояние', xlabel:'с'});
+    if (this.frame % 8 === 1) this.camFrame();
+  },
+  async camFrame(){
+    try {
+      const r = await api(`/api/env/camera?id=${this.id}&w=96&h=64&mode=rgb`, {binary:true}), b = new Uint8Array(await r.arrayBuffer()), c = $('#r_cam')?.getContext('2d');
+      if (!c) return; const im = c.createImageData(96,64); for (let i=0;i<96*64;i++){ im.data[i*4]=b[i*3]; im.data[i*4+1]=b[i*3+1]; im.data[i*4+2]=b[i*3+2]; im.data[i*4+3]=255; } c.putImageData(im,0,0);
+    } catch(e){}
+  },
+  async loop(ep, my){
+    while (ep === epoch && my === this.run){
+      if (this.paused){ await new Promise(r=>setTimeout(r,120)); continue; }
+      try {
+        await api(`/api/env/step?id=${this.id}&mode=${$('#r_m').value}&repeat=${$('#r_s').value}`);
+        const st = await api('/api/env/state?id='+this.id);
+        if (ep !== epoch || my !== this.run) return;
+        this.place(st);
+        if (st.done){ await new Promise(r=>setTimeout(r,1800)); if (ep===epoch && my===this.run && !this.paused){ this.seed++; this.start(); } return; }
+      } catch(e){ return; }
+      await new Promise(r=>requestAnimationFrame(r));
+    }
+  },
+  update(){},
+  dispose(){ this.run = (this.run||0)+1; if (this.id){ fetch('/api/env/close?id='+this.id).catch(()=>{}); this.id=null; } this.ground=this.body=this.goal=this.rays=this.trail=null; },
+};
+
+// ============================================================ вкладка: Mission Lab
+const VERDICT = {'выполнено':'g','не выполнено':'r','данных мало':'y','нет данных':''};
+const missionTab = {
+  async init(){
+    const el = $('#mission'); el.style.display='block'; panel.style.display='none';
+    el.innerHTML = `<div class="ml-head"><div><h2>Mission Lab</h2><div class="muted">От требований миссии к инженерному ответу: выполнима ли она, что её ломает и какая технология окупится. Те же условия полёта для каждого варианта.</div></div>
+        <div class="btns"><select id="ml_p" style="width:auto"><option value="lunar_lander">Лунный модуль</option><option value="mars_helicopter">Вертолёт на Марсе</option><option value="lunar_rover">Лунный ровер</option></select>
+        <span class="btn" id="ml_go">Рассчитать миссию</span></div></div>
+      <div class="ml-grid"><div class="card ml-editor"><h3>Описание миссии</h3><textarea id="ml_s" spellcheck="false"></textarea><div id="ml_err" class="no"></div></div>
+      <div id="ml_res" class="ml-res"><div class="card ml-empty"><div class="ml-big">🚀</div><b>Нажмите «Рассчитать миссию»</b><div class="muted">Сотни полётов с разбросами параметров дадут карту требований, причины отказов и ценность технологий.</div></div></div></div>`;
+    $('#ml_p').onchange = () => this.load();
+    $('#ml_go').onclick = () => this.calc();
+    await this.load();
+  },
+  async load(){ $('#ml_s').value = JSON.stringify(await api('/api/mission/example?name='+$('#ml_p').value), null, 2); },
+  async calc(){
+    const my = epoch; $('#ml_err').textContent=''; let spec;
+    try { spec = JSON.stringify(JSON.parse($('#ml_s').value)); } catch(e){ $('#ml_err').textContent = 'Описание не разобрано: '+e.message; return; }
+    busy(true, 'считаю полёты…'); $('#ml_go').classList.add('off');
+    try {
+      const r = await api('/api/mission/run', {method:'POST', body:spec});
+      if (my === epoch){ this.r = r; this.show(r); }
+    } catch(e){ if (my === epoch) $('#ml_err').textContent = e.message; }
+    finally { busy(false); $('#ml_go')?.classList.remove('off'); }
+  },
+  show(r){
+    const pct = x => isFinite(x) && x!=null ? (100*x).toFixed(1)+'%' : '—', num = x => x==null||!isFinite(x) ? '—' : fmt(x, Math.abs(x)<10?2:1);
+    const met = r.requirements_met, tot = r.requirements_total, ok = met===tot;
+    const tv = q => q.percentile==null ? pct : num;
+    const techs = r.technologies, sig = techs.filter(t=>t.delta>t.delta_ci), best = sig[0], maxD = Math.max(.01,...techs.map(t=>Math.abs(t.delta)+t.delta_ci)), maxF = Math.max(.01,...r.drivers.map(d=>Math.abs(d.delta)));
+    const advice = ok ? 'Все требования выполняются с запасом, проверенным по доверительным интервалам.' : best ? `Больше всего даёт «${esc(best.name)}»: ${(best.delta*100).toFixed(1)} п.п. успеха${best.dry_mass_delta>0?` за ${best.dry_mass_delta} кг`:''}. Требований после неё: ${best.requirements_met} из ${tot}.` : 'Ни одна из заданных технологий не даёт значимого улучшения: стоит пересмотреть варианты или требования.';
+    $('#ml_res').innerHTML = `
+      <div class="card hero ${ok?'good':'bad'}"><div class="ml-num">${pct(r.success)}</div><div><b>успешных полётов</b><div class="muted">95%: ${pct(r.success_ci[0])}–${pct(r.success_ci[1])} · ${r.runs} запусков · ${fmt(r.seconds,1)} с расчёта</div></div>
+        <div class="ml-count"><span class="pill ${ok?'g':'r'}">требований ${met} из ${tot}</span></div><div class="ml-advice">${advice}</div></div>
+      <div class="card"><h3>Требования</h3><table><tr><th>ID</th><th>Требование</th><th>Цель</th><th>Результат</th><th>95%</th><th></th></tr>${r.scorecard.map(q=>`<tr><td class="muted">${esc(q.id)}</td><td>${esc(q.text)}</td><td>${q.op} ${tv(q)(q.target)}</td><td><b>${tv(q)(q.value)}</b></td><td class="muted">${tv(q)(q.ci_low)}–${tv(q)(q.ci_high)}</td><td><span class="pill ${VERDICT[q.verdict]}">${q.verdict}</span></td></tr>`).join('')}</table></div>
+      <div class="card"><h3>Как именно отказывает</h3>${r.failure_modes.length?r.failure_modes.map(f=>`<div class="hbar"><span>${esc(f.mode)}</span><div class="bar"><i class="red" style="width:${100*f.share}%"></i></div><b>${pct(f.share)}</b></div>`).join(''):'<div class="muted">Отказов нет.</div>'}</div>
+      <div class="card"><h3>Что ломает миссию</h3><div class="muted" style="margin-bottom:6px">Каждый разброс включён отдельно. Без разбросов успех ${pct(r.baseline_no_dispersions)}.</div>${r.drivers.map(d=>`<div class="hbar"><span>${esc(d.name)} <i class="muted">σ ${d.sigma}</i></span><div class="tor"><i class="${d.delta<0?'red':'grn'}" style="width:${50*Math.abs(d.delta)/maxF}%;${d.delta<0?'right:50%':'left:50%'}"></i></div><b>${d.delta>=0?'+':''}${(100*d.delta).toFixed(1)}</b></div>`).join('')}</div>
+      ${techs.length?`<div class="card ml-wide"><h3>Ценность технологий</h3><div class="muted" style="margin-bottom:6px">Парное сравнение на тех же условиях полёта. Жирным — значимо, интервал не включает ноль.</div><table><tr><th>Технология</th><th style="width:34%">Изменение успеха, п.п.</th><th>Спасено / потеряно</th><th>Масса</th><th>Требований</th></tr>${techs.map(t=>{const s=t.delta-t.delta_ci>0||t.delta+t.delta_ci<0;return `<tr class="${s?'':'dim'}"><td>${s?'<b>':''}${esc(t.name)}${s?'</b>':''}</td><td><div class="tor ci"><i class="${t.delta<0?'red':'grn'}" style="width:${50*Math.abs(t.delta)/maxD}%;${t.delta<0?'right:50%':'left:50%'}"></i><u style="left:${50+50*(t.delta-t.delta_ci)/maxD}%;width:${100*t.delta_ci/maxD}%"></u></div><span class="muted">${t.delta>=0?'+':''}${(100*t.delta).toFixed(1)} ± ${(100*t.delta_ci).toFixed(1)}</span></td><td>${t.saved} / ${t.lost}</td><td>${t.dry_mass_delta?`+${t.dry_mass_delta} кг`:'—'}</td><td>${t.requirements_met} из ${tot}</td></tr>`}).join('')}</table></div>`:''}
+      <div class="card ml-wide ml-foot"><span class="muted">${esc(r.limits)} ${esc(r.generator)}, seed ${r.seed}.</span><div class="btns"><span class="btn sec" id="ml_md">Отчёт .md</span><span class="btn sec" id="ml_js">Данные .json</span></div></div>`;
+    const dl = (txt, name, type) => { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([txt],{type})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); };
+    $('#ml_md').onclick = () => dl(r.markdown, 'mission_report.md', 'text/markdown');
+    $('#ml_js').onclick = () => dl(JSON.stringify(r,null,2), 'mission_report.json', 'application/json');
+    $('#mission').scrollTo({top:0, behavior: REDUCED ? 'auto':'smooth'});
+  },
+  update(){},
+  dispose(){ $('#mission').style.display='none'; panel.style.display='block'; },
+};
+
+const tabs = {mission:missionTab, robots:robotsTab, world:worldTab, climate:climateTab, solar:solarTab, system:systemTab, starmap:starmapTab, galaxy:galaxyTab, cosmo:cosmoTab, laws:lawsTab};
+let initChain = Promise.resolve(), intro = null;
 async function switchTab(name){
-  epoch++;
-  if (current){ current.dispose?.(); current.controls?.dispose(); current.scene?.traverse(o=>{ o.geometry?.dispose?.(); }); }
-  hud.style.display='none'; chartbox.style.display='none'; panel.style.display='block'; panel.innerHTML='';
+  const my = ++epoch;
+  const veil = $('#veil');
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
-  current = tabs[name]; location.hash = name;
-  try { await current.init(); } catch(e){ panel.innerHTML = `<div class="no">Ошибка: ${e.message}</div>`; console.error(e); }
+  if (current && !REDUCED){ veil.classList.add('on'); await sleep(170); }
+  await initChain;              // предыдущая вкладка могла ещё грузиться: не даём ей писать в чужую панель
+  if (my !== epoch) return;     // пока шёл переход, выбрали другую вкладку
+  if (current){ current.dispose?.(); current.controls?.dispose(); current.scene?.traverse(o=>{ o.geometry?.dispose?.(); }); }
+  hud.style.display='none'; chartbox.style.display='none'; panel.style.display='block'; panel.innerHTML=''; panel.classList.remove('enter'); chartbox.classList.remove('enter');
+  current = tabs[name]; if (location.hash !== '#'+name) location.hash = name; intro = null;
+  initChain = (async () => { try { await current.init(); } catch(e){ panel.innerHTML = `<div class="no">Ошибка: ${esc(e.message)}</div>`; console.error(e); } })();
+  await initChain;
+  if (my !== epoch) return;
   resize();
+  void panel.offsetWidth; panel.classList.add('enter'); chartbox.classList.add('enter');
+  // плавный наезд камеры; любое движение мышью его отменяет
+  if (current.camera && current.controls && !current.noIntro && !REDUCED){
+    const c = current.camera, t = current.controls.target, to = c.position.clone();
+    intro = {c, from: to.clone().sub(t).multiplyScalar(1.5).add(t), to, t0: performance.now()};
+    c.position.copy(intro.from);
+    current.controls.addEventListener('start', () => { intro = null; }, {once:true});
+  }
+  veil.classList.remove('on');
 }
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), .1);
+  if (intro && current?.camera === intro.c){
+    const k = Math.min((performance.now()-intro.t0)/900, 1), e = 1-Math.pow(1-k,3);
+    intro.c.position.lerpVectors(intro.from, intro.to, e);
+    if (k >= 1) intro = null;
+  }
   if (current?.scene){ current.controls.update(); current.update(dt); renderer.render(current.scene, current.camera); }
   else { renderer.clear(); }
 });
+/* клавиши 1–9: быстрый переход между вкладками */
+addEventListener('keydown', e => { if (e.metaKey||e.ctrlKey||e.altKey||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; const b = document.querySelectorAll('nav button')[+e.key-1]; if (b && /[1-9]/.test(e.key)) switchTab(b.dataset.tab); });
 addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t in tabs && current !== tabs[t]) switchTab(t); });
 resize();
 switchTab((location.hash||'#world').slice(1) in tabs ? (location.hash||'#world').slice(1) : 'world');
