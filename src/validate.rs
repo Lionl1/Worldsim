@@ -307,6 +307,81 @@ pub fn climate_checks() -> Vec<Check> {
     ]
 }
 
+pub fn env_checks() -> Vec<Check> {
+    use crate::env::{Env, EnvConfig, Terrain, G0};
+    let mut out = Vec::new();
+    // 1) Циолковский: полный расход топлива в невесомости и вакууме
+    let mut cfg = EnvConfig::new("lander", "moon").unwrap();
+    cfg.world.gravity_scale = 1e-12;
+    cfg.noise = 0.0;
+    let mut e = Env::new(cfg).unwrap();
+    e.reset(1);
+    let h0 = e.terrain.height(0.0, 0.0);
+    e.set_state(Vec3::new(0.0, 0.0, h0 + 100.0), Vec3::ZERO);
+    let m0 = e.mass();
+    for _ in 0..4000 { e.step(&[1.0, 0.0, 0.0, 0.0]); }
+    let dv = e.velocity().norm();
+    let theory = e.isp() * G0 * (m0 / e.dry_mass()).ln();
+    out.push(chk("Уравнение Циолковского", "посадочный модуль: Δv при полном расходе топлива", dv, theory, 0.002, "м/с"));
+    // 2) Дрон: зависание на Земле при тяге = весу; на Луне нет подъёмной силы; на Марсе обычных винтов мало
+    let hover = |planet: &str, thr: Option<f64>, rotor: f64| -> f64 {
+        let mut c = EnvConfig::new("drone", planet).unwrap();
+        c.noise = 0.0;
+        c.rotor_scale = rotor;
+        let mut e = Env::new(c).unwrap();
+        e.reset(3);
+        let h = e.terrain.height(0.0, 0.0);
+        e.set_state(Vec3::new(0.0, 0.0, h + 30.0), Vec3::ZERO);
+        let rho = e.air_density();
+        let u = thr.unwrap_or(if rho > 0.0 { 0.4 * 1.225 / rho / rotor } else { 1.0 });
+        for _ in 0..50 { e.step(&[u; 4]); }
+        e.velocity().z
+    };
+    out.push(chk_max("Импульсная теория винта", "Земля: тяга = весу → вертикальная скорость за 1 с, м/с", hover("earth", None, 1.0), 0.05));
+    out.push(Check { law: "Подъёмная сила ∝ ρ", test: "Луна (вакуум): дрон на полной тяге падает".into(),
+        value: format!("v_z = {:.2} м/с", hover("moon", Some(1.0), 1.0)), expected: "< 0".into(), pass: hover("moon", Some(1.0), 1.0) < -1.0 });
+    out.push(Check { law: "Подъёмная сила ∝ ρ", test: "Марс: обычные винты не поднимают, ×40 (как Ingenuity) поднимают".into(),
+        value: format!("{:.2} / {:+.2} м/с", hover("mars", Some(1.0), 1.0), hover("mars", Some(1.0), 40.0)), expected: "< 0 / > 0".into(),
+        pass: hover("mars", Some(1.0), 1.0) < 0.0 && hover("mars", Some(1.0), 40.0) > 0.0 });
+    // 3) Ровер: сцепление по Кулону — въезд на склон tanθ < μ − C_rr, сползание при tanθ > μ
+    let climb = |grade: f64| -> f64 {
+        let mut c = EnvConfig::new("rover", "earth").unwrap();
+        c.noise = 0.0;
+        let mut e = Env::new(c).unwrap();
+        e.reset(1);
+        e.set_terrain(Terrain::plane(grade, 0.6));
+        e.set_state(Vec3::new(0.0, 0.0, 0.0), Vec3::ZERO);
+        for _ in 0..200 { e.step(&[1.0, 1.0]); }
+        e.pose().0.x
+    };
+    let (x1, x2) = (climb(0.3), climb(0.75));
+    out.push(Check { law: "Трение Кулона (сцепление колёс)", test: "μ=0.6: склон 17° — въезжает, 37° — сползает".into(),
+        value: format!("{x1:+.1} м / {x2:+.1} м"), expected: "> 0 / < 0".into(), pass: x1 > 0.0 && x2 < 0.0 });
+    // 4) Детерминизм
+    let run = || { let mut e = Env::new(EnvConfig::new("lander", "mars").unwrap()).unwrap(); e.reset(42); let mut o = vec![]; for k in 0..200 { o = e.step(&[0.6, (k as f64 * 0.1).sin(), 0.0, 0.1]).0; } o };
+    let (a, b) = (run(), run());
+    out.push(chk_max("Воспроизводимость", "одинаковый seed и действия → одинаковые наблюдения", a.iter().zip(&b).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max), 1e-12));
+    // 5) Шум сенсоров
+    let mut e = Env::new(EnvConfig::new("rover", "moon").unwrap()).unwrap();
+    e.reset(5);
+    let xs: Vec<f64> = (0..2000).map(|_| e.step(&[0.0, 0.0]).0[0]).collect();
+    let m = xs.iter().sum::<f64>() / xs.len() as f64;
+    let sd = (xs.iter().map(|x| (x - m).powi(2)).sum::<f64>() / xs.len() as f64).sqrt();
+    out.push(chk("Модель сенсоров", "GPS ровера: СКО шума", sd, 0.5, 0.06, "м"));
+    // 6) Решаемость: автопилот сажает модуль на Луну
+    let mut cfg = EnvConfig::new("lander", "moon").unwrap();
+    cfg.randomize = true;
+    let mut e = Env::new(cfg).unwrap();
+    let mut ok = 0;
+    for ep in 0..10 {
+        e.reset(ep + 1);
+        loop { let a = e.autopilot(); let (_, _, t, tr) = e.step(&a); if t || tr { break; } }
+        if e.info.success { ok += 1; }
+    }
+    out.push(Check { law: "Решаемость задачи", test: "ПД-автопилот: посадка на Луну, 10 эпизодов".into(), value: format!("{ok}/10"), expected: "≥ 7/10".into(), pass: ok >= 7 });
+    out
+}
+
 pub fn all() -> Vec<Check> {
     let mut v = Vec::new();
     v.extend(kepler());
@@ -321,5 +396,6 @@ pub fn all() -> Vec<Check> {
     v.extend(galaxy_checks());
     v.extend(cosmology_checks());
     v.extend(climate_checks());
+    v.extend(env_checks());
     v
 }

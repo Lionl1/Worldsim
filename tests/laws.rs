@@ -17,6 +17,7 @@ fn assert_all(v: Vec<Check>) {
 #[test] fn galaxies() { assert_all(validate::galaxy_checks()); }
 #[test] fn cosmology() { assert_all(validate::cosmology_checks()); }
 #[test] fn climate() { assert_all(validate::climate_checks()); }
+#[test] fn robot_env() { assert_all(validate::env_checks()); }
 #[test] fn electromagnetism() { assert_all(validate::magnetosphere()); }
 
 #[test]

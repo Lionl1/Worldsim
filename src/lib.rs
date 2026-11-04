@@ -14,6 +14,7 @@ pub mod climate;
 pub mod constants;
 pub mod cosmology;
 pub mod datagen;
+pub mod env;
 pub mod galaxy;
 pub mod json;
 pub mod magneto;

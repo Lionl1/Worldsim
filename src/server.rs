@@ -35,6 +35,7 @@ fn data_resp(name: &str) -> Resp {
 }
 
 enum Sim {
+    Env(Box<crate::env::Env>),
     NBody { sim: NBody, e0: f64 },
     Galaxy(Galaxy),
     Pm(PmSim),
@@ -76,36 +77,55 @@ pub fn serve(port: u16, open_browser: bool) -> Result<(), String> {
 }
 
 fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(60)))?;
+    let _ = stream.set_nodelay(true);
     let mut reader = BufReader::new(stream.try_clone()?);
-    let mut line = String::new();
-    reader.read_line(&mut line)?;
-    let mut content_len = 0usize;
+    // keep-alive: много запросов в одном соединении (важно для обучения агентов)
     loop {
-        let mut h = String::new();
-        if reader.read_line(&mut h)? == 0 || h == "\r\n" || h == "\n" { break; }
-        if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") { content_len = v.trim().parse().unwrap_or(0); }
-    }
-    if content_len > 0 { let mut b = vec![0; content_len.min(1 << 20)]; reader.read_exact(&mut b)?; }
-    let mut parts = line.split_whitespace();
-    let method = parts.next().unwrap_or("");
-    let target = parts.next().unwrap_or("/");
-    let (path, query) = target.split_once('?').unwrap_or((target, ""));
-    let q = parse_query(query);
-    let resp = if method == "GET" || method == "POST" {
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route(path, &q, &st))) {
-            Ok(Ok(r)) => r,
-            Ok(Err(e)) => Resp::err(400, &e),
-            Err(_) => Resp::err(500, "внутренняя ошибка симуляции"),
+        let mut line = String::new();
+        if reader.read_line(&mut line)? == 0 { return Ok(()); }
+        if line.trim().is_empty() { continue; }
+        let mut content_len = 0usize;
+        let mut close = false;
+        loop {
+            let mut h = String::new();
+            if reader.read_line(&mut h)? == 0 || h == "\r\n" || h == "\n" { break; }
+            let hl = h.to_ascii_lowercase();
+            if let Some(v) = hl.strip_prefix("content-length:") { content_len = v.trim().parse().unwrap_or(0); }
+            if hl.starts_with("connection:") && hl.contains("close") { close = true; }
         }
-    } else { Resp::err(405, "только GET") };
-    let reason = match resp.status { 200 => "OK", 400 => "Bad Request", 404 => "Not Found", 405 => "Method Not Allowed", _ => "Internal Server Error" };
-    let mut head = format!("HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: *\r\nCache-Control: no-store\r\nConnection: close\r\n",
-        resp.status, reason, resp.ctype, resp.body.len());
-    for (k, v) in &resp.headers { head.push_str(&format!("{k}: {v}\r\n")); }
-    head.push_str("\r\n");
-    stream.write_all(head.as_bytes())?;
-    stream.write_all(&resp.body)?;
-    stream.flush()
+        let mut body = Vec::new();
+        if content_len > 0 { body = vec![0; content_len.min(1 << 20)]; reader.read_exact(&mut body)?; }
+        let mut parts = line.split_whitespace();
+        let method = parts.next().unwrap_or("");
+        let target = parts.next().unwrap_or("/");
+        let (path, query) = target.split_once('?').unwrap_or((target, ""));
+        let mut q = parse_query(query);
+        // POST с телом вида a=1&b=2 (или JSON-массив действия) — для длинных действий
+        if method == "POST" && !body.is_empty() {
+            let b = String::from_utf8_lossy(&body).to_string();
+            let t = b.trim();
+            if t.starts_with('[') { q.insert("action".into(), t.trim_matches(|c| c == '[' || c == ']').to_string()); }
+            else { q.extend(parse_query(t)); }
+        }
+        let resp = if method == "GET" || method == "POST" {
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route(path, &q, &st))) {
+                Ok(Ok(r)) => r,
+                Ok(Err(e)) => Resp::err(400, &e),
+                Err(_) => Resp::err(500, "внутренняя ошибка симуляции"),
+            }
+        } else { Resp::err(405, "только GET/POST") };
+        let reason = match resp.status { 200 => "OK", 400 => "Bad Request", 404 => "Not Found", 405 => "Method Not Allowed", _ => "Internal Server Error" };
+        let mut head = format!("HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: *\r\nCache-Control: no-store\r\nConnection: {}\r\n",
+            resp.status, reason, resp.ctype, resp.body.len(), if close { "close" } else { "keep-alive" });
+        for (k, v) in &resp.headers { head.push_str(&format!("{k}: {v}\r\n")); }
+        head.push_str("\r\n");
+        let mut out = head.into_bytes();
+        out.extend_from_slice(&resp.body);
+        stream.write_all(&out)?;
+        stream.flush()?;
+        if close { return Ok(()); }
+    }
 }
 
 fn parse_query(s: &str) -> Q {
@@ -158,6 +178,14 @@ fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
         "/api/cosmo/step" => cosmo_step(q, st)?,
         "/api/cosmo/power" => cosmo_power(q, st)?,
         "/api/cosmo/background" => Resp::json(cosmo_background()),
+        "/api/env/tasks" => Resp::json(J::Arr(crate::env::TASKS.iter().map(|(n, d)| J::obj().set("name", *n).set("description", *d)).collect())),
+        "/api/env/make" => env_make(q, st)?,
+        "/api/env/reset" => env_reset(q, st)?,
+        "/api/env/step" => env_step(q, st)?,
+        "/api/env/state" => env_state(q, st)?,
+        "/api/env/terrain" => env_terrain(q, st)?,
+        "/api/env/camera" => env_camera(q, st)?,
+        "/api/env/list" => env_list(st),
         "/api/validate" => Resp::json(J::Arr(validate::all().into_iter().map(|c| J::obj().set("law", c.law).set("test", c.test).set("value", c.value).set("expected", c.expected).set("pass", c.pass)).collect())),
         _ => Resp::err(404, "нет такого пути"),
     })
@@ -317,7 +345,7 @@ fn system_json(sys: &StarSystem) -> J {
 fn store(st: &State, sim: Sim) -> u64 {
     let id = st.next.fetch_add(1, Ordering::SeqCst);
     let mut m = st.sims.lock().unwrap();
-    if m.len() > 24 { if let Some(&k) = m.keys().min() { m.remove(&k); } }
+    if m.len() > 64 { if let Some(&k) = m.keys().min() { m.remove(&k); } }
     m.insert(id, Arc::new(Mutex::new(sim)));
     id
 }
@@ -473,3 +501,119 @@ fn cosmo_background() -> J {
     out
 }
 
+
+// ------------------------------------------------------------------ среда для агентов
+
+use crate::env::{Env, EnvConfig};
+
+fn env_make(q: &Q, st: &State) -> Result<Resp, String> {
+    let mut cfg = EnvConfig::new(s(q, "task", "lander"), s(q, "physics", "moon"))?;
+    cfg.world.atmosphere = q.get("atmosphere").filter(|v| !v.is_empty() && *v != "auto").cloned();
+    cfg.world.surface = q.get("surface").filter(|v| !v.is_empty() && *v != "auto").cloned();
+    cfg.world.gravity_scale = f(q, "gravity_scale", 1.0);
+    cfg.randomize = s(q, "randomize", "0") == "1";
+    cfg.noise = f(q, "noise", 1.0);
+    cfg.rotor_scale = f(q, "rotor_scale", 1.0);
+    if let Some(m) = q.get("max_steps").and_then(|v| v.parse().ok()) { cfg.max_steps = m; }
+    let mut env = Env::new(cfg)?;
+    let obs = env.reset(f(q, "seed", 1.0) as u64);
+    let (lo, hi) = env.act_bounds();
+    let meta = J::obj().set("task", s(q, "task", "lander")).set("world", env.world.name())
+        .set("obs_names", env.obs_names()).set("act_names", env.act_names()).set("act_low", lo).set("act_high", hi)
+        .set("obs_dim", obs.len()).set("act_dim", env.act_names().len()).set("control_dt", env.control_dt()).set("max_steps", env.cfg.max_steps)
+        .set("obs", obs).set("text", env.describe());
+    let id = store(st, Sim::Env(Box::new(env)));
+    Ok(Resp::json(meta.set("id", id)))
+}
+
+fn with_env<T>(q: &Q, st: &State, f: impl FnOnce(&mut Env) -> Result<T, String>) -> Result<T, String> {
+    let h = get(st, q)?;
+    let mut g = h.lock().unwrap();
+    match &mut *g { Sim::Env(e) => f(e), _ => Err("не сессия среды".into()) }
+}
+
+fn info_json(e: &Env) -> J {
+    J::obj().set("success", e.info.success).set("crashed", e.info.crashed).set("reason", e.info.reason.clone())
+        .set("t", e.t).set("steps", e.steps).set("episode_return", e.ep_return).set("fuel_used", e.info.fuel_used)
+        .set("energy_used", e.info.energy_used).set("resource_frac", e.battery_frac())
+}
+
+fn env_reset(q: &Q, st: &State) -> Result<Resp, String> {
+    let seed = f(q, "seed", 1.0) as u64;
+    with_env(q, st, |e| {
+        let obs = e.reset(seed);
+        Ok(Resp::json(J::obj().set("obs", obs).set("info", info_json(e)).set("text", e.describe())))
+    })
+}
+
+fn env_step(q: &Q, st: &State) -> Result<Resp, String> {
+    let want_text = s(q, "text", "0") == "1";
+    let mode = s(q, "mode", "").to_string();
+    let action: Vec<f64> = q.get("action").map(|a| a.split(',').filter_map(|x| x.trim().parse().ok()).collect()).unwrap_or_default();
+    let n = (f(q, "repeat", 1.0) as usize).clamp(1, 100);
+    with_env(q, st, |e| {
+        let mut total = 0.0;
+        let mut res = (e.last_obs.clone(), 0.0, e.done, false);
+        for _ in 0..n {
+            let a = match mode.as_str() {
+                "auto" => e.autopilot(),
+                "random" => { let (lo, hi) = e.act_bounds(); let mut r = crate::rng::Rng::new(e.steps as u64 * 7919 + e.seed); lo.iter().zip(&hi).map(|(l, h)| r.uniform(*l, *h)).collect() }
+                _ => action.clone(),
+            };
+            if a.len() != e.act_names().len() { return Err(format!("действие должно иметь {} чисел: {:?}", e.act_names().len(), e.act_names())); }
+            res = e.step(&a);
+            total += res.1;
+            if res.2 || res.3 { break; }
+        }
+        let mut j = J::obj().set("obs", res.0).set("reward", total).set("terminated", res.2).set("truncated", res.3).set("info", info_json(e));
+        if want_text { j = j.set("text", e.describe()); }
+        Ok(Resp::json(j))
+    })
+}
+
+fn v3(v: crate::vec3::Vec3) -> J { J::from(vec![v.x, v.y, v.z]) }
+
+fn env_state(q: &Q, st: &State) -> Result<Resp, String> {
+    with_env(q, st, |e| {
+        let (p, quat) = e.pose();
+        let lidar: Vec<J> = e.last_lidar.iter().map(|(a, b)| J::from(vec![a.x, a.y, a.z, b.x, b.y, b.z])).collect();
+        Ok(Resp::json(J::obj().set("task", format!("{:?}", e.cfg.task).to_lowercase()).set("pos", v3(p)).set("quat", vec![quat.w, quat.x, quat.y, quat.z])
+            .set("vel", v3(e.velocity())).set("goal", v3(e.goal)).set("wind", v3(e.wind())).set("lidar", J::Arr(lidar))
+            .set("action", e.last_action.clone()).set("obs", e.last_obs.clone()).set("obs_names", e.obs_names()).set("done", e.done)
+            .set("info", info_json(e)).set("text", e.describe()).set("speed", e.rover_speed()).set("world", e.world.name())))
+    })
+}
+
+fn env_terrain(q: &Q, st: &State) -> Result<Resp, String> {
+    let n = (f(q, "n", 129.0) as usize).clamp(17, 257);
+    with_env(q, st, |e| {
+        let t = &e.terrain;
+        let mut h = Vec::with_capacity(n * n);
+        for j in 0..n { for i in 0..n {
+            let x = -t.size / 2.0 + t.size * i as f64 / (n - 1) as f64;
+            let y = -t.size / 2.0 + t.size * j as f64 / (n - 1) as f64;
+            h.push(t.height(x, y));
+        }}
+        Ok(Resp::json(J::obj().set("n", n).set("size", t.size).set("h", h).set("surface", e.world.surface.name.clone())
+            .set("oxides", J::Arr(presets::normalized(&e.world.surface.oxides_wt).into_iter().map(|(k, v)| J::Arr(vec![J::from(k), J::from(v)])).collect()))
+            .set("has_air", e.world.atmosphere.is_some())))
+    })
+}
+
+fn env_camera(q: &Q, st: &State) -> Result<Resp, String> {
+    let (w, h) = ((f(q, "w", 48.0) as usize).clamp(4, 256), (f(q, "h", 32.0) as usize).clamp(4, 256));
+    with_env(q, st, |e| Ok(Resp::json(J::obj().set("w", w).set("h", h).set("depth", e.depth_camera(w, h, f(q, "fov", 70.0))))))
+}
+
+fn env_list(st: &State) -> Resp {
+    let m = st.sims.lock().unwrap();
+    let mut out = Vec::new();
+    for (id, s) in m.iter() {
+        if let Ok(g) = s.try_lock() {
+            if let Sim::Env(e) = &*g {
+                out.push(J::obj().set("id", *id).set("task", format!("{:?}", e.cfg.task).to_lowercase()).set("world", e.world.name()).set("steps", e.steps).set("episode_return", e.ep_return));
+            }
+        }
+    }
+    Resp::json(J::Arr(out))
+}
