@@ -1,18 +1,43 @@
 """Клиент HTTP API среды (`worldsim serve`). Интерфейс как у Gymnasium, но без зависимости от него."""
 import http.client
 import json
+import os
+import time
 from urllib.parse import urlencode
 
 import numpy as np
 
 
 class Client:
-    def __init__(self, host="localhost", port=8080, timeout=60):
+    def __init__(self, host="localhost", port=8080, timeout=60, token=None):
         self.conn = http.client.HTTPConnection(host, port, timeout=timeout)
+        token = token or os.environ.get("WORLDSIM_TOKEN")
+        self.headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     def get(self, path, **params):
         q = urlencode({k: v for k, v in params.items() if v is not None})
-        self.conn.request("GET", f"{path}?{q}" if q else path)
+        self.conn.request("GET", f"{path}?{q}" if q else path, headers=self.headers)
+        return self._read()
+
+    def post(self, path, body=b""):
+        self.conn.request("POST", path, body=body, headers=self.headers)
+        return self._read()
+
+    def run_mission(self, spec, on_progress=None, poll_s=0.3):
+        """Миссия в фоне: ждём результат и возвращаем отчёт. `spec` — словарь или текст JSON."""
+        body = spec if isinstance(spec, str) else json.dumps(spec, ensure_ascii=False)
+        job = self.post("/api/jobs/mission", body.encode())["id"]
+        while True:
+            j = self.get(f"/api/jobs/{job}")
+            if on_progress:
+                on_progress(j["fraction"])
+            if j["status"] == "done":
+                return self.get(f"/api/runs/{j['run']}")
+            if j["status"] != "running":
+                raise RuntimeError(j.get("error") or "расчёт отменён")
+            time.sleep(poll_s)
+
+    def _read(self):
         r = self.conn.getresponse()
         body = r.read()
         if r.status != 200:

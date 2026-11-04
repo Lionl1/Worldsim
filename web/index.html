@@ -56,7 +56,8 @@ table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,t
 .verdict{display:flex;gap:28px;align-items:center;flex-wrap:wrap;padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.verdict .num{font-size:44px;font-weight:700;letter-spacing:-1px;line-height:1;font-variant-numeric:tabular-nums}.verdict .txt{flex:1;min-width:240px}.advice{margin-top:14px;font-size:15px;color:var(--text);line-height:1.5}
 .hbar{display:grid;grid-template-columns:minmax(150px,34%) 1fr 62px;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid #222b3a}.hbar b{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}.hbar .bar{height:10px}.bar i.red,.tor i.red{background:var(--bad)}
 .tor{position:relative;height:10px;background:#232c3b;border-radius:2px;overflow:hidden}.tor::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:#7c8aa3}.tor i{position:absolute;top:0;bottom:0;display:block}.tor i.grn{background:var(--good)}.tor u{position:absolute;top:4px;height:2px;background:#fff;z-index:1;opacity:.75}.tor.ci{margin:5px 0 4px}tr.dim td{color:var(--muted)}.ml-foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
-#ml_s{height:calc(100vh - 262px);min-height:240px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#d8e4f7;resize:vertical}#ml_err{margin-top:8px}
+.hrun{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:7px 0;border-bottom:1px solid var(--line);align-items:center}.hrun label{color:var(--text);display:flex;gap:6px;align-items:baseline}.hrun .muted{grid-column:1;font-size:13px}.hrun .btn{grid-column:2;grid-row:1/3;padding:4px 10px}
+#ml_s{height:420px;min-height:240px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#d8e4f7;resize:vertical}#ml_err{margin-top:8px}
 @media (max-width:1100px){main{grid-template-columns:minmax(0,1fr) 320px}.row label{flex-basis:108px}}
 @media (max-width:760px){#app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}nav{flex-direction:row;padding:6px;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;gap:2px;scrollbar-width:none}nav h1,nav .sub,nav .foot,nav .grp{display:none}nav button{white-space:nowrap;flex:0 0 auto}
 main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 40vh minmax(0,1fr)}#hud{grid-row:1;padding:6px 10px;font-size:13px}#stage{grid-row:2}#chartbox{display:none!important}#panel{grid-column:1;grid-row:3;border-left:0;border-top:1px solid var(--line);padding:14px}#laws{padding:14px}#laws table{min-width:640px}#mission{padding:14px}.hbar{grid-template-columns:minmax(110px,40%) 1fr 54px}#ml_s{height:240px}.report{overflow-x:auto}}
@@ -109,8 +110,15 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 let current = null, epoch = 0;
+/* токен живёт только до закрытия вкладки и передаётся заголовком, а не в адресе */
+const authToken = () => { try { return sessionStorage.getItem('ws_token') || ''; } catch(e){ return ''; } };
 const api = async (path, opts={}) => {
-  const r = await fetch(path, opts);
+  const headers = {...(opts.headers||{})}, t = authToken(); if (t) headers.Authorization = 'Bearer '+t;
+  let r = await fetch(path, {...opts, headers});
+  if (r.status === 401){
+    const v = prompt('Сервер защищён. Введите токен доступа:');
+    if (v){ try { sessionStorage.setItem('ws_token', v); } catch(e){} headers.Authorization = 'Bearer '+v; r = await fetch(path, {...opts, headers}); }
+  }
   if (!r.ok) { let m = r.statusText; try { m = (await r.json()).error } catch(e){} throw new Error(m); }
   return opts.binary ? r : r.json();
 };
@@ -918,7 +926,7 @@ const robotsTab = {
     try { meta = await api('/api/env/make?'+qs(q)); ter = await api(`/api/env/terrain?id=${meta.id}&n=161`); }
     catch(e){ $('#r_info').innerHTML = `<div class="no">${esc(e.message)}</div>`; return; }
     if (my !== this.run || ep0 !== epoch) return;
-    if (this.id) fetch('/api/env/close?id='+this.id).catch(()=>{});
+    if (this.id) api('/api/env/close?id='+this.id).catch(()=>{});
     this.id = meta.id; this.meta = meta; this.task = task; this.ter = ter; this.hist = {t:[],a:[],v:[]}; this.frame = 0; this.throttle = 0; this.speed = 0;
     for (const o of [this.ground,this.body,this.goal,this.rays,this.trail,this.rocks,this.plume]) if (o){ o.parent?.remove(o); o.traverse?.(c=>c.geometry?.dispose?.()); }
     // рельеф: сетка совпадает с физической, цвет зависит от высоты и уклона
@@ -1026,7 +1034,7 @@ const robotsTab = {
     let any=false; for (let k=0;k<D.N;k++){ if (D.life[k]<=0) continue; any=true; D.life[k]-=dt; if (D.life[k]<=0){ a.setXYZ(k,1e6,1e6,1e6); continue; } a.setXYZ(k,a.getX(k)+D.vel[k*3]*dt,a.getY(k)+D.vel[k*3+1]*dt,a.getZ(k)+D.vel[k*3+2]*dt); }
     if (any||this.throttle>.05) a.needsUpdate = true;
   },
-  dispose(){ this.run = (this.run||0)+1; if (this.id){ fetch('/api/env/close?id='+this.id).catch(()=>{}); this.id=null; } this.ground=this.body=this.goal=this.rays=this.trail=this.rocks=this.plume=this.dust=null; },
+  dispose(){ this.run = (this.run||0)+1; if (this.id){ api('/api/env/close?id='+this.id).catch(()=>{}); this.id=null; } this.ground=this.body=this.goal=this.rays=this.trail=this.rocks=this.plume=this.dust=null; },
 };
 
 // ============================================================ вкладка: Mission Lab
@@ -1036,21 +1044,53 @@ const missionTab = {
     const el = $('#mission'); el.style.display='block';
     panel.innerHTML = `<h2>Mission Lab</h2><div class="muted">Опишите аппарат, разбросы, требования и варианты технологий.</div>
       <div class="row"><label>Пример</label><select id="ml_p"><option value="lunar_lander">Лунный модуль</option><option value="mars_helicopter">Вертолёт на Марсе</option><option value="lunar_rover">Лунный ровер</option></select></div>
-      <div class="btns"><span class="btn" id="ml_go">Рассчитать миссию</span></div>
-      <div id="ml_err" class="no"></div><h3>Описание миссии, JSON</h3><textarea id="ml_s" spellcheck="false" aria-label="Описание миссии"></textarea>`;
+      <div class="btns"><span class="btn" id="ml_go">Рассчитать миссию</span><span class="btn sec" id="ml_x" style="display:none">Отменить</span></div>
+      <div id="ml_err" class="no"></div><h3>История запусков</h3><div id="ml_h" class="muted">Пока пусто.</div><h3>Описание миссии, JSON</h3><textarea id="ml_s" spellcheck="false" aria-label="Описание миссии"></textarea>`;
     el.innerHTML = `<div class="ml-empty"><b>Выполнима ли миссия и что её ломает?</b>Нажмите «Рассчитать миссию». Сотни полётов с разбросами параметров дадут проверку требований, причины отказов и ценность каждой технологии.</div>`;
     $('#ml_p').onchange = () => this.load();
     $('#ml_go').onclick = () => this.calc();
-    await this.load();
+    $('#ml_x').onclick = () => { if (this.job) api(`/api/jobs/${this.job}/cancel`, {method:'POST'}).catch(()=>{}); };
+    await this.load(); this.history();
+  },
+  /* сохранённые запуски: открыть отчёт или сравнить два */
+  async history(){
+    let rows = []; try { rows = await api('/api/runs'); } catch(e){ return; }
+    const el = $('#ml_h'); if (!el) return;
+    if (!rows.length){ el.textContent = 'Пока пусто.'; return; }
+    el.innerHTML = rows.slice(0,8).map(r=>`<div class="hrun"><label><input type="checkbox" data-c="${esc(r.id)}"> ${esc(r.name)}</label><span class="muted">${new Date(r.created*1000).toLocaleString('ru',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${(r.success*100).toFixed(1)}%</span><span class="btn sec" data-o="${esc(r.id)}">Открыть</span></div>`).join('')+`<div class="btns"><span class="btn sec" id="ml_cmp">Сравнить выбранные</span></div>`;
+    el.querySelectorAll('[data-o]').forEach(b=>b.onclick=async()=>{ const r=await api('/api/runs/'+b.dataset.o); this.r=r; this.show(r); });
+    $('#ml_cmp').onclick=()=>this.compare();
+  },
+  async compare(){
+    const ids=[...document.querySelectorAll('#ml_h input:checked')].map(i=>i.dataset.c);
+    if (ids.length!==2){ $('#ml_err').textContent='Выберите ровно два запуска.'; return; }
+    $('#ml_err').textContent='';
+    const c=await api('/api/runs/compare?'+qs({a:ids[1],b:ids[0]}));
+    const pct=x=>x==null||!isFinite(x)?'—':(100*x).toFixed(1)+'%', num=x=>x==null?'—':fmt(x,2);
+    $('#mission').innerHTML=`<div class="report"><h2>Сравнение запусков</h2><div class="sub">Сначала более ранний, затем более поздний.</div>
+      <div class="verdict"><div class="num ${c.delta>0?'ok':c.delta<0?'no':''}">${c.delta>=0?'+':''}${(c.delta*100).toFixed(1)} п.п.</div><div class="txt"><b>Изменение успеха</b><div class="muted">${pct(c.success_a)} → ${pct(c.success_b)}</div></div></div>
+      <h3>Требования</h3><table><tr><th>Требование</th><th>Было</th><th>Стало</th></tr>${c.requirements.map(q=>`<tr><td>${esc(q.text)}</td><td>${num(q.a)} <span class="pill ${VERDICT[q.a_verdict]||''}">${esc(q.a_verdict)}</span></td><td>${num(q.b)} <span class="pill ${VERDICT[q.b_verdict]||''}">${esc(q.b_verdict)}</span></td></tr>`).join('')}</table>
+      <h3>Что поменялось в описании</h3>${c.spec_changes.length?`<table><tr><th>Параметр</th><th>Было</th><th>Стало</th></tr>${c.spec_changes.map(x=>`<tr><td>${esc(x.key)}</td><td>${esc(x.a)}</td><td>${esc(x.b)}</td></tr>`).join('')}</table>`:'<div class="muted">Описания совпадают.</div>'}</div>`;
   },
   async load(){ $('#ml_s').value = JSON.stringify(await api('/api/mission/example?name='+$('#ml_p').value), null, 2); },
   async calc(){
     const my = epoch; $('#ml_err').textContent=''; let spec;
     try { spec = JSON.stringify(JSON.parse($('#ml_s').value)); } catch(e){ $('#ml_err').textContent = 'Не удалось разобрать описание: '+e.message; return; }
-    busy(true, 'Считаю полёты…'); $('#ml_go').classList.add('off');
-    try { const r = await api('/api/mission/run', {method:'POST', body:spec}); if (my === epoch){ this.r = r; this.show(r); } }
-    catch(e){ if (my === epoch) $('#ml_err').textContent = e.message; }
-    finally { busy(false); $('#ml_go')?.classList.remove('off'); }
+    $('#ml_go').classList.add('off'); $('#ml_x').style.display='';
+    try {
+      const job = await api('/api/jobs/mission', {method:'POST', body:spec});
+      this.job = job.id;
+      for (;;){
+        await sleep(350);
+        const j = await api('/api/jobs/'+job.id);
+        if (my !== epoch) return;
+        busy(j.status==='running', `Считаю полёты: ${Math.round(j.fraction*100)}%`);
+        if (j.status==='done'){ const r = await api('/api/runs/'+j.run); this.r = r; this.show(r); this.runId = j.run; this.history(); break; }
+        if (j.status==='failed'){ $('#ml_err').textContent = j.error; break; }
+        if (j.status==='cancelled'){ $('#ml_err').textContent = 'Расчёт отменён.'; break; }
+      }
+    } catch(e){ if (my === epoch) $('#ml_err').textContent = e.message; }
+    finally { busy(false); $('#ml_go')?.classList.remove('off'); if ($('#ml_x')) $('#ml_x').style.display='none'; this.job = null; }
   },
   show(r){
     const pct = x => isFinite(x) && x!=null ? (100*x).toFixed(1)+'%' : '—', num = x => x==null||!isFinite(x) ? '—' : fmt(x, Math.abs(x)<10?2:1);

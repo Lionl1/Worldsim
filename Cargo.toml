@@ -1,6 +1,6 @@
 [package]
 name = "worldsim"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Физические модели миров (Земля, Луна, Марс, ...) для симуляции и генерации данных"
 license = "MIT"

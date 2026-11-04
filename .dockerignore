@@ -1,0 +1,6 @@
+target
+runs
+.git
+python
+**/__pycache__
+data/*.json

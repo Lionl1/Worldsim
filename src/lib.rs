@@ -33,6 +33,7 @@ pub mod quantum;
 pub mod rng;
 pub mod server;
 pub mod stars;
+pub mod store;
 pub mod starsystem;
 pub mod tectonics;
 pub mod thermal;

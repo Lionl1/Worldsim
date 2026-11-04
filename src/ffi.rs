@@ -1,4 +1,5 @@
 //! Векторная среда для Python через ctypes (`python/worldsim/vec.py`): без HTTP и без зависимостей.
+//! Все функции небезопасны по контракту C: указатели от `ws_vec_new`, буферы нужного размера (см. vec.py).
 //! Все массивы — f32 по строкам; завершившиеся среды сами начинают новый эпизод (как в Gymnasium VectorEnv).
 
 use crate::collect::episode_seed;
@@ -24,7 +25,8 @@ fn write_str(s: &str, buf: *mut u8, cap: usize) -> usize {
 }
 
 #[no_mangle]
-pub extern "C" fn ws_last_error(buf: *mut u8, cap: usize) -> usize { LAST_ERROR.with(|l| write_str(&l.borrow(), buf, cap)) }
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_last_error(buf: *mut u8, cap: usize) -> usize { LAST_ERROR.with(|l| write_str(&l.borrow(), buf, cap)) }
 
 #[allow(clippy::too_many_arguments)]
 fn build(task: &str, worlds: &str, n: usize, seed: u64, noise: f64, randomize: bool, frame_skip: usize, max_steps: usize, rotor_scale: f64, gust: f64, lag: f64, fault: f64, threads: usize, params: &str) -> Result<VecEnv, String> {
@@ -49,8 +51,8 @@ fn build(task: &str, worlds: &str, n: usize, seed: u64, noise: f64, randomize: b
 
 /// Возвращает указатель или null; причину даёт `ws_last_error`.
 #[no_mangle]
-#[allow(clippy::too_many_arguments)]
-pub extern "C" fn ws_vec_new(task: *const c_char, worlds: *const c_char, n: usize, seed: u64, noise: f64, randomize: bool, frame_skip: usize, max_steps: usize, rotor_scale: f64, gust: f64, lag: f64, fault: f64, threads: usize, params: *const c_char) -> *mut VecEnv {
+#[allow(clippy::too_many_arguments, clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_vec_new(task: *const c_char, worlds: *const c_char, n: usize, seed: u64, noise: f64, randomize: bool, frame_skip: usize, max_steps: usize, rotor_scale: f64, gust: f64, lag: f64, fault: f64, threads: usize, params: *const c_char) -> *mut VecEnv {
     let text = |p: *const c_char| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned();
     match build(&text(task), &text(worlds), n, seed, noise, randomize, frame_skip, max_steps, rotor_scale, gust, lag, fault, threads, &text(params)) {
         Ok(v) => Box::into_raw(Box::new(v)),
@@ -59,11 +61,13 @@ pub extern "C" fn ws_vec_new(task: *const c_char, worlds: *const c_char, n: usiz
 }
 
 #[no_mangle]
-pub extern "C" fn ws_vec_free(p: *mut VecEnv) { if !p.is_null() { drop(unsafe { Box::from_raw(p) }); } }
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_vec_free(p: *mut VecEnv) { if !p.is_null() { drop(unsafe { Box::from_raw(p) }); } }
 
 /// Описание среды в JSON: размеры, имена, границы действий.
 #[no_mangle]
-pub extern "C" fn ws_vec_spec(p: *mut VecEnv, buf: *mut u8, cap: usize) -> usize {
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_vec_spec(p: *mut VecEnv, buf: *mut u8, cap: usize) -> usize {
     let v = unsafe { &*p };
     let e = &v.envs[0];
     let (lo, hi) = e.act_bounds();
@@ -92,7 +96,8 @@ fn each<T: Send>(envs: Vec<T>, threads: usize, f: impl Fn(T) + Sync) {
 }
 
 #[no_mangle]
-pub extern "C" fn ws_vec_reset(p: *mut VecEnv, obs: *mut f32) {
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_vec_reset(p: *mut VecEnv, obs: *mut f32) {
     let v = unsafe { &mut *p };
     let n = v.envs.len();
     let obs = unsafe { std::slice::from_raw_parts_mut(obs, n * v.nobs) };
@@ -106,7 +111,8 @@ pub extern "C" fn ws_vec_reset(p: *mut VecEnv, obs: *mut f32) {
 
 /// `final_obs` — наблюдение в момент конца эпизода: у завершившихся сред `obs` уже от нового эпизода.
 #[no_mangle]
-pub extern "C" fn ws_vec_step(p: *mut VecEnv, act: *const f32, obs: *mut f32, reward: *mut f32, terminated: *mut u8, truncated: *mut u8, final_obs: *mut f32) {
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_vec_step(p: *mut VecEnv, act: *const f32, obs: *mut f32, reward: *mut f32, terminated: *mut u8, truncated: *mut u8, final_obs: *mut f32) {
     let v = unsafe { &mut *p };
     let (n, no, na) = (v.envs.len(), v.nobs, v.nact);
     let (act, obs, reward, terminated, truncated, final_obs) = unsafe { (
@@ -134,7 +140,8 @@ pub extern "C" fn ws_vec_step(p: *mut VecEnv, act: *const f32, obs: *mut f32, re
 macro_rules! exporter {
     ($name:ident, $width:ident, $get:expr) => {
         #[no_mangle]
-        pub extern "C" fn $name(p: *mut VecEnv, out: *mut f32) {
+        #[allow(clippy::missing_safety_doc)]
+        pub unsafe extern "C" fn $name(p: *mut VecEnv, out: *mut f32) {
             let v = unsafe { &mut *p };
             let w = $width(v);
             let out = unsafe { std::slice::from_raw_parts_mut(out, v.envs.len() * w) };

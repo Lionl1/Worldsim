@@ -1,5 +1,7 @@
 """Проверки Python-инструментов. Запуск: cd python && python -m unittest discover tests"""
+import http.client
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -143,7 +145,8 @@ class Server(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.proc = subprocess.Popen([str(BIN), "serve", "--port", str(cls.PORT), "--no-open"], stdout=subprocess.DEVNULL)
+        cls.data = tempfile.mkdtemp()
+        cls.proc = subprocess.Popen([str(BIN), "serve", "--port", str(cls.PORT), "--no-open", "--data-dir", cls.data], stdout=subprocess.DEVNULL)
         for _ in range(50):
             try:
                 cls.c = worldsim.Client(port=cls.PORT)
@@ -157,6 +160,7 @@ class Server(unittest.TestCase):
     def tearDownClass(cls):
         cls.proc.terminate()
         cls.proc.wait()
+        shutil.rmtree(cls.data)
 
     def test_fork_reproduces_and_branches(self):
         e = self.c.make("lander", "earth", seed=3)
@@ -232,6 +236,39 @@ class Server(unittest.TestCase):
         self.assertLess(int(px[20, 32].sum()), 30)
         self.assertGreater(int(px.sum()), 0)
 
+    def test_jobs_progress_cancel_and_runs(self):
+        spec = self.c.get("/api/mission/example", name="mars_helicopter")
+        spec["runs"] = 16
+        seen = []
+        r = self.c.run_mission(spec, seen.append)
+        self.assertIn("scorecard", r)
+        self.assertTrue(r["spec_sha256"])
+        self.assertTrue(seen)
+        spec2 = dict(spec, rotor_scale=25)
+        self.c.run_mission(spec2)
+        runs = self.c.get("/api/runs")
+        self.assertGreaterEqual(len(runs), 2)
+        cmp = self.c.get("/api/runs/compare", a=runs[1]["id"], b=runs[0]["id"])
+        self.assertTrue(any(x["key"] == "rotor_scale" for x in cmp["spec_changes"]))
+        # отмена долгой задачи
+        big = dict(spec, runs=20000)
+        job = self.c.post("/api/jobs/mission", json.dumps(big).encode())["id"]
+        self.c.post(f"/api/jobs/{job}/cancel")
+        for _ in range(100):
+            j = self.c.get(f"/api/jobs/{job}")
+            if j["status"] != "running":
+                break
+            time.sleep(0.1)
+        self.assertEqual(j["status"], "cancelled")
+        # ошибки доступа и пути
+        for bad in ("../../etc", "..%2f", "abc!"):
+            with self.assertRaises(RuntimeError):
+                self.c.get(f"/api/runs/{bad}")
+        with self.assertRaises(RuntimeError):
+            self.c.post("/api/jobs/mission", b"{bad")
+        with self.assertRaises(RuntimeError):
+            self.c.get("/api/mission/run")
+
     def test_cameras(self):
         e = self.c.make("rover", "mars")
         self.assertEqual(e.camera(8, 6, "rgb").shape, (6, 8, 3))
@@ -249,14 +286,72 @@ class Server(unittest.TestCase):
     def test_mission_api(self):
         spec = self.c.get("/api/mission/example", name="mars_helicopter")
         spec["runs"] = 12
-        self.c.conn.request("POST", "/api/mission/run", body=json.dumps(spec))
-        r = json.loads(self.c.conn.getresponse().read())
+        r = self.c.post("/api/mission/run", json.dumps(spec).encode())
         self.assertIn("scorecard", r)
         self.assertIn("markdown", r)
         self.c.conn.request("POST", "/api/mission/run", body="{bad")
         resp = self.c.conn.getresponse()
         self.assertEqual(resp.status, 400)
         resp.read()
+
+
+class Security(unittest.TestCase):
+    PORT = 18766
+
+    def raw(self, method="GET", path="/api/version", headers=None, body=None):
+        c = http.client.HTTPConnection("localhost", self.PORT, timeout=10)
+        c.request(method, path, body=body, headers=headers or {})
+        r = c.getresponse()
+        return r.status, dict(r.getheaders()), r.read()
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data = tempfile.mkdtemp()
+        env = dict(os.environ, WORLDSIM_TOKEN="secret-token")
+        cls.proc = subprocess.Popen([str(BIN), "serve", "--port", str(cls.PORT), "--no-open", "--data-dir", cls.data], stdout=subprocess.DEVNULL, env=env)
+        for _ in range(50):
+            try:
+                http.client.HTTPConnection("localhost", cls.PORT, timeout=1).connect()
+                return
+            except OSError:
+                time.sleep(0.1)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.proc.terminate()
+        cls.proc.wait()
+        shutil.rmtree(cls.data)
+
+    def test_token(self):
+        self.assertEqual(self.raw()[0], 401)
+        self.assertEqual(self.raw(headers={"Authorization": "Bearer wrong-token-x"})[0], 401)
+        self.assertEqual(self.raw(headers={"Authorization": "Bearer secret-token"})[0], 200)
+        self.assertEqual(self.raw(path="/healthz")[0], 200)
+        self.assertEqual(self.raw(path="/")[0], 200)
+        c = worldsim.Client(port=self.PORT, token="secret-token")
+        self.assertEqual(c.get("/api/version")["name"], "worldsim")
+
+    def test_foreign_site_rejected_without_wildcard(self):
+        ok = {"Authorization": "Bearer secret-token"}
+        self.assertEqual(self.raw(headers={**ok, "Origin": "https://evil.example"})[0], 403)
+        self.assertEqual(self.raw(headers={**ok, "Origin": f"http://localhost:{self.PORT}"})[0], 200)
+        self.assertNotIn("Access-Control-Allow-Origin", self.raw(headers=ok)[1])
+
+    def test_limits(self):
+        ok = {"Authorization": "Bearer secret-token"}
+        self.assertEqual(self.raw("POST", "/api/mission/run", ok, b"x" * (1 << 21))[0], 413)
+        self.assertEqual(self.raw(path="/api/version?" + "a" * 20000, headers=ok)[0], 431)
+        self.assertEqual(self.raw("DELETE", "/api/version", ok)[0], 405)
+
+    def test_external_bind_requires_token(self):
+        env = {k: v for k, v in os.environ.items() if k != "WORLDSIM_TOKEN"}
+        r = subprocess.run([str(BIN), "serve", "--host", "0.0.0.0", "--port", "18767", "--no-open"], capture_output=True, env=env, timeout=10)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("токен", r.stderr.decode())
+
+    def test_health_command(self):
+        self.assertEqual(subprocess.run([str(BIN), "health", "--port", str(self.PORT)], capture_output=True).returncode, 0)
+        self.assertNotEqual(subprocess.run([str(BIN), "health", "--port", "18799"], capture_output=True).returncode, 0)
 
 
 if __name__ == "__main__":

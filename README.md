@@ -256,10 +256,34 @@ data/                                         — каталоги HYG и OEC (�
 tools/fetch_data.sh, build_data.py           — загрузка и сборка данных из каталогов
 ```
 
+## Запуск для команды
+
+```bash
+docker build -t worldsim .
+docker run -p 8080:8080 -e WORLDSIM_TOKEN=придумайте-длинный-токен -v worldsim-data:/data worldsim
+```
+
+Или готовый бинарник со страницы релизов:
+
+```bash
+WORLDSIM_TOKEN=придумайте-длинный-токен worldsim serve --host 0.0.0.0 --data-dir /var/lib/worldsim --log
+```
+
+| Что | Как |
+|---|---|
+| Доступ | заголовок `Authorization: Bearer <токен>`; на внешнем адресе без токена сервер не запустится |
+| Проверка живости | `GET /healthz` или `worldsim health` |
+| Описание API | `GET /api/openapi.json` |
+| Долгие расчёты | `POST /api/jobs/mission`, затем `GET /api/jobs/{id}`; отмена — `POST /api/jobs/{id}/cancel` |
+| История | `GET /api/runs`, сравнение `GET /api/runs/compare?a=…&b=…`; файлы лежат в `--data-dir` |
+| Запросы с чужих сайтов | отклоняются; разрешить можно ключом `--cors` |
+
+TLS сервер не поддерживает: в сети ставьте его за обратный прокси. Подробности в [SECURITY.md](SECURITY.md), история изменений в [CHANGELOG.md](CHANGELOG.md).
+
 ## Сравнение с аналогами
 
 Universe Sandbox, SpaceEngine, OpenSpace, REBOUND, GADGET-4/SWIFT, ExoPlaSim — в [COMPARISON.md](COMPARISON.md):
-где worldsim сильнее, где уступает и что в плане.
+где worldsim сильнее, где уступает и что в плане. Сравнение с инструментами для космических миссий и таблица разрывов: [docs/COMPETITORS.md](docs/COMPETITORS.md).
 
 ## Границы модели
 

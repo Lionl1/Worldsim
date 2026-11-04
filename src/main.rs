@@ -30,7 +30,10 @@ const HELP: &str = "worldsim — физические модели миров
   system    --bodies sun,earth,moon,mars --years 1 --dt-hours 1 [--gr] [--leapfrog] [--out sys.csv]
   dataset   --task projectile|orbit|thermal|particle|system --n 1000
             --worlds earth,moon,mars --out data/ --seed 42 [--points 100] [--noise 0.01] [--strict]
-  serve     [--port 8080] [--no-open]   3D-интерфейс в браузере (все модели)
+  serve     [--host 127.0.0.1] [--port 8080] [--no-open] [--token T] [--data-dir runs] [--cors] [--log] [--insecure]
+            интерфейс и API. На внешнем адресе нужен токен (--token или WORLDSIM_TOKEN)
+  health    [--port 8080]               проверка живости сервера, код выхода 0 или 1
+  version                               версия
   validate                      прогнать проверку всех законов
   params    [--task lander|drone|rover]  все настраиваемые параметры: имя, единицы, диапазон, значение по умолчанию
   mission   файл.json [--out папка] [--threads N]
@@ -100,7 +103,9 @@ fn allowed_flags(cmd: &str) -> Option<&'static [&'static str]> {
         "particle" => &["species", "mev", "L", "pitch", "time", "out", "lon"],
         "system" => &["bodies", "years", "dt-hours", "gr", "leapfrog", "out"],
         "dataset" => &["task", "n", "worlds", "out", "seed", "points", "noise", "strict"],
-        "serve" => &["port", "no-open"],
+        "serve" => &["host", "port", "no-open", "token", "data-dir", "cors", "log", "insecure"],
+        "health" => &["port"],
+        "version" => &[],
         "mission" => &["out", "threads"],
         "params" => &["task"],
         "collect" => &["task", "worlds", "episodes", "policies", "noise", "randomize", "frame-skip", "max-steps", "gust", "lag", "fault", "rotor-scale", "threads", "seed", "terrain", "camera", "camera-every", "counterfactuals", "set", "out"],
@@ -239,8 +244,29 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
         "serve" => {
             let port = num(kv, "port", 8080.0)?;
             if port.fract() != 0.0 || !(1.0..=65535.0).contains(&port) { return Err(format!("--port: нужен порт от 1 до 65535, получено {port}")); }
-            worldsim::server::serve(port as u16, !flag(kv, "no-open"))?
+            worldsim::server::serve_opts(worldsim::server::ServerOpts {
+                host: kv.get("host").cloned().unwrap_or("127.0.0.1".into()),
+                port: port as u16,
+                open: !flag(kv, "no-open"),
+                // токен в командной строке виден в списке процессов, поэтому переменная окружения предпочтительнее
+                token: kv.get("token").cloned().or(std::env::var("WORLDSIM_TOKEN").ok()).filter(|t| !t.is_empty()),
+                data_dir: kv.get("data-dir").cloned().or(std::env::var("WORLDSIM_DATA").ok()).unwrap_or("runs".into()).into(),
+                cors: flag(kv, "cors"),
+                log: flag(kv, "log"),
+                insecure: flag(kv, "insecure"),
+            })?
         }
+        "health" => {
+            use std::io::{Read, Write as _};
+            let port = num(kv, "port", 8080.0)? as u16;
+            let mut c = std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|e| format!("порт {port}: {e}"))?;
+            c.write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").map_err(|e| e.to_string())?;
+            let mut r = String::new();
+            c.read_to_string(&mut r).map_err(|e| e.to_string())?;
+            if !r.starts_with("HTTP/1.1 200") { return Err(format!("сервер ответил: {}", r.lines().next().unwrap_or(""))); }
+            println!("ok");
+        }
+        "version" => println!("worldsim {}", env!("CARGO_PKG_VERSION")),
         "params" => {
             let task = EnvConfig::new(kv.get("task").map(|s| s.as_str()).unwrap_or("lander"), "earth")?.task;
             let mut group = "";
@@ -253,11 +279,12 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
             let path = pos.first().ok_or("укажите файл миссии: worldsim mission missions/lunar_lander.json --out report")?;
             let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
             let threads = num(kv, "threads", std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1) as f64)? as usize;
-            let report = mission::run(&mission::MissionSpec::parse(&text)?, threads)?;
+            let report = mission::run(&mission::MissionSpec::parse(&text)?, threads)?.set("spec_sha256", worldsim::store::sha256(text.as_bytes()));
             if let Some(out) = kv.get("out") {
                 std::fs::create_dir_all(out).map_err(|e| format!("{out}: {e}"))?;
                 std::fs::write(format!("{out}/report.json"), report.render()).map_err(|e| e.to_string())?;
                 std::fs::write(format!("{out}/report.md"), mission::markdown(&report)).map_err(|e| e.to_string())?;
+                std::fs::write(format!("{out}/spec.json"), &text).map_err(|e| e.to_string())?;
             }
             print!("{}", mission::markdown(&report));
         }

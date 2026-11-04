@@ -14,7 +14,7 @@ use crate::json::J;
 use crate::rng::Rng;
 use crate::vec3::Vec3;
 use crate::world::{World, WorldSpec};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 const METRICS: &[&str] = &["success", "crashed", "touch_speed", "touch_tilt", "touch_offset", "fuel_used", "energy_used_kj", "duration_s"];
@@ -28,6 +28,10 @@ pub struct Requirement { pub id: String, pub text: String, pub metric: String, p
 
 #[derive(Clone, Debug, Default)]
 pub struct Technology { pub name: String, pub set: Vec<(String, f64)>, pub set_dispersion: Vec<(String, f64)>, pub set_top: Vec<(String, f64)>, pub dry_mass_delta: f64 }
+
+/// Прогресс расчёта: фоновая задача показывает его и может отменить.
+#[derive(Default)]
+pub struct Progress { pub done: AtomicUsize, pub total: AtomicUsize, pub cancel: AtomicBool }
 
 #[derive(Clone, Debug)]
 pub struct MissionSpec {
@@ -188,7 +192,7 @@ fn fly(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor
 }
 
 /// Серия полётов: номер запуска задаёт seed, поэтому сравнение вариантов идёт на одних и тех же условиях.
-fn campaign(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor: f64, runs: usize, threads: usize) -> Result<Vec<RunResult>, String> {
+fn campaign(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor: f64, runs: usize, threads: usize, progress: &Progress) -> Result<Vec<RunResult>, String> {
     let results = Mutex::new(vec![RunResult::default(); runs]);
     let (next, err) = (AtomicUsize::new(0), Mutex::new(None));
     std::thread::scope(|sc| {
@@ -196,6 +200,8 @@ fn campaign(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], 
             sc.spawn(|| loop {
                 let i = next.fetch_add(1, Ordering::Relaxed);
                 if i >= runs { return; }
+                if progress.cancel.load(Ordering::Relaxed) { *err.lock().unwrap() = Some("расчёт отменён".to_string()); next.store(runs, Ordering::Relaxed); return; }
+                progress.done.fetch_add(1, Ordering::Relaxed);
                 match fly(spec, vehicle, d, rotor, episode_seed(spec.seed, i as u64)) {
                     Ok(r) => results.lock().unwrap()[i] = r,
                     Err(e) => { *err.lock().unwrap() = Some(e); next.store(runs, Ordering::Relaxed); }
@@ -266,20 +272,24 @@ fn margin_score(spec: &MissionSpec, rs: &[RunResult]) -> usize {
     spec.requirements.iter().filter(|q| { let (v, l, h) = evaluate(q, rs); verdict(q, v, l, h) == "выполнено" }).count()
 }
 
-pub fn run(spec: &MissionSpec, threads: usize) -> Result<J, String> {
+pub fn run(spec: &MissionSpec, threads: usize) -> Result<J, String> { run_with(spec, threads, &Progress::default()) }
+
+pub fn run_with(spec: &MissionSpec, threads: usize, progress: &Progress) -> Result<J, String> {
     let t0 = std::time::Instant::now();
-    let base = campaign(spec, &spec.vehicle, &spec.dispersions, spec.rotor_scale, spec.runs, threads)?;
+    let active = spec.dispersions.iter().filter(|d| d.1 != 0.0).count();
+    progress.total.store(spec.runs + spec.runs.min(300) * (1 + active) + spec.runs * spec.technologies.len(), Ordering::Relaxed);
+    let base = campaign(spec, &spec.vehicle, &spec.dispersions, spec.rotor_scale, spec.runs, threads, progress)?;
     let base_s = success_rate(&base);
 
     // Главные факторы: каждый разброс отдельно, остальные выключены; плюс без разбросов вообще
     let drivers_runs = spec.runs.min(300);
-    let clean = campaign(spec, &spec.vehicle, &[], spec.rotor_scale, drivers_runs, threads)?;
+    let clean = campaign(spec, &spec.vehicle, &[], spec.rotor_scale, drivers_runs, threads, progress)?;
     let clean_s = success_rate(&clean);
     let mut drivers = vec![];
     for (k, v) in &spec.dispersions {
         if *v == 0.0 { continue; }
         let only = [(k.clone(), *v)];
-        let rs = campaign(spec, &spec.vehicle, &only, spec.rotor_scale, drivers_runs, threads)?;
+        let rs = campaign(spec, &spec.vehicle, &only, spec.rotor_scale, drivers_runs, threads, progress)?;
         let s = success_rate(&rs);
         drivers.push((k.clone(), *v, s, s - clean_s));
     }
@@ -298,7 +308,7 @@ pub fn run(spec: &MissionSpec, threads: usize) -> Result<J, String> {
         let mut d = spec.dispersions.clone();
         for (k, v) in &t.set_dispersion { d.retain(|(n, _)| n != k); d.push((k.clone(), *v)); }
         let rotor = t.set_top.iter().find(|(n, _)| n == "rotor_scale").map(|x| x.1).unwrap_or(spec.rotor_scale);
-        let rs = campaign(spec, &veh, &d, rotor, spec.runs, threads)?;
+        let rs = campaign(spec, &veh, &d, rotor, spec.runs, threads, progress)?;
         let s = success_rate(&rs);
         // парное сравнение: на одних и тех же условиях — что спасено и что испорчено
         let saved = rs.iter().zip(&base).filter(|(a, b)| a.success > 0.5 && b.success < 0.5).count();

@@ -225,3 +225,45 @@ fn new_parameters_change_behaviour() {
     assert!((run("gyro_bias=0.2")[9] - base[9]).abs() > 1e-3);
     assert!((run("obs_delay=10")[5] - base[5]).abs() > 1e-3);
 }
+
+#[test]
+fn sha256_matches_known_vectors() {
+    use worldsim::store::sha256;
+    assert_eq!(sha256(b""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    assert_eq!(sha256(b"abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    assert_eq!(sha256(&[b'a'; 1000]), "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3");
+}
+
+#[test]
+fn run_store_saves_lists_and_rejects_bad_ids() {
+    use worldsim::store;
+    let d = std::env::temp_dir().join(format!("ws_runs_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let text = spec("");
+    let r = mission::run(&MissionSpec::parse(&text).unwrap(), 2).unwrap();
+    let a = store::save_run(&d, &text, &r).unwrap();
+    let b = store::save_run(&d, &text, &r).unwrap();
+    assert_ne!(a, b); // тот же отчёт не перезаписывает прошлый запуск
+    assert_eq!(store::list_runs(&d).as_arr().unwrap().len(), 2);
+    assert!(store::load_report(&d, &a).is_ok());
+    for bad in ["../x", "..", "a/b", "", "ZZZ"] { assert!(store::load_report(&d, bad).is_err(), "{bad}"); }
+    let c = store::compare(&d, &a, &b).unwrap();
+    assert_eq!(c.get("delta").unwrap().as_f64(), Some(0.0));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn openapi_lists_every_route() {
+    let api = J::parse(include_str!("../docs/openapi.json")).unwrap();
+    let paths: Vec<String> = api.get("paths").unwrap().as_obj().unwrap().iter().map(|x| x.0.clone()).collect();
+    let src = include_str!("../src/server.rs");
+    let mut seen = 0;
+    for (i, _) in src.match_indices("\"/api/") {
+        let rest = &src[i + 1..];
+        let lit = &rest[..rest.find('"').unwrap()];
+        if lit.ends_with('/') || lit.contains(' ') { continue; } // префиксы и текст описаны через {id}
+        seen += 1;
+        assert!(paths.iter().any(|p| p == lit), "{lit} нет в openapi.json");
+    }
+    assert!(seen > 20);
+}

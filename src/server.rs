@@ -48,12 +48,35 @@ struct Slot { sim: Arc<Mutex<Sim>>, last_used: u64, is_env: bool }
 const MAX_ENV_SESSIONS: usize = 1024;
 const MAX_OTHER_SESSIONS: usize = 64;
 
+/// Настройки сервера.
+#[derive(Clone, Debug)]
+pub struct ServerOpts { pub host: String, pub port: u16, pub open: bool, pub token: Option<String>, pub data_dir: std::path::PathBuf, pub cors: bool, pub log: bool, pub insecure: bool }
+
+const MAX_CONNECTIONS: usize = 512;
+const MAX_BODY: usize = 1 << 20;
+const MAX_LINE: u64 = 16 * 1024;
+const MAX_HEADERS: usize = 100;
+const MAX_ACTIVE_JOBS: usize = 4;
+const MAX_KEPT_JOBS: usize = 200;
+
+/// Фоновая задача.
+struct Job { id: String, name: String, spec: String, progress: crate::mission::Progress, state: Mutex<JobState> }
+#[derive(Clone)]
+enum JobState { Running, Done(String), Failed(String), Cancelled }
+
 #[derive(Clone)]
 struct State {
     sims: Arc<Mutex<HashMap<u64, Slot>>>,
     next: Arc<AtomicU64>,
     tick: Arc<AtomicU64>,
+    opts: Arc<ServerOpts>,
+    active: Arc<std::sync::atomic::AtomicUsize>,
+    jobs: Arc<Mutex<Vec<Arc<Job>>>>,
 }
+
+/// Снимает счётчик соединений даже при панике в потоке.
+struct ConnGuard(Arc<std::sync::atomic::AtomicUsize>);
+impl Drop for ConnGuard { fn drop(&mut self) { self.0.fetch_sub(1, Ordering::SeqCst); } }
 
 type Q = HashMap<String, String>;
 
@@ -66,75 +89,161 @@ impl Resp {
 }
 
 pub fn serve(port: u16, open_browser: bool) -> Result<(), String> {
-    let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("порт {port}: {e}"))?;
-    let url = format!("http://localhost:{port}");
-    println!("worldsim: интерфейс на {url}  (Ctrl+C — остановить)");
-    if open_browser {
+    serve_opts(ServerOpts { host: "127.0.0.1".into(), port, open: open_browser, token: None, data_dir: "runs".into(), cors: false, log: false, insecure: false })
+}
+
+fn is_loopback(host: &str) -> bool { matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]") }
+
+pub fn serve_opts(opts: ServerOpts) -> Result<(), String> {
+    if !is_loopback(&opts.host) && opts.token.is_none() && !opts.insecure {
+        return Err(format!("адрес {} виден из сети: задайте токен через WORLDSIM_TOKEN или --token. Запустить без защиты можно только явно: --insecure", opts.host));
+    }
+    let listener = TcpListener::bind((opts.host.as_str(), opts.port)).map_err(|e| format!("порт {}: {e}", opts.port))?;
+    let url = format!("http://{}:{}", if is_loopback(&opts.host) { "localhost" } else { &opts.host }, opts.port);
+    println!("worldsim {}: {url}  (Ctrl+C — остановить){}", env!("CARGO_PKG_VERSION"), if opts.token.is_some() { ", нужен токен" } else { "" });
+    if opts.open {
         let cmd = if cfg!(target_os = "macos") { Some("open") } else if cfg!(target_os = "linux") { Some("xdg-open") } else { None };
         if let Some(c) = cmd { let _ = std::process::Command::new(c).arg(&url).spawn(); }
         #[cfg(target_os = "windows")]
         { let _ = std::process::Command::new("cmd").args(["/C", "start", &url]).spawn(); }
     }
-    let state = State { sims: Arc::new(Mutex::new(HashMap::new())), next: Arc::new(AtomicU64::new(1)), tick: Arc::new(AtomicU64::new(1)) };
+    let state = State { sims: Arc::new(Mutex::new(HashMap::new())), next: Arc::new(AtomicU64::new(1)), tick: Arc::new(AtomicU64::new(1)), opts: Arc::new(opts), active: Default::default(), jobs: Default::default() };
     for stream in listener.incoming() {
-        let Ok(stream) = stream else { continue };
+        let Ok(mut stream) = stream else { continue };
+        if state.active.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
+            state.active.fetch_sub(1, Ordering::SeqCst);
+            let _ = stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            continue;
+        }
         let st = state.clone();
-        std::thread::spawn(move || { let _ = handle(stream, st); });
+        std::thread::spawn(move || { let _g = ConnGuard(st.active.clone()); let _ = handle(stream, st); });
     }
     Ok(())
 }
 
+/// Строка заголовка ограниченной длины: нельзя занять память бесконечной строкой.
+fn read_line_limited(r: &mut BufReader<TcpStream>, out: &mut String) -> std::io::Result<usize> {
+    let mut lim = r.by_ref().take(MAX_LINE);
+    let mut raw = Vec::new();
+    let n = lim.read_until(b'\n', &mut raw)?;
+    out.push_str(&String::from_utf8_lossy(&raw));
+    Ok(n)
+}
+
+/// Сравнение токена за постоянное время: по времени ответа нельзя подбирать символы.
+fn token_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() { return false; }
+    a.bytes().zip(b.bytes()).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
+}
+
+fn send(stream: &mut TcpStream, st: &State, resp: &Resp, close: bool, head_only: bool) -> std::io::Result<()> {
+    let reason = match resp.status { 200 => "OK", 400 => "Bad Request", 401 => "Unauthorized", 403 => "Forbidden", 404 => "Not Found", 405 => "Method Not Allowed", 413 => "Payload Too Large", 429 => "Too Many Requests", 431 => "Request Header Fields Too Large", _ => "Internal Server Error" };
+    let mut head = format!("HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: {}\r\n",
+        resp.status, reason, resp.ctype, resp.body.len(), if close { "close" } else { "keep-alive" });
+    if st.opts.cors { head.push_str("Access-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: *\r\n"); }
+    if resp.status == 401 { head.push_str("WWW-Authenticate: Bearer\r\n"); }
+    for (k, v) in &resp.headers { head.push_str(&format!("{k}: {v}\r\n")); }
+    head.push_str("\r\n");
+    let mut out = head.into_bytes();
+    if !head_only { out.extend_from_slice(&resp.body); }
+    stream.write_all(&out)?;
+    stream.flush()
+}
+
 fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
     stream.set_read_timeout(Some(std::time::Duration::from_secs(60)))?;
+    stream.set_write_timeout(Some(std::time::Duration::from_secs(60)))?;
     let _ = stream.set_nodelay(true);
     let mut reader = BufReader::new(stream.try_clone()?);
     // keep-alive: много запросов в одном соединении (важно для обучения агентов)
     loop {
         let mut line = String::new();
-        if reader.read_line(&mut line)? == 0 { return Ok(()); }
+        if read_line_limited(&mut reader, &mut line)? == 0 { return Ok(()); }
         if line.trim().is_empty() { continue; }
+        if !line.ends_with('\n') { return send(&mut stream, &st, &Resp::err(431, "слишком длинная строка запроса"), true, false); }
+        let started = std::time::Instant::now();
         let mut content_len = 0usize;
         let mut close = false;
+        let (mut auth, mut origin, mut host) = (String::new(), String::new(), String::new());
+        let mut headers = 0;
         loop {
             let mut h = String::new();
-            if reader.read_line(&mut h)? == 0 || h == "\r\n" || h == "\n" { break; }
+            if read_line_limited(&mut reader, &mut h)? == 0 || h == "\r\n" || h == "\n" { break; }
+            headers += 1;
+            if headers > MAX_HEADERS || !h.ends_with('\n') { return send(&mut stream, &st, &Resp::err(431, "слишком большие заголовки"), true, false); }
             let hl = h.to_ascii_lowercase();
-            if let Some(v) = hl.strip_prefix("content-length:") { content_len = v.trim().parse().unwrap_or(0); }
+            if let Some(v) = hl.strip_prefix("content-length:") { content_len = v.trim().parse().unwrap_or(usize::MAX); }
             if hl.starts_with("connection:") && hl.contains("close") { close = true; }
+            if hl.starts_with("authorization:") { auth = h["authorization:".len()..].trim().to_string(); }
+            if let Some(v) = hl.strip_prefix("origin:") { origin = v.trim().to_string(); }
+            if let Some(v) = hl.strip_prefix("host:") { host = v.trim().to_string(); }
+        }
+        // тело больше лимита не читаем и не обрезаем: обрезанное описание миссии дало бы другой результат
+        if content_len > MAX_BODY {
+            // дочитываем в разумных пределах, иначе клиент получит обрыв вместо понятного ответа
+            let _ = std::io::copy(&mut reader.by_ref().take((content_len as u64).min(16 << 20)), &mut std::io::sink());
+            return send(&mut stream, &st, &Resp::err(413, "тело запроса больше 1 МБ"), true, false);
         }
         let mut body = Vec::new();
-        if content_len > 0 { body = vec![0; content_len.min(1 << 20)]; reader.read_exact(&mut body)?; }
+        if content_len > 0 { body = vec![0; content_len]; reader.read_exact(&mut body)?; }
         let mut parts = line.split_whitespace();
-        let method = parts.next().unwrap_or("");
+        let method = parts.next().unwrap_or("").to_string();
         let target = parts.next().unwrap_or("/");
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
+        let path = path.to_string();
         let mut q = parse_query(query);
         // POST с телом вида a=1&b=2 (или JSON-массив действия) — для длинных действий
         if method == "POST" && !body.is_empty() {
             let b = String::from_utf8_lossy(&body).to_string();
             let t = b.trim();
-            if path == "/api/mission/run" { q.insert("spec".into(), t.to_string()); }
+            if path == "/api/mission/run" || path == "/api/jobs/mission" { q.insert("spec".into(), t.to_string()); }
             else if t.starts_with('[') { q.insert("action".into(), t.trim_matches(|c| c == '[' || c == ']').to_string()); }
             else { q.extend(parse_query(t)); }
         }
-        let resp = if method == "GET" || method == "POST" || method == "HEAD" {
-            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route(path, &q, &st))) {
+        let resp = if !(method == "GET" || method == "POST" || method == "HEAD") {
+            Resp::err(405, "только GET/POST/HEAD")
+        } else if let Some(r) = guard(&st, &path, &auth, &origin, &host) {
+            r
+        } else if method != "POST" && (path == "/api/mission/run" || path == "/api/jobs/mission" || (path.starts_with("/api/jobs/") && path.ends_with("/cancel"))) {
+            // запуск и отмена меняют состояние: случайная ссылка или предзагрузка не должны их вызывать
+            Resp::err(405, "этот запрос выполняется методом POST")
+        } else {
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route(&path, &q, &st))) {
                 Ok(Ok(r)) => r,
-                Ok(Err(e)) => Resp::err(400, &e),
+                Ok(Err(e)) => Resp::err(if e.contains("не найден") { 404 } else if e.starts_with("слишком много") { 429 } else { 400 }, &e),
                 Err(_) => Resp::err(500, "внутренняя ошибка симуляции"),
             }
-        } else { Resp::err(405, "только GET/POST/HEAD") };
-        let reason = match resp.status { 200 => "OK", 400 => "Bad Request", 404 => "Not Found", 405 => "Method Not Allowed", _ => "Internal Server Error" };
-        let mut head = format!("HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: *\r\nCache-Control: no-store\r\nConnection: {}\r\n",
-            resp.status, reason, resp.ctype, resp.body.len(), if close { "close" } else { "keep-alive" });
-        for (k, v) in &resp.headers { head.push_str(&format!("{k}: {v}\r\n")); }
-        head.push_str("\r\n");
-        let mut out = head.into_bytes();
-        if method != "HEAD" { out.extend_from_slice(&resp.body); }
-        stream.write_all(&out)?;
-        stream.flush()?;
+        };
+        if st.opts.log {
+            // строку запроса не пишем: в параметрах могут быть данные заказчика
+            eprintln!("{} {} {} {}b {:.1}ms", method, path, resp.status, resp.body.len(), started.elapsed().as_secs_f64() * 1e3);
+        }
+        send(&mut stream, &st, &resp, close, method == "HEAD")?;
         if close { return Ok(()); }
     }
+}
+
+/// Источник и доступ. None — запрос можно обрабатывать.
+fn guard(st: &State, path: &str, auth: &str, origin: &str, host: &str) -> Option<Resp> {
+    if path == "/healthz" { return None; }
+    if !st.opts.cors {
+        // браузер присылает Origin при запросе со страницы: чужому сайту нельзя обращаться к локальному серверу
+        if !origin.is_empty() {
+            let o = origin.split("://").nth(1).unwrap_or(origin);
+            if o != host { return Some(Resp::err(403, "запрос с другого сайта отклонён; разрешить можно ключом --cors")); }
+        }
+        // без токена отвечаем только на локальные имена: защита от подмены DNS
+        if st.opts.token.is_none() && is_loopback(&st.opts.host) {
+            let name = if host.starts_with('[') { host.split(']').next().map(|x| format!("{x}]")).unwrap_or_default() } else { host.split(':').next().unwrap_or("").to_string() };
+            if !name.is_empty() && !is_loopback(&name) { return Some(Resp::err(403, "неизвестное имя сервера")); }
+        }
+    }
+    if let Some(t) = &st.opts.token {
+        if path == "/" || path == "/index.html" { return None; } // страница без данных: токен спрашивает она сама
+        let given = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !token_eq(given, t) { return Some(Resp::err(401, "нужен токен: Authorization: Bearer <токен>")); }
+    }
+    None
 }
 
 fn parse_query(s: &str) -> Q {
@@ -190,9 +299,19 @@ fn check_params(q: &Q) -> Result<(), String> {
 
 fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
     // у лаборатории и чёрных дыр свои диапазоны: там `a` — спин и ширина барьера, а не полуось орбиты
-    if !path.starts_with("/api/lab/") && !path.starts_with("/api/blackhole/") { check_params(q)?; }
+    if !path.starts_with("/api/lab/") && !path.starts_with("/api/blackhole/") && !path.starts_with("/api/runs") { check_params(q)?; }
     Ok(match path {
-        "/" | "/index.html" => Resp { status: 200, ctype: "text/html; charset=utf-8", body: INDEX.as_bytes().to_vec(), headers: vec![] },
+        "/" | "/index.html" => Resp { status: 200, ctype: "text/html; charset=utf-8", body: INDEX.as_bytes().to_vec(),
+            headers: vec![("Content-Security-Policy".into(), "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'".into())] },
+        "/healthz" => Resp::json(J::obj().set("status", "ok")),
+        "/api/version" => Resp::json(J::obj().set("name", "worldsim").set("version", env!("CARGO_PKG_VERSION")).set("params", crate::env::PARAMS.len()).set("auth", st.opts.token.is_some())),
+        "/api/openapi.json" => Resp { status: 200, ctype: "application/json; charset=utf-8", body: include_bytes!("../docs/openapi.json").to_vec(), headers: vec![] },
+        "/api/jobs/mission" => job_start(q, st)?,
+        "/api/jobs" => Resp::json(J::Arr(st.jobs.lock().unwrap_or_else(|e| e.into_inner()).iter().rev().map(|j| job_json(j)).collect())),
+        "/api/runs" => Resp::json(crate::store::list_runs(&st.opts.data_dir)),
+        "/api/runs/compare" => Resp::json(crate::store::compare(&st.opts.data_dir, s(q, "a", ""), s(q, "b", ""))?),
+        p if p.starts_with("/api/runs/") => Resp::json(crate::store::load_report(&st.opts.data_dir, &p["/api/runs/".len()..])?),
+        p if p.starts_with("/api/jobs/") => job_route(&p["/api/jobs/".len()..], st)?,
         "/data/stars.json" => data_resp("stars_hyg.json"),
         "/data/exoplanets.json" => data_resp("exoplanets_oec.json"),
         "/api/presets" => Resp::json(presets_json()),
@@ -397,7 +516,7 @@ fn store(st: &State, sim: Sim) -> u64 {
     let id = st.next.fetch_add(1, Ordering::SeqCst);
     let is_env = matches!(sim, Sim::Env(_));
     let cap = if is_env { MAX_ENV_SESSIONS } else { MAX_OTHER_SESSIONS };
-    let mut m = st.sims.lock().unwrap();
+    let mut m = st.sims.lock().unwrap_or_else(|e| e.into_inner());
     // вытесняем самую давно не использованную сессию того же рода, а не самую старую
     if m.values().filter(|s| s.is_env == is_env).count() >= cap {
         if let Some(k) = m.iter().filter(|(_, s)| s.is_env == is_env).min_by_key(|(_, s)| s.last_used).map(|(k, _)| *k) { m.remove(&k); }
@@ -408,7 +527,7 @@ fn store(st: &State, sim: Sim) -> u64 {
 
 fn get(st: &State, q: &Q) -> Result<Arc<Mutex<Sim>>, String> {
     let id = f(q, "id", 0.0) as u64;
-    let mut m = st.sims.lock().unwrap();
+    let mut m = st.sims.lock().unwrap_or_else(|e| e.into_inner());
     let slot = m.get_mut(&id).ok_or_else(|| "сессия симуляции не найдена — создайте заново".to_string())?;
     slot.last_used = st.tick.fetch_add(1, Ordering::Relaxed);
     Ok(slot.sim.clone())
@@ -450,7 +569,7 @@ fn nbody_new(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn nbody_step(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
-    let mut g = h.lock().unwrap();
+    let mut g = h.lock().unwrap_or_else(|e| e.into_inner());
     let Sim::NBody { sim, e0 } = &mut *g else { return Err("не N-тел сессия".into()) };
     let total = f(q, "days", 1.0).clamp(0.0, 3650.0) * DAY;
     let dt = (f(q, "dt_hours", 2.0) * 3600.0).clamp(60.0, 30.0 * DAY);
@@ -477,7 +596,7 @@ fn galaxy_new(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn galaxy_step(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
-    let mut g = h.lock().unwrap();
+    let mut g = h.lock().unwrap_or_else(|e| e.into_inner());
     let Sim::Galaxy(gal) = &mut *g else { return Err("не галактическая сессия".into()) };
     let steps = (f(q, "steps", 1.0) as usize).min(50);
     let dt = f(q, "dt", 0.002);
@@ -488,7 +607,7 @@ fn galaxy_step(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn galaxy_rotation(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
-    let g = h.lock().unwrap();
+    let g = h.lock().unwrap_or_else(|e| e.into_inner());
     let Sim::Galaxy(gal) = &*g else { return Err("не галактическая сессия".into()) };
     let rc = gal.rotation_curve(gal.rotation_range(), 25);
     let (k, w) = gal.energy();
@@ -510,7 +629,7 @@ fn cosmo_new(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn cosmo_step(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
-    let mut g = h.lock().unwrap();
+    let mut g = h.lock().unwrap_or_else(|e| e.into_inner());
     let Sim::Pm(pm) = &mut *g else { return Err("не космологическая сессия".into()) };
     let da = f(q, "da", 0.01).clamp(0.0, 0.05);
     let steps = (f(q, "steps", 1.0) as usize).clamp(0, 10);
@@ -535,7 +654,7 @@ fn cosmo_step(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn cosmo_power(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
-    let mut g = h.lock().unwrap();
+    let mut g = h.lock().unwrap_or_else(|e| e.into_inner());
     let Sim::Pm(pm) = &mut *g else { return Err("не космологическая сессия".into()) };
     let p = pm.measure_power(16);
     let c = pm.cosmo;
@@ -594,6 +713,57 @@ fn env_make(q: &Q, st: &State) -> Result<Resp, String> {
     Ok(Resp::json(meta.set("id", id)))
 }
 
+fn job_json(j: &Job) -> J {
+    let (done, total) = (j.progress.done.load(Ordering::Relaxed), j.progress.total.load(Ordering::Relaxed));
+    let st = j.state.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let (status, run, error) = match st {
+        JobState::Running => ("running", J::Null, J::Null),
+        JobState::Done(id) => ("done", J::from(id), J::Null),
+        JobState::Failed(e) => ("failed", J::Null, J::from(e)),
+        JobState::Cancelled => ("cancelled", J::Null, J::Null),
+    };
+    J::obj().set("id", j.id.clone()).set("name", j.name.clone()).set("status", status).set("done", done).set("total", total)
+        .set("fraction", if total > 0 { (done as f64 / total as f64).min(1.0) } else { 0.0 }).set("run", run).set("error", error)
+}
+
+fn job_start(q: &Q, st: &State) -> Result<Resp, String> {
+    let text = q.get("spec").ok_or("нет описания миссии")?.clone();
+    let spec = crate::mission::MissionSpec::parse(&text)?;
+    let mut jobs = st.jobs.lock().unwrap_or_else(|e| e.into_inner());
+    let running = jobs.iter().filter(|j| matches!(*j.state.lock().unwrap_or_else(|e| e.into_inner()), JobState::Running)).count();
+    if running >= MAX_ACTIVE_JOBS { return Err(format!("слишком много задач: выполняется {running}, дождитесь завершения")); }
+    if jobs.len() >= MAX_KEPT_JOBS { jobs.remove(0); }
+    let id = format!("{:x}", st.next.fetch_add(1, Ordering::SeqCst));
+    let job = Arc::new(Job { id: id.clone(), name: spec.name.clone(), spec: text, progress: Default::default(), state: Mutex::new(JobState::Running) });
+    jobs.push(job.clone());
+    drop(jobs);
+    let root = st.opts.data_dir.clone();
+    std::thread::spawn(move || {
+        let threads = std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1);
+        // паника внутри расчёта не должна оставить задачу в состоянии «идёт» навсегда
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::mission::run_with(&spec, threads, &job.progress)));
+        let next = match result {
+            Ok(Ok(r)) => {
+                let md = crate::mission::markdown(&r);
+                let _ = md;
+                match crate::store::save_run(&root, &job.spec, &r.set("spec_sha256", crate::store::sha256(job.spec.as_bytes()))) { Ok(id) => JobState::Done(id), Err(e) => JobState::Failed(e) }
+            }
+            Ok(Err(_)) if job.progress.cancel.load(Ordering::Relaxed) => JobState::Cancelled,
+            Ok(Err(e)) => JobState::Failed(e),
+            Err(_) => JobState::Failed("внутренняя ошибка расчёта".into()),
+        };
+        *job.state.lock().unwrap_or_else(|e| e.into_inner()) = next;
+    });
+    Ok(Resp::json(J::obj().set("id", id)))
+}
+
+fn job_route(rest: &str, st: &State) -> Result<Resp, String> {
+    let (id, cancel) = match rest.strip_suffix("/cancel") { Some(x) => (x, true), None => (rest, false) };
+    let job = st.jobs.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|j| j.id == id).cloned().ok_or_else(|| format!("задача {id} не найдена"))?;
+    if cancel { job.progress.cancel.store(true, Ordering::Relaxed); }
+    Ok(Resp::json(job_json(&job)))
+}
+
 fn bh_props(q: &Q) -> Result<J, String> {
     use crate::blackhole as b;
     let m = crate::lab::num(q, "m_sun", 10.0, 1e-20, 1e12)? * crate::quantum::M_SUN;
@@ -623,7 +793,7 @@ fn str_list(v: &[&str]) -> J { J::Arr(v.iter().map(|x| J::from(*x)).collect()) }
 
 fn with_env<T>(q: &Q, st: &State, f: impl FnOnce(&mut Env) -> Result<T, String>) -> Result<T, String> {
     let h = get(st, q)?;
-    let mut g = h.lock().unwrap();
+    let mut g = h.lock().unwrap_or_else(|e| e.into_inner());
     match &mut *g { Sim::Env(e) => f(e), _ => Err("не сессия среды".into()) }
 }
 
@@ -723,12 +893,12 @@ fn env_fork(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn env_close(q: &Q, st: &State) -> Result<Resp, String> {
     let id = f(q, "id", 0.0) as u64;
-    let closed = st.sims.lock().unwrap().remove(&id).is_some();
+    let closed = st.sims.lock().unwrap_or_else(|e| e.into_inner()).remove(&id).is_some();
     Ok(Resp::json(J::obj().set("closed", closed)))
 }
 
 fn env_list(st: &State) -> Resp {
-    let m = st.sims.lock().unwrap();
+    let m = st.sims.lock().unwrap_or_else(|e| e.into_inner());
     let mut out = Vec::new();
     for (id, s) in m.iter() {
         if let Ok(g) = s.sim.try_lock() {

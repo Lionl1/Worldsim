@@ -1,0 +1,53 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo build --release --locked
+      - run: cargo test --release --locked
+      - run: cargo run --release --locked -- validate
+      - run: cargo clippy --release --locked -- -D clippy::correctness -D clippy::suspicious
+  python:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: cargo build --release --locked
+      - run: pip install numpy
+      - run: python -m unittest discover tests
+        working-directory: python
+        env:
+          PYTHONPATH: .
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t worldsim:ci .
+      - name: Проверка образа
+        run: |
+          docker run -d --name ws -e WORLDSIM_TOKEN=ci-token -p 8080:8080 worldsim:ci
+          for i in $(seq 1 30); do curl -fs http://localhost:8080/healthz && break; sleep 1; done
+          curl -fs http://localhost:8080/healthz
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/version)" = "401"
+          curl -fs -H 'Authorization: Bearer ci-token' http://localhost:8080/api/version
+          docker inspect --format '{{.Config.User}}' ws | grep -qv '^$'
