@@ -1,0 +1,57 @@
+{
+  "name": "Вертолёт на Марсе",
+  "task": "drone",
+  "world": "mars",
+  "runs": 300,
+  "seed": 1,
+  "rotor_scale": 16,
+  "dispersions": {
+    "gravity": 0.01,
+    "nav_noise": 1.0,
+    "gust": 6.0,
+    "actuator_lag": 0.08
+  },
+  "requirements": [
+    {
+      "id": "REQ-01",
+      "text": "Долетел до точки и завис",
+      "metric": "success",
+      "op": ">=",
+      "value": 0.9
+    },
+    {
+      "id": "REQ-02",
+      "text": "Энергия за полёт, 95-й перцентиль",
+      "metric": "energy_used_kj",
+      "percentile": 95,
+      "op": "<=",
+      "value": 1.1
+    }
+  ],
+  "technologies": [
+    {
+      "name": "Винты площадью ×20",
+      "set_top": {
+        "rotor_scale": 20
+      }
+    },
+    {
+      "name": "Винты площадью ×14",
+      "set_top": {
+        "rotor_scale": 14
+      }
+    },
+    {
+      "name": "Точнее навигация (шум ×0.25)",
+      "set_dispersion": {
+        "nav_noise": 0.25
+      }
+    },
+    {
+      "name": "Быстрые приводы (задержка 0.02 с)",
+      "set_dispersion": {
+        "actuator_lag": 0.02
+      }
+    }
+  ]
+}

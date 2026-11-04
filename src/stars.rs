@@ -76,7 +76,9 @@ pub fn star(name: &str) -> Result<Star, String> {
         "betelgeuse" => s("Бетельгейзе (сверхгигант)", 16.5, 764.0, 126_000.0, 3600.0),
         _ => {
             if let Some(m) = name.strip_prefix("ms:") {
-                return Ok(Star::main_sequence(m.parse().map_err(|_| format!("ms:<масса>, получено {name}"))?));
+                let mass: f64 = m.parse().map_err(|_| format!("ms:<масса>, получено {name}"))?;
+                if !(mass.is_finite() && mass > 0.0 && mass <= 1000.0) { return Err(format!("масса звезды {mass} вне диапазона (0, 1000] M☉")); }
+                return Ok(Star::main_sequence(mass));
             }
             return Err(format!("неизвестная звезда '{name}', доступны: {STAR_NAMES:?} или ms:<масса в M☉>"));
         }

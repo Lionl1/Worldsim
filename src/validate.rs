@@ -368,6 +368,78 @@ pub fn env_checks() -> Vec<Check> {
     let m = xs.iter().sum::<f64>() / xs.len() as f64;
     let sd = (xs.iter().map(|x| (x - m).powi(2)).sum::<f64>() / xs.len() as f64).sqrt();
     out.push(chk("Модель сенсоров", "GPS ровера: СКО шума", sd, 0.5, 0.06, "м"));
+    // Контакт: на плоскости модуль стоит на опорах, значит реакция равна весу, а акселерометр показывает g
+    let mut c = EnvConfig::new("lander", "mars").unwrap();
+    c.noise = 0.0;
+    let mut e = Env::new(c).unwrap();
+    e.reset(1);
+    e.set_terrain(Terrain::plane(0.0, 0.8));
+    e.set_state(Vec3::new(0.0, 0.0, 1.7), Vec3::ZERO);
+    let g_mars = e.world.g_at(0.0);
+    let mut az = 0.0;
+    for _ in 0..40 { let (o, _, t, _) = e.step(&[0.0, 0.0, 0.0, 0.0]); az = o[15]; if t { break; } }
+    out.push(chk("Третий закон Ньютона (опоры)", "модуль стоит на Марсе: акселерометр показывает g", az, g_mars, 0.03, "м/с²"));
+    // Опрокидывание: запас устойчивости зависит от g, поэтому тот же манёвр опасен на Луне и безопасен на Земле
+    let turn = |planet: &str| -> bool {
+        let mut c = EnvConfig::new("rover", planet).unwrap();
+        c.noise = 0.0;
+        let mut e = Env::new(c).unwrap();
+        e.reset(1);
+        e.set_terrain(Terrain::plane(0.0, 0.8));
+        e.set_state(Vec3::ZERO, Vec3::ZERO);
+        for _ in 0..30 { e.step(&[1.0, 1.0]); }
+        for _ in 0..200 { let (_, _, t, _) = e.step(&[1.0, -1.0]); if t { return e.info.crashed; } }
+        false
+    };
+    let (moon_tip, earth_tip) = (turn("moon"), turn("earth"));
+    out.push(Check { law: "Статическая устойчивость (v·ω / g)", test: "тот же поворот: на Луне опрокидывает, на Земле нет".into(),
+        value: format!("{moon_tip} / {earth_tip}"), expected: "true / false".into(), pass: moon_tip && !earth_tip });
+    // Порывы: стационарное СКО процесса Орнштейна–Уленбека
+    let mut c = EnvConfig::new("drone", "earth").unwrap();
+    c.gust = 3.0;
+    c.max_steps = usize::MAX;
+    let mut e = Env::new(c).unwrap();
+    e.reset(4);
+    let h = e.terrain.height(0.0, 0.0);
+    let mut sum = 0.0;
+    let mut k = 0.0;
+    for t in 0..60_000 {
+        e.set_state(Vec3::new(0.0, 0.0, h + 100.0), Vec3::ZERO);
+        e.step(&[0.4; 4]);
+        if t > 1000 { let v = e.gust_velocity().x; sum += v * v; k += 1.0; }
+    }
+    out.push(chk("Процесс Орнштейна–Уленбека (порывы)", "СКО порывов равно заданному", (sum / k).sqrt(), 3.0, 0.1, "м/с"));
+    // Приводы: апериодическое звено, за время τ выход доходит до 1 − 1/e
+    let mut c = EnvConfig::new("lander", "moon").unwrap();
+    c.noise = 0.0;
+    c.actuator_lag = 0.2;
+    let mut e = Env::new(c).unwrap();
+    e.reset(1);
+    let h = e.terrain.height(0.0, 0.0);
+    e.set_state(Vec3::new(0.0, 0.0, h + 400.0), Vec3::ZERO);
+    for _ in 0..10 { e.step(&[1.0, 0.0, 0.0, 0.0]); } // 10 шагов по 20 мс = τ
+    out.push(chk("Звено 1-го порядка (приводы)", "за время τ команда отрабатывается на 1 − 1/e", e.applied_action()[0], 1.0 - (-1f64).exp(), 0.01, ""));
+    // Двигатель ровера: без нагрузки скорость упирается в холостой ход
+    let mut c = EnvConfig::new("rover", "earth").unwrap();
+    c.noise = 0.0;
+    c.world.atmosphere = Some("none".into());
+    let mut e = Env::new(c).unwrap();
+    e.reset(1);
+    e.set_terrain(Terrain::plane(0.0, 0.8));
+    e.set_state(Vec3::ZERO, Vec3::ZERO);
+    for _ in 0..300 { e.step(&[1.0, 1.0]); }
+    out.push(Check { law: "Характеристика мотора", test: "ровер на ровном: скорость ниже холостого хода".into(), value: format!("{:.2} м/с", e.rover_speed()), expected: "1…2.5 м/с".into(), pass: e.rover_speed() > 1.0 && e.rover_speed() < 2.5 });
+    // Ветвление: копия среды идёт точно так же, как оригинал, иначе контрфактические данные неверны
+    let mut a = Env::new(EnvConfig::new("lander", "earth").unwrap()).unwrap();
+    a.reset(9);
+    for _ in 0..50 { a.step(&[0.6, 0.0, 0.1, 0.0]); }
+    let mut b = a.clone();
+    let mut diff: f64 = 0.0;
+    for _ in 0..100 {
+        let (x, y) = (a.step(&[0.5, 0.1, 0.0, 0.0]).0, b.step(&[0.5, 0.1, 0.0, 0.0]).0);
+        diff = x.iter().zip(&y).map(|(p, q)| (p - q).abs()).fold(diff, f64::max);
+    }
+    out.push(chk_max("Точность ветвления", "копия среды повторяет оригинал точно", diff, 1e-12));
     // 6) Решаемость: автопилот сажает модуль на Луну
     let mut cfg = EnvConfig::new("lander", "moon").unwrap();
     cfg.randomize = true;

@@ -29,6 +29,12 @@ impl WorldSpec {
     pub fn preset(name: &str) -> Self {
         WorldSpec { physics: name.into(), atmosphere: None, surface: None, gravity_scale: 1.0, distance_au: None }
     }
+
+    /// `mars` или `mars:earth:moon` (физика:атмосфера:поверхность).
+    pub fn parse(s: &str) -> Self {
+        let p: Vec<&str> = s.split(':').collect();
+        WorldSpec { physics: p[0].into(), atmosphere: p.get(1).map(|x| x.to_string()), surface: p.get(2).map(|x| x.to_string()), gravity_scale: 1.0, distance_au: None }
+    }
 }
 
 impl World {
@@ -105,7 +111,8 @@ impl World {
 
     pub fn mean_surface_temperature(&self) -> f64 {
         match &self.atmosphere {
-            Some(a) => a.t0,
+            // парниковый эффект только греет: пресет атмосферы не может охладить мир ниже равновесной T
+            Some(a) => a.t0.max(self.equilibrium_temperature()),
             None => self.equilibrium_temperature(),
         }
     }

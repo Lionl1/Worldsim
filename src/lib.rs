@@ -11,13 +11,16 @@
 pub mod atmosphere;
 pub mod ballistics;
 pub mod climate;
+pub mod collect;
 pub mod constants;
 pub mod cosmology;
 pub mod datagen;
 pub mod env;
+pub mod ffi;
 pub mod galaxy;
 pub mod json;
 pub mod magneto;
+pub mod mission;
 pub mod nbody;
 pub mod orbit;
 pub mod presets;

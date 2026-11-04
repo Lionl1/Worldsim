@@ -20,6 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 const INDEX: &str = include_str!("../web/index.html");
+const MISSION_EXAMPLE: &str = include_str!("../missions/lunar_lander.json");
 
 /// Каталоги читаются с диска: ./data или папка проекта. Собрать: tools/fetch_data.sh
 fn data_file(name: &str) -> Option<Vec<u8>> {
@@ -41,10 +42,17 @@ enum Sim {
     Pm(PmSim),
 }
 
+struct Slot { sim: Arc<Mutex<Sim>>, last_used: u64, is_env: bool }
+
+/// Сколько сессий держим: среды лёгкие и нужны сотнями, тяжёлые симуляции — десятками.
+const MAX_ENV_SESSIONS: usize = 1024;
+const MAX_OTHER_SESSIONS: usize = 64;
+
 #[derive(Clone)]
 struct State {
-    sims: Arc<Mutex<HashMap<u64, Arc<Mutex<Sim>>>>>,
+    sims: Arc<Mutex<HashMap<u64, Slot>>>,
     next: Arc<AtomicU64>,
+    tick: Arc<AtomicU64>,
 }
 
 type Q = HashMap<String, String>;
@@ -67,7 +75,7 @@ pub fn serve(port: u16, open_browser: bool) -> Result<(), String> {
         #[cfg(target_os = "windows")]
         { let _ = std::process::Command::new("cmd").args(["/C", "start", &url]).spawn(); }
     }
-    let state = State { sims: Arc::new(Mutex::new(HashMap::new())), next: Arc::new(AtomicU64::new(1)) };
+    let state = State { sims: Arc::new(Mutex::new(HashMap::new())), next: Arc::new(AtomicU64::new(1)), tick: Arc::new(AtomicU64::new(1)) };
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         let st = state.clone();
@@ -105,23 +113,24 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
         if method == "POST" && !body.is_empty() {
             let b = String::from_utf8_lossy(&body).to_string();
             let t = b.trim();
-            if t.starts_with('[') { q.insert("action".into(), t.trim_matches(|c| c == '[' || c == ']').to_string()); }
+            if path == "/api/mission/run" { q.insert("spec".into(), t.to_string()); }
+            else if t.starts_with('[') { q.insert("action".into(), t.trim_matches(|c| c == '[' || c == ']').to_string()); }
             else { q.extend(parse_query(t)); }
         }
-        let resp = if method == "GET" || method == "POST" {
+        let resp = if method == "GET" || method == "POST" || method == "HEAD" {
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route(path, &q, &st))) {
                 Ok(Ok(r)) => r,
                 Ok(Err(e)) => Resp::err(400, &e),
                 Err(_) => Resp::err(500, "внутренняя ошибка симуляции"),
             }
-        } else { Resp::err(405, "только GET/POST") };
+        } else { Resp::err(405, "только GET/POST/HEAD") };
         let reason = match resp.status { 200 => "OK", 400 => "Bad Request", 404 => "Not Found", 405 => "Method Not Allowed", _ => "Internal Server Error" };
         let mut head = format!("HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: *\r\nCache-Control: no-store\r\nConnection: {}\r\n",
             resp.status, reason, resp.ctype, resp.body.len(), if close { "close" } else { "keep-alive" });
         for (k, v) in &resp.headers { head.push_str(&format!("{k}: {v}\r\n")); }
         head.push_str("\r\n");
         let mut out = head.into_bytes();
-        out.extend_from_slice(&resp.body);
+        if method != "HEAD" { out.extend_from_slice(&resp.body); }
         stream.write_all(&out)?;
         stream.flush()?;
         if close { return Ok(()); }
@@ -159,7 +168,28 @@ fn decode(s: &str) -> String {
 fn f(q: &Q, k: &str, d: f64) -> f64 { q.get(k).and_then(|v| v.parse().ok()).unwrap_or(d) }
 fn s<'a>(q: &'a Q, k: &str, d: &'a str) -> &'a str { q.get(k).map(|v| v.as_str()).filter(|v| !v.is_empty()).unwrap_or(d) }
 
+/// Допустимые диапазоны числовых параметров: мусор должен давать понятную ошибку, а не NaN в ответе и не молчаливую подмену.
+const PARAM_RANGES: &[(&str, f64, f64)] = &[
+    ("id", 0.0, 1e15), ("seed", 0.0, 1e15), ("n", 0.0, 1e9), ("steps", 0.0, 1e6), ("repeat", 1.0, 1e6), ("planet", 0.0, 1e6),
+    ("gravity_scale", 1e-15, 100.0), ("distance_au", 1e-6, 1e6), ("solar", 0.0, 100.0), ("tau", 0.0, 100.0), ("obliquity", -180.0, 180.0),
+    ("ecc", 0.0, 0.99), ("e", 0.0, 0.99), ("ocean", 0.0, 1.0), ("years", 1.0, 2000.0), ("speed", 0.0, 1e7), ("elev", -90.0, 90.0), ("az", -360.0, 360.0),
+    ("lat", -90.0, 90.0), ("alt", 0.0, 1e8), ("radius", 1e-6, 1e3), ("density", 1e-3, 1e6), ("max_time", 1e-3, 1e9), ("days", 0.0, 3650.0), ("dt_hours", 1e-3, 1e4),
+    ("dt", 1e-12, 1.0), ("box", 10.0, 2000.0), ("a0", 0.005, 0.5), ("da", 0.0, 0.05), ("m", 1e-6, 1e6), ("a", 1e-4, 1e5), ("ms", 1e-3, 1000.0), ("rs", 1e-3, 1e4), ("ts", 1.0, 1e6),
+    ("noise", 0.0, 100.0), ("rotor_scale", 1e-3, 1e4), ("max_steps", 1.0, 1e9), ("frame_skip", 1.0, 100.0), ("gust", 0.0, 100.0), ("lag", 0.0, 10.0), ("fault", 0.0, 1.0),
+    ("w", 1.0, 1e5), ("h", 1.0, 1e5), ("fov", 1.0, 179.0),
+];
+
+fn check_params(q: &Q) -> Result<(), String> {
+    for (k, lo, hi) in PARAM_RANGES {
+        let Some(v) = q.get(*k).filter(|v| !v.is_empty()) else { continue };
+        let x: f64 = v.parse().map_err(|_| format!("{k}: ожидалось число, получено '{v}'"))?;
+        if !x.is_finite() || x < *lo || x > *hi { return Err(format!("{k} = {v} вне диапазона [{lo}, {hi}]")); }
+    }
+    Ok(())
+}
+
 fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
+    check_params(q)?;
     Ok(match path {
         "/" | "/index.html" => Resp { status: 200, ctype: "text/html; charset=utf-8", body: INDEX.as_bytes().to_vec(), headers: vec![] },
         "/data/stars.json" => data_resp("stars_hyg.json"),
@@ -186,6 +216,20 @@ fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
         "/api/env/terrain" => env_terrain(q, st)?,
         "/api/env/camera" => env_camera(q, st)?,
         "/api/env/list" => env_list(st),
+        "/api/mission/example" => match s(q, "name", "lunar_lander") {
+            "mars_helicopter" => Resp::json(J::parse(include_str!("../missions/mars_helicopter.json"))?),
+            "lunar_rover" => Resp::json(J::parse(include_str!("../missions/lunar_rover.json"))?),
+            _ => Resp::json(J::parse(MISSION_EXAMPLE)?),
+        },
+        "/api/mission/run" => {
+            // описание приходит телом POST как JSON; handle() кладёт его в spec
+            let spec = q.get("spec").ok_or("нет описания миссии")?;
+            let report = crate::mission::run(&crate::mission::MissionSpec::parse(spec)?, std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1))?;
+            let md = crate::mission::markdown(&report);
+            Resp::json(report.set("markdown", md))
+        }
+        "/api/env/fork" => env_fork(q, st)?,
+        "/api/env/close" => env_close(q, st)?,
         "/api/validate" => Resp::json(J::Arr(validate::all().into_iter().map(|c| J::obj().set("law", c.law).set("test", c.test).set("value", c.value).set("expected", c.expected).set("pass", c.pass)).collect())),
         _ => Resp::err(404, "нет такого пути"),
     })
@@ -263,7 +307,9 @@ fn world_json(w: &World) -> Result<J, String> {
         .set("day_h", p.solar_day / 3600.0).set("j2", p.j2).set("obliquity", p.obliquity).set("dipole", p.dipole_moment)
         .set("distance_au", w.star_distance / AU).set("insolation", w.insolation()).set("albedo", p.bond_albedo)
         .set("t_eq", w.equilibrium_temperature()).set("t_mean", w.mean_surface_temperature()).set("tau", w.greenhouse_tau())
-        .set("has_surface", p.has_surface).set("year_days", climate::orbital_period(w) / DAY);
+        .set("has_surface", p.has_surface).set("year_days", climate::orbital_period(w) / DAY)
+        // приливный захват: у таких миров sol_day — условное «очень много», показывать его как сутки нельзя
+        .set("tidally_locked", p.solar_day > 100.0 * climate::orbital_period(w));
     j = match &w.atmosphere {
         None => j.set("atmosphere", J::Null),
         Some(a) => {
@@ -296,7 +342,7 @@ fn climate_json(q: &Q) -> Result<J, String> {
         eccentricity: q.get("ecc").and_then(|v| v.parse().ok()),
         ocean_fraction: q.get("ocean").and_then(|v| v.parse().ok()),
         initial_t: if s(q, "cold", "0") == "1" { Some(200.0) } else { None },
-        years: f(q, "years", 30.0) as usize, bands: 60, samples_per_year: 48, ..Default::default()
+        years: f(q, "years", 30.0) as usize, samples_per_year: 48, ..Default::default()
     };
     let r = climate::simulate(&w, &o);
     Ok(J::obj().set("world", w.name()).set("lat", r.lat).set("time", r.time_frac)
@@ -344,15 +390,23 @@ fn system_json(sys: &StarSystem) -> J {
 
 fn store(st: &State, sim: Sim) -> u64 {
     let id = st.next.fetch_add(1, Ordering::SeqCst);
+    let is_env = matches!(sim, Sim::Env(_));
+    let cap = if is_env { MAX_ENV_SESSIONS } else { MAX_OTHER_SESSIONS };
     let mut m = st.sims.lock().unwrap();
-    if m.len() > 64 { if let Some(&k) = m.keys().min() { m.remove(&k); } }
-    m.insert(id, Arc::new(Mutex::new(sim)));
+    // вытесняем самую давно не использованную сессию того же рода, а не самую старую
+    if m.values().filter(|s| s.is_env == is_env).count() >= cap {
+        if let Some(k) = m.iter().filter(|(_, s)| s.is_env == is_env).min_by_key(|(_, s)| s.last_used).map(|(k, _)| *k) { m.remove(&k); }
+    }
+    m.insert(id, Slot { sim: Arc::new(Mutex::new(sim)), last_used: st.tick.fetch_add(1, Ordering::Relaxed), is_env });
     id
 }
 
 fn get(st: &State, q: &Q) -> Result<Arc<Mutex<Sim>>, String> {
     let id = f(q, "id", 0.0) as u64;
-    st.sims.lock().unwrap().get(&id).cloned().ok_or_else(|| "сессия симуляции не найдена — создайте заново".to_string())
+    let mut m = st.sims.lock().unwrap();
+    let slot = m.get_mut(&id).ok_or_else(|| "сессия симуляции не найдена — создайте заново".to_string())?;
+    slot.last_used = st.tick.fetch_add(1, Ordering::Relaxed);
+    Ok(slot.sim.clone())
 }
 
 const BODY_COLORS: &[(&str, &str)] = &[("sun", "#ffd27a"), ("mercury", "#9c8f86"), ("venus", "#e8cf8e"), ("earth", "#4f8bd6"),
@@ -363,6 +417,8 @@ fn nbody_new(q: &Q, st: &State) -> Result<Resp, String> {
     let (mut sim, meta) = if kind == "solar" {
         let names: Vec<String> = s(q, "bodies", "sun,mercury,venus,earth,moon,mars,jupiter").split(',').map(|x| x.trim().to_string()).collect();
         let refs: Vec<&str> = names.iter().map(|x| x.as_str()).collect();
+        // два одинаковых тела оказались бы в одной точке: сила бесконечна
+        if let Some(d) = names.iter().enumerate().find(|(i, n)| names[..*i].contains(n)) { return Err(format!("тело '{}' указано дважды", d.1)); }
         let sim = NBody::from_presets(&refs)?;
         let meta = J::Arr(names.iter().map(|n| {
             let p = presets::physics(n).unwrap();
@@ -396,7 +452,7 @@ fn nbody_step(q: &Q, st: &State) -> Result<Resp, String> {
     let n = (total / dt).ceil().max(1.0) as usize;
     for _ in 0..n.min(200_000) { sim.step(total / n as f64); }
     let pos: Vec<f64> = sim.bodies.iter().flat_map(|b| [b.r.x / AU, b.r.y / AU, b.r.z / AU]).collect();
-    let err = ((sim.invariants().energy - *e0) / *e0).abs();
+    let err = if e0.abs() > 0.0 { ((sim.invariants().energy - *e0) / *e0).abs() } else { 0.0 };
     Ok(Resp::json(J::obj().set("t_days", sim.t / DAY).set("pos", pos).set("energy_error", err)))
 }
 
@@ -422,14 +478,14 @@ fn galaxy_step(q: &Q, st: &State) -> Result<Resp, String> {
     let dt = f(q, "dt", 0.002);
     for _ in 0..steps { gal.step(dt); }
     let body = f32_bytes(gal.pos.iter().flat_map(|p| [p.x, p.z, -p.y]));
-    Ok(Resp::bin(body, vec![("X-T-Gyr".into(), format!("{:.4}", gal.t * TIME_GYR))]))
+    Ok(Resp::bin(body, vec![("X-T-Gyr".into(), format!("{:.6e}", gal.t * TIME_GYR))]))
 }
 
 fn galaxy_rotation(q: &Q, st: &State) -> Result<Resp, String> {
     let h = get(st, q)?;
     let g = h.lock().unwrap();
     let Sim::Galaxy(gal) = &*g else { return Err("не галактическая сессия".into()) };
-    let rc = gal.rotation_curve(25.0, 25);
+    let rc = gal.rotation_curve(gal.rotation_range(), 25);
     let (k, w) = gal.energy();
     Ok(Resp::json(J::obj().set("r", rc.iter().map(|x| x.0).collect::<Vec<_>>()).set("v", rc.iter().map(|x| x.1).collect::<Vec<_>>())
         .set("virial", 2.0 * k / w.abs()).set("energy", k + w)))
@@ -515,16 +571,24 @@ fn env_make(q: &Q, st: &State) -> Result<Resp, String> {
     cfg.noise = f(q, "noise", 1.0);
     cfg.rotor_scale = f(q, "rotor_scale", 1.0);
     if let Some(m) = q.get("max_steps").and_then(|v| v.parse().ok()) { cfg.max_steps = m; }
+    if let Some(k) = q.get("frame_skip").and_then(|v| v.parse().ok()) { cfg.frame_skip = k; }
+    cfg.gust = f(q, "gust", 0.0);
+    cfg.actuator_lag = f(q, "lag", 0.0);
+    cfg.fault_prob = f(q, "fault", 0.0);
+    if let Some(w) = q.get("worlds").filter(|v| !v.is_empty()) { cfg.worlds = w.split(',').map(|x| WorldSpec::parse(x.trim())).collect(); }
     let mut env = Env::new(cfg)?;
     let obs = env.reset(f(q, "seed", 1.0) as u64);
     let (lo, hi) = env.act_bounds();
     let meta = J::obj().set("task", s(q, "task", "lander")).set("world", env.world.name())
         .set("obs_names", env.obs_names()).set("act_names", env.act_names()).set("act_low", lo).set("act_high", hi)
         .set("obs_dim", obs.len()).set("act_dim", env.act_names().len()).set("control_dt", env.control_dt()).set("max_steps", env.cfg.max_steps)
+        .set("state_names", str_list(&env.state_names())).set("param_names", str_list(crate::env::PARAM_NAMES)).set("params", env.params())
         .set("obs", obs).set("text", env.describe());
     let id = store(st, Sim::Env(Box::new(env)));
     Ok(Resp::json(meta.set("id", id)))
 }
+
+fn str_list(v: &[&str]) -> J { J::Arr(v.iter().map(|x| J::from(*x)).collect()) }
 
 fn with_env<T>(q: &Q, st: &State, f: impl FnOnce(&mut Env) -> Result<T, String>) -> Result<T, String> {
     let h = get(st, q)?;
@@ -548,12 +612,14 @@ fn env_reset(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn env_step(q: &Q, st: &State) -> Result<Resp, String> {
     let want_text = s(q, "text", "0") == "1";
+    let want_traj = s(q, "traj", "0") == "1";
     let mode = s(q, "mode", "").to_string();
     let action: Vec<f64> = q.get("action").map(|a| a.split(',').filter_map(|x| x.trim().parse().ok()).collect()).unwrap_or_default();
     let n = (f(q, "repeat", 1.0) as usize).clamp(1, 100);
     with_env(q, st, |e| {
         let mut total = 0.0;
         let mut res = (e.last_obs.clone(), 0.0, e.done, false);
+        let mut traj: Vec<(Vec<f64>, Vec<f64>, f64)> = Vec::new();
         for _ in 0..n {
             let a = match mode.as_str() {
                 "auto" => e.autopilot(),
@@ -563,10 +629,17 @@ fn env_step(q: &Q, st: &State) -> Result<Resp, String> {
             if a.len() != e.act_names().len() { return Err(format!("действие должно иметь {} чисел: {:?}", e.act_names().len(), e.act_names())); }
             res = e.step(&a);
             total += res.1;
+            if want_traj { traj.push((a, res.0.clone(), res.1)); }
             if res.2 || res.3 { break; }
         }
         let mut j = J::obj().set("obs", res.0).set("reward", total).set("terminated", res.2).set("truncated", res.3).set("info", info_json(e));
         if want_text { j = j.set("text", e.describe()); }
+        // при repeat > 1 без этого промежуточные переходы теряются
+        if want_traj {
+            j = j.set("traj_actions", J::Arr(traj.iter().map(|t| J::from(t.0.clone())).collect()))
+                .set("traj_obs", J::Arr(traj.iter().map(|t| J::from(t.1.clone())).collect()))
+                .set("traj_rewards", traj.iter().map(|t| t.2).collect::<Vec<f64>>());
+        }
         Ok(Resp::json(j))
     })
 }
@@ -580,7 +653,8 @@ fn env_state(q: &Q, st: &State) -> Result<Resp, String> {
         Ok(Resp::json(J::obj().set("task", format!("{:?}", e.cfg.task).to_lowercase()).set("pos", v3(p)).set("quat", vec![quat.w, quat.x, quat.y, quat.z])
             .set("vel", v3(e.velocity())).set("goal", v3(e.goal)).set("wind", v3(e.wind())).set("lidar", J::Arr(lidar))
             .set("action", e.last_action.clone()).set("obs", e.last_obs.clone()).set("obs_names", e.obs_names()).set("done", e.done)
-            .set("info", info_json(e)).set("text", e.describe()).set("speed", e.rover_speed()).set("world", e.world.name())))
+            .set("info", info_json(e)).set("text", e.describe()).set("speed", e.rover_speed()).set("world", e.world.name())
+            .set("state_names", str_list(&e.state_names())).set("state", e.state()).set("param_names", str_list(crate::env::PARAM_NAMES)).set("params", e.params())))
     })
 }
 
@@ -602,14 +676,31 @@ fn env_terrain(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn env_camera(q: &Q, st: &State) -> Result<Resp, String> {
     let (w, h) = ((f(q, "w", 48.0) as usize).clamp(4, 256), (f(q, "h", 32.0) as usize).clamp(4, 256));
-    with_env(q, st, |e| Ok(Resp::json(J::obj().set("w", w).set("h", h).set("depth", e.depth_camera(w, h, f(q, "fov", 70.0))))))
+    let fov = f(q, "fov", 70.0);
+    if s(q, "mode", "depth") == "rgb" {
+        return with_env(q, st, |e| Ok(Resp::bin(e.rgb_camera(w, h, fov), vec![("X-Width".into(), w.to_string()), ("X-Height".into(), h.to_string())])));
+    }
+    with_env(q, st, |e| Ok(Resp::json(J::obj().set("w", w).set("h", h).set("depth", e.depth_camera(w, h, fov)))))
+}
+
+/// Копия среды: то же состояние и тот же ГПСЧ. Можно проиграть разные действия из одной точки и сравнить с «воображением» модели.
+fn env_fork(q: &Q, st: &State) -> Result<Resp, String> {
+    let copy = with_env(q, st, |e| Ok(Box::new(e.clone())))?;
+    let id = store(st, Sim::Env(copy));
+    Ok(Resp::json(J::obj().set("id", id)))
+}
+
+fn env_close(q: &Q, st: &State) -> Result<Resp, String> {
+    let id = f(q, "id", 0.0) as u64;
+    let closed = st.sims.lock().unwrap().remove(&id).is_some();
+    Ok(Resp::json(J::obj().set("closed", closed)))
 }
 
 fn env_list(st: &State) -> Resp {
     let m = st.sims.lock().unwrap();
     let mut out = Vec::new();
     for (id, s) in m.iter() {
-        if let Ok(g) = s.try_lock() {
+        if let Ok(g) = s.sim.try_lock() {
             if let Sim::Env(e) = &*g {
                 out.push(J::obj().set("id", *id).set("task", format!("{:?}", e.cfg.task).to_lowercase()).set("world", e.world.name()).set("steps", e.steps).set("episode_return", e.ep_return));
             }

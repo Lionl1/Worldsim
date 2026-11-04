@@ -4,9 +4,11 @@ use std::io::{BufWriter, Write};
 use std::process::ExitCode;
 
 use worldsim::ballistics::{self, Launch, Options, Projectile};
+use worldsim::collect;
 use worldsim::constants::{AU, DAY, YEAR};
 use worldsim::datagen::{self, DatasetConfig};
 use worldsim::magneto::{self, ParticleLaunch};
+use worldsim::mission;
 use worldsim::nbody::{Integrator, NBody};
 use worldsim::presets;
 use worldsim::thermal::{self, ThermalOptions};
@@ -29,6 +31,13 @@ const HELP: &str = "worldsim — физические модели миров
             --worlds earth,moon,mars --out data/ --seed 42 [--points 100] [--noise 0.01] [--strict]
   serve     [--port 8080] [--no-open]   3D-интерфейс в браузере (все модели)
   validate                      прогнать проверку всех законов
+  mission   файл.json [--out папка] [--threads N]
+            Mission Lab: карта требований, главные факторы, ценность технологий (см. missions/)
+  collect   --task lander|drone|rover --worlds moon,mars:earth:moon --episodes 1000 --out dir
+            [--policies smooth,hold,auto_noise] [--noise 1] [--randomize] [--frame-skip 4] [--max-steps N]
+            [--gust 2] [--lag 0.05] [--fault 0.2] [--rotor-scale 1] [--threads N] [--seed 42]
+            [--terrain 33] [--camera 64 --camera-every 5] [--counterfactuals 3]
+            переходы для обучения world model: .npy + meta.json (см. README)
 
 МИР (для любой команды)
   --world mars                  всё от Марса
@@ -79,9 +88,31 @@ fn world_spec(pos: &[String], kv: &HashMap<String, String>) -> Result<WorldSpec,
     })
 }
 
-fn spec_from_triple(s: &str) -> WorldSpec {
-    let p: Vec<&str> = s.split(':').collect();
-    WorldSpec { physics: p[0].into(), atmosphere: p.get(1).map(|x| x.to_string()), surface: p.get(2).map(|x| x.to_string()), gravity_scale: 1.0, distance_au: None }
+/// Какие ключи понимает команда: опечатка не должна молча считаться значением по умолчанию.
+fn allowed_flags(cmd: &str) -> Option<&'static [&'static str]> {
+    Some(match cmd {
+        "presets" | "validate" => &[],
+        "info" => &[],
+        "throw" => &["speed", "elev", "az", "lat", "lon", "alt", "radius", "density", "cd", "no-drag", "no-rotation", "no-j2", "sample-dt", "max-time", "out"],
+        "thermal" => &["lat", "dec", "days", "sample-days", "out"],
+        "particle" => &["species", "mev", "L", "pitch", "time", "out", "lon"],
+        "system" => &["bodies", "years", "dt-hours", "gr", "leapfrog", "out"],
+        "dataset" => &["task", "n", "worlds", "out", "seed", "points", "noise", "strict"],
+        "serve" => &["port", "no-open"],
+        "mission" => &["out", "threads"],
+        "collect" => &["task", "worlds", "episodes", "policies", "noise", "randomize", "frame-skip", "max-steps", "gust", "lag", "fault", "rotor-scale", "threads", "seed", "terrain", "camera", "camera-every", "counterfactuals", "out"],
+        _ => return None,
+    })
+}
+
+fn check_flags(cmd: &str, kv: &HashMap<String, String>) -> Result<(), String> {
+    let Some(allowed) = allowed_flags(cmd) else { return Ok(()) };
+    let takes_world = matches!(cmd, "info" | "throw" | "thermal" | "particle");
+    const WORLD: &[&str] = &["world", "physics", "atmosphere", "surface", "gravity-scale", "distance-au"];
+    let mut bad: Vec<&str> = kv.keys().map(|k| k.as_str()).filter(|k| !allowed.contains(k) && !(takes_world && WORLD.contains(k))).collect();
+    bad.sort();
+    if let Some(k) = bad.first() { return Err(format!("неизвестный ключ --{k} для команды '{cmd}'. worldsim --help")); }
+    Ok(())
 }
 
 fn out_file(kv: &HashMap<String, String>) -> Result<Option<BufWriter<File>>, String> {
@@ -89,6 +120,7 @@ fn out_file(kv: &HashMap<String, String>) -> Result<Option<BufWriter<File>>, Str
 }
 
 fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), String> {
+    check_flags(cmd, kv)?;
     match cmd {
         "presets" => {
             println!("физика:     {}", presets::PHYSICS_NAMES.join(", "));
@@ -98,6 +130,8 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
         "info" => info(&World::build(&world_spec(pos, kv)?)?)?,
         "throw" => {
             let w = World::build(&world_spec(pos, kv)?)?;
+            if num(kv, "speed", 300.0)? < 0.0 { return Err("--speed: скорость не может быть отрицательной, направление задают --elev и --az".into()); }
+            if num(kv, "radius", 0.05)? <= 0.0 || num(kv, "density", 7800.0)? <= 0.0 { return Err("--radius и --density должны быть больше нуля".into()); }
             let p = Projectile::sphere(num(kv, "radius", 0.05)?, num(kv, "density", 7800.0)?);
             let p = Projectile { cd: num(kv, "cd", p.cd)?, ..p };
             let l = Launch { lat: num(kv, "lat", 0.0)?, lon: num(kv, "lon", 0.0)?, altitude: num(kv, "alt", 0.0)?,
@@ -183,7 +217,7 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
             for b in &s.bodies { println!("  {:8} r = {:.4} а.е.", b.name, b.r.norm() / AU); }
         }
         "dataset" => {
-            let worlds: Vec<WorldSpec> = kv.get("worlds").cloned().unwrap_or("earth,moon,mars".into()).split(',').map(|s| spec_from_triple(s.trim())).collect();
+            let worlds: Vec<WorldSpec> = kv.get("worlds").cloned().unwrap_or("earth,moon,mars".into()).split(',').map(|s| WorldSpec::parse(s.trim())).collect();
             let cfg = DatasetConfig {
                 task: kv.get("task").cloned().unwrap_or("projectile".into()),
                 n: num(kv, "n", 100.0)? as usize,
@@ -196,7 +230,50 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
             println!("задача {}: создано {} сэмплов, валидных {} ({:.1}%), max ошибка {:.2e}, {:.1} с → {}/",
                 cfg.task, st.generated, st.valid, 100.0 * st.valid as f64 / st.generated.max(1) as f64, st.max_error, t0.elapsed().as_secs_f64(), cfg.out_dir);
         }
-        "serve" => worldsim::server::serve(num(kv, "port", 8080.0)? as u16, !flag(kv, "no-open"))?,
+        "serve" => {
+            let port = num(kv, "port", 8080.0)?;
+            if port.fract() != 0.0 || !(1.0..=65535.0).contains(&port) { return Err(format!("--port: нужен порт от 1 до 65535, получено {port}")); }
+            worldsim::server::serve(port as u16, !flag(kv, "no-open"))?
+        }
+        "mission" => {
+            let path = pos.first().ok_or("укажите файл миссии: worldsim mission missions/lunar_lander.json --out report")?;
+            let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+            let threads = num(kv, "threads", std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1) as f64)? as usize;
+            let report = mission::run(&mission::MissionSpec::parse(&text)?, threads)?;
+            if let Some(out) = kv.get("out") {
+                std::fs::create_dir_all(out).map_err(|e| format!("{out}: {e}"))?;
+                std::fs::write(format!("{out}/report.json"), report.render()).map_err(|e| e.to_string())?;
+                std::fs::write(format!("{out}/report.md"), mission::markdown(&report)).map_err(|e| e.to_string())?;
+            }
+            print!("{}", mission::markdown(&report));
+        }
+        "collect" => {
+            let cfg = collect::CollectConfig {
+                task: kv.get("task").cloned().unwrap_or("lander".into()),
+                worlds: kv.get("worlds").cloned().unwrap_or("earth,moon,mars".into()).split(',').map(|s| WorldSpec::parse(s.trim())).collect(),
+                policies: collect::Policy::parse_list(kv.get("policies").map(|s| s.as_str()).unwrap_or("smooth,hold,auto_noise"))?,
+                episodes: num(kv, "episodes", 100.0)? as usize,
+                seed: num(kv, "seed", 42.0)? as u64,
+                noise: num(kv, "noise", 1.0)?,
+                randomize: flag(kv, "randomize"),
+                frame_skip: kv.contains_key("frame-skip").then(|| num(kv, "frame-skip", 4.0)).transpose()?.map(|x| x as usize),
+                max_steps: kv.contains_key("max-steps").then(|| num(kv, "max-steps", 1.0)).transpose()?.map(|x| x as usize),
+                rotor_scale: num(kv, "rotor-scale", 1.0)?,
+                gust: num(kv, "gust", 0.0)?,
+                lag: num(kv, "lag", 0.0)?,
+                fault: num(kv, "fault", 0.0)?,
+                threads: num(kv, "threads", std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1) as f64)? as usize,
+                out_dir: kv.get("out").cloned().ok_or("--out: укажите папку для данных")?,
+                terrain_n: num(kv, "terrain", 0.0)? as usize,
+                camera_n: num(kv, "camera", 0.0)? as usize,
+                camera_every: num(kv, "camera-every", 1.0)? as usize,
+                counterfactuals: num(kv, "counterfactuals", 0.0)? as usize,
+            };
+            let st = collect::run(&cfg)?;
+            println!("{}: {} эпизодов, {} переходов, успешных {:.1}%, {:.0} шагов/с → {}/", cfg.task, st.episodes, st.transitions,
+                100.0 * st.successes as f64 / st.episodes.max(1) as f64, st.transitions as f64 / st.seconds.max(1e-9), cfg.out_dir);
+            if st.non_finite > 0 { return Err(format!("найдено {} нечисловых значений", st.non_finite)); }
+        }
         "validate" => {
             let t0 = std::time::Instant::now();
             let checks = validate::all();

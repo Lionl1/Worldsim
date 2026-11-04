@@ -1,5 +1,6 @@
 //! Детерминированный ГПСЧ xoshiro256** (воспроизводимые датасеты по seed).
 
+#[derive(Clone)]
 pub struct Rng { s: [u64; 4] }
 
 impl Rng {

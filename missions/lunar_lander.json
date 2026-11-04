@@ -1,0 +1,100 @@
+{
+  "name": "Лунный посадочный модуль, 1050 кг",
+  "task": "lander",
+  "world": "moon",
+  "runs": 300,
+  "seed": 1,
+  "vehicle": {
+    "dry_mass": 1000,
+    "fuel": 50,
+    "isp": 300,
+    "t_max": 5000,
+    "torque_max": 2500
+  },
+  "dispersions": {
+    "gravity": 0.02,
+    "dry_mass": 0.03,
+    "isp": 0.02,
+    "t_max": 0.05,
+    "nav_noise": 1.0,
+    "actuator_lag": 0.15,
+    "fault": 0.05
+  },
+  "requirements": [
+    {
+      "id": "REQ-01",
+      "text": "Успешная мягкая посадка",
+      "metric": "success",
+      "op": ">=",
+      "value": 0.9
+    },
+    {
+      "id": "REQ-02",
+      "text": "Скорость касания, 99-й перцентиль",
+      "metric": "touch_speed",
+      "percentile": 99,
+      "op": "<=",
+      "value": 2.5
+    },
+    {
+      "id": "REQ-03",
+      "text": "Промах от площадки, 95-й перцентиль",
+      "metric": "touch_offset",
+      "percentile": 95,
+      "op": "<=",
+      "value": 25
+    },
+    {
+      "id": "REQ-04",
+      "text": "Расход топлива, 99-й перцентиль",
+      "metric": "fuel_used",
+      "percentile": 99,
+      "op": "<=",
+      "value": 48
+    }
+  ],
+  "technologies": [
+    {
+      "name": "Двигатель Isp 340 с",
+      "set": {
+        "isp": 340
+      },
+      "dry_mass_delta": 15
+    },
+    {
+      "name": "Двигатель 7 кН",
+      "set": {
+        "t_max": 7000
+      },
+      "dry_mass_delta": 25
+    },
+    {
+      "name": "Мощнее двигатели ориентации",
+      "set": {
+        "torque_max": 4000
+      },
+      "dry_mass_delta": 8
+    },
+    {
+      "name": "Точнее навигация (шум ×0.25)",
+      "set_dispersion": {
+        "nav_noise": 0.25
+      },
+      "dry_mass_delta": 5
+    },
+    {
+      "name": "Быстрые приводы (задержка 0.03 с)",
+      "set_dispersion": {
+        "actuator_lag": 0.03
+      },
+      "dry_mass_delta": 3
+    },
+    {
+      "name": "Запас топлива +30 кг",
+      "set": {
+        "fuel": 80
+      },
+      "dry_mass_delta": 0
+    }
+  ]
+}

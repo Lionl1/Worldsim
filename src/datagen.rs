@@ -59,10 +59,17 @@ impl Sink {
 
 pub fn generate(cfg: &DatasetConfig) -> Result<Stats, String> {
     let io = |e: std::io::Error| e.to_string();
-    fs::create_dir_all(&cfg.out_dir).map_err(io)?;
-    let dir = Path::new(&cfg.out_dir);
+    // сначала всё проверяем: ошибка в параметрах не должна оставлять пустую папку и неполные файлы
+    if cfg.n == 0 { return Err("--n: нужен хотя бы один сэмпл".into()); }
     let worlds: Vec<World> = cfg.worlds.iter().map(World::build).collect::<Result<_, _>>()?;
     let (series_cols, param_cols) = columns(&cfg.task)?;
+    if cfg.task == "particle" {
+        if let Some(w) = worlds.iter().find(|w| w.physics.dipole_moment <= 0.0) {
+            return Err(format!("у мира {} нет магнитного диполя (используйте earth, jupiter, mercury)", w.physics.name));
+        }
+    }
+    fs::create_dir_all(&cfg.out_dir).map_err(io)?;
+    let dir = Path::new(&cfg.out_dir);
     let mut sink = Sink {
         params: BufWriter::new(File::create(dir.join("params.csv")).map_err(io)?),
         series: BufWriter::new(File::create(dir.join("series.csv")).map_err(io)?),

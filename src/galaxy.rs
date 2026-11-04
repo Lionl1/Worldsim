@@ -257,11 +257,21 @@ impl Galaxy {
     pub fn tree_acc(&self) -> Vec<Vec3> { self.par_field(false).0 }
 
     /// Профиль круговой скорости √(r·|a_r|) — кривая вращения.
+    /// Диапазон кривой вращения: 25 кпк для дисков, иначе от размера самой системы.
+    pub fn rotation_range(&self) -> f64 {
+        if self.kind.iter().any(|k| *k == Kind::Disk) { return 25.0; }
+        let mut r: Vec<f64> = self.pos.iter().map(|p| (p.x * p.x + p.y * p.y).sqrt()).collect();
+        r.sort_by(|a, b| a.total_cmp(b));
+        3.0 * r.get(r.len() / 2).copied().unwrap_or(1.0).max(1e-9)
+    }
+
     pub fn rotation_curve(&self, r_max: f64, bins: usize) -> Vec<(f64, f64)> {
+        // без диска считаем круговую скорость по всем частицам (сфера Пламмера, шаровое скопление)
+        let any_disk = self.kind.iter().any(|k| *k == Kind::Disk);
         let mut sum = vec![0.0; bins];
         let mut cnt = vec![0usize; bins];
         for i in 0..self.len() {
-            if self.kind[i] != Kind::Disk { continue; }
+            if any_disk && self.kind[i] != Kind::Disk { continue; }
             let p = self.pos[i];
             let r = (p.x * p.x + p.y * p.y).sqrt();
             let b = (r / r_max * bins as f64) as usize;

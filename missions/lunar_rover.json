@@ -1,0 +1,61 @@
+{
+  "name": "Лунный ровер, 180 кг",
+  "task": "rover",
+  "world": "moon",
+  "runs": 300,
+  "seed": 1,
+  "vehicle": {
+    "rover_mass": 180,
+    "motor_force": 900,
+    "panel_area": 1.5
+  },
+  "dispersions": {
+    "gravity": 0.01,
+    "rover_mass": 0.05,
+    "nav_noise": 1.0,
+    "fault": 0.05
+  },
+  "requirements": [
+    {
+      "id": "REQ-01",
+      "text": "Дошёл до цели",
+      "metric": "success",
+      "op": ">=",
+      "value": 0.85
+    },
+    {
+      "id": "REQ-02",
+      "text": "Энергия, 95-й перцентиль",
+      "metric": "energy_used_kj",
+      "percentile": 95,
+      "op": "<=",
+      "value": 60
+    }
+  ],
+  "technologies": [
+    {
+      "name": "Ровер тяжелее на 40 кг",
+      "set": {
+        "rover_mass": 220
+      }
+    },
+    {
+      "name": "Ровер легче на 40 кг",
+      "set": {
+        "rover_mass": 140
+      }
+    },
+    {
+      "name": "Сильнее моторы (1400 Н)",
+      "set": {
+        "motor_force": 1400
+      }
+    },
+    {
+      "name": "Слабее моторы (500 Н)",
+      "set": {
+        "motor_force": 500
+      }
+    }
+  ]
+}

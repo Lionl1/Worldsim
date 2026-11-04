@@ -1,9 +1,15 @@
 [package]
 name = "worldsim"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Физические модели миров (Земля, Луна, Марс, ...) для симуляции и генерации данных"
 license = "MIT"
+
+[lib]
+name = "worldsim"
+path = "src/lib.rs"
+# cdylib — для векторной среды в Python через ctypes (см. python/worldsim/vec.py)
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 # намеренно пусто: только стандартная библиотека
