@@ -211,6 +211,27 @@ class Server(unittest.TestCase):
         with self.assertRaises(ValueError):
             worldsim.VectorEnv("lander", "moon", params={"warp": 1})
 
+    def test_physics_lab_routes(self):
+        for topic in ("tunnel", "levels", "hydrogen", "sod", "dam", "chapman", "nozzle", "crater", "collide", "ocean"):
+            self.assertIsInstance(self.c.get(f"/api/lab/{topic}"), dict, topic)
+        with self.assertRaises(RuntimeError):
+            self.c.get("/api/lab/nosuch")
+        with self.assertRaises(RuntimeError):
+            self.c.get("/api/lab/crater", d=-1)
+        t = self.c.get("/api/lab/tunnel", e=0.5, v0=0.8, a=1)
+        self.assertLess(abs(t["t_numeric"] - t["t_exact"]) / t["t_exact"], 0.05)
+        self.assertLess(abs(t["norm"] - 1), 1e-6)
+        p = self.c.get("/api/blackhole/props", m_sun=10, a=0)
+        self.assertLess(abs(p["isco"] - 6), 1e-3)
+        with self.assertRaises(RuntimeError):
+            self.c.get("/api/blackhole/props", a=1.5)
+        b = self.c.get("/api/blackhole/render", w=64, h=40)
+        self.assertEqual(len(b), 64 * 40 * 3)
+        # в центре кадра тень, сбоку свет диска или фон
+        px = np.frombuffer(b, np.uint8).reshape(40, 64, 3)
+        self.assertLess(int(px[20, 32].sum()), 30)
+        self.assertGreater(int(px.sum()), 0)
+
     def test_cameras(self):
         e = self.c.make("rover", "mars")
         self.assertEqual(e.camera(8, 6, "rgb").shape, (6, 8, 3))

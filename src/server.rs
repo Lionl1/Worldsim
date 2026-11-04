@@ -189,7 +189,8 @@ fn check_params(q: &Q) -> Result<(), String> {
 }
 
 fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
-    check_params(q)?;
+    // у лаборатории и чёрных дыр свои диапазоны: там `a` — спин и ширина барьера, а не полуось орбиты
+    if !path.starts_with("/api/lab/") && !path.starts_with("/api/blackhole/") { check_params(q)?; }
     Ok(match path {
         "/" | "/index.html" => Resp { status: 200, ctype: "text/html; charset=utf-8", body: INDEX.as_bytes().to_vec(), headers: vec![] },
         "/data/stars.json" => data_resp("stars_hyg.json"),
@@ -229,6 +230,9 @@ fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
             Resp::json(report.set("markdown", md))
         }
         "/api/env/schema" => Resp::json(param_schema()),
+        "/api/blackhole/props" => Resp::json(bh_props(q)?),
+        "/api/blackhole/render" => bh_render(q)?,
+        p if p.starts_with("/api/lab/") => Resp::json(crate::lab::run(&p["/api/lab/".len()..], q)?),
         "/api/env/fork" => env_fork(q, st)?,
         "/api/env/close" => env_close(q, st)?,
         "/api/validate" => Resp::json(J::Arr(validate::all().into_iter().map(|c| J::obj().set("law", c.law).set("test", c.test).set("value", c.value).set("expected", c.expected).set("pass", c.pass)).collect())),
@@ -588,6 +592,22 @@ fn env_make(q: &Q, st: &State) -> Result<Resp, String> {
         .set("obs", obs).set("text", env.describe());
     let id = store(st, Sim::Env(Box::new(env)));
     Ok(Resp::json(meta.set("id", id)))
+}
+
+fn bh_props(q: &Q) -> Result<J, String> {
+    use crate::blackhole as b;
+    let m = crate::lab::num(q, "m_sun", 10.0, 1e-20, 1e12)? * crate::quantum::M_SUN;
+    let a = crate::lab::num(q, "a", 0.0, 0.0, 0.9999)?.max(1e-9);
+    Ok(J::obj().set("rs", b::schwarzschild_radius(m)).set("horizon", b::kerr_horizon(a)).set("isco", b::kerr_isco(a)).set("photon", b::kerr_photon_orbit(a))
+        .set("shadow", 27f64.sqrt()).set("efficiency", b::radiative_efficiency(a)).set("t_hawking", b::hawking_temperature(m)).set("evaporation_yr", b::evaporation_years(m)).set("tide", b::horizon_tide(m)))
+}
+
+fn bh_render(q: &Q) -> Result<Resp, String> {
+    use crate::lab::num;
+    let (w, h) = (num(q, "w", 480.0, 16.0, 1600.0)? as usize, num(q, "h", 300.0, 16.0, 1200.0)? as usize);
+    let o = crate::blackhole::RenderOpts { w, h, incl_deg: num(q, "incl", 78.0, 0.0, 90.0)?, r_in: 6.0, r_out: num(q, "r_out", 18.0, 6.5, 500.0)?, distance: num(q, "dist", 45.0, 8.0, 500.0)?, fov_deg: 34.0, doppler: s(q, "doppler", "1") == "1" };
+    let threads = std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1);
+    Ok(Resp::bin(crate::blackhole::render(&o, threads), vec![("X-Width".into(), w.to_string()), ("X-Height".into(), h.to_string())]))
 }
 
 /// Описание всех параметров для интерфейса и клиентов: форму можно построить без знания о конкретных полях.

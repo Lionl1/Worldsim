@@ -21,6 +21,8 @@ main{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax
 #hud{grid-column:1;grid-row:1;background:var(--side);border-bottom:1px solid var(--line);padding:9px 16px;color:var(--soft);font-variant-numeric:tabular-nums;font-size:14px}.hud b{color:var(--text);font-weight:600}.hud .k{color:var(--muted)}
 #stage{grid-column:1;grid-row:2;position:relative;min-height:0;min-width:0;background:#05070c}
 #gl{position:absolute;inset:0;width:100%;height:100%;display:block;transition:opacity .25s}
+#bh{position:absolute;inset:0;width:100%;height:100%;display:none;background:#000;z-index:1;object-fit:contain}
+main.plot #stage{display:none}main.plot #chartbox{grid-row:1/4;height:auto;display:block!important;padding:18px}
 #chartbox{grid-column:1;grid-row:3;height:216px;background:var(--side);border-top:1px solid var(--line);padding:8px 10px}#chart{width:100%;height:100%;display:block}
 #panel{grid-column:2;grid-row:1/4;background:var(--panel);border-left:1px solid var(--line);padding:18px;overflow:auto;min-height:0}
 .panel h2{margin:0 0 6px;font-size:18px;font-weight:650;letter-spacing:-.2px;line-height:1.3}.panel>.muted:first-of-type{margin-bottom:12px}
@@ -78,11 +80,14 @@ main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 40vh minmax(0,1
   <button data-tab="starmap">Карта звёзд и экзопланет</button>
   <button data-tab="galaxy">Галактики</button>
   <button data-tab="cosmo">Космология</button>
+  <div class="grp">Физика</div>
+  <button data-tab="blackhole">Чёрные дыры</button>
+  <button data-tab="lab">Лаборатория</button>
   <div class="foot">Данные: HYG v4.1 (CC BY-SA 4.0), Open Exoplanet Catalogue (MIT), Planck 2018, NASA Fact Sheets.<br>Мышь: вращение, колесо — масштаб.</div>
 </nav>
 <main>
   <div id="hud" class="hud" style="display:none"></div>
-  <div id="stage"><canvas id="gl"></canvas><div id="mission"></div></div>
+  <div id="stage"><canvas id="gl"></canvas><canvas id="bh"></canvas><div id="mission"></div></div>
   <div id="panel" class="panel"></div>
   <div id="chartbox" class="chartbox" style="display:none"><canvas id="chart"></canvas></div>
   <div id="laws"></div>
@@ -1071,7 +1076,120 @@ const missionTab = {
   dispose(){ $('#mission').style.display='none'; },
 };
 
-const tabs = {mission:missionTab, robots:robotsTab, world:worldTab, climate:climateTab, solar:solarTab, system:systemTab, starmap:starmapTab, galaxy:galaxyTab, cosmo:cosmoTab, laws:lawsTab};
+// ============================================================ вкладка: Чёрные дыры
+const blackholeTab = {
+  async init(){
+    const c = $('#bh'); c.style.display='block'; this.ctx = c.getContext('2d');
+    panel.innerHTML = `<h2>Чёрные дыры</h2><div class="muted">Лучи света идут по настоящим геодезическим Шварцшильда. Спин влияет на таблицу, рендер считается без вращения дыры.</div>
+      <div class="row"><label>Масса, M☉</label><input id="b_m" type="number" min="0.001" value="10"></div>
+      <div class="row"><label>Спин a</label><input id="b_a" type="range" min="0" max="0.998" step="0.002" value="0"><span id="b_av" style="flex:0 0 44px;text-align:right">0</span></div>
+      <h3>Вид</h3>
+      <div class="row"><label>Наклон диска, °</label><input id="b_i" type="range" min="1" max="89" step="1" value="78"><span id="b_iv" style="flex:0 0 32px;text-align:right">78</span></div>
+      <div class="row"><label>Расстояние, M</label><input id="b_d" type="range" min="12" max="120" step="1" value="45"><span id="b_dv" style="flex:0 0 32px;text-align:right">45</span></div>
+      <div class="row"><label>Край диска, M</label><input id="b_o" type="range" min="8" max="40" step="1" value="18"><span id="b_ov" style="flex:0 0 32px;text-align:right">18</span></div>
+      <div class="row"><label>Доплер</label><select id="b_x"><option value="1">Учитывать</option><option value="0">Без него</option></select></div>
+      <h3>Что получается</h3><div id="b_k" class="kv"></div>`;
+    for (const [i,v] of [['b_i','b_iv'],['b_d','b_dv'],['b_o','b_ov'],['b_a','b_av']]) $('#'+i).oninput = e => { $('#'+v).textContent = e.target.value; if (i==='b_a') this.props(); else this.draw(true); };
+    $('#b_m').oninput = () => this.props();
+    $('#b_x').onchange = () => this.draw();
+    await this.props(); await this.draw();
+  },
+  async props(){
+    let r; try { r = await api('/api/blackhole/props?'+qs({m_sun:$('#b_m').value, a:$('#b_a').value})); } catch(e){ $('#b_k').innerHTML = `<div class="no" style="grid-column:1/-1;text-align:left">${esc(e.message)}</div>`; return; }
+    const P = (k,v) => `<div>${k}</div><div>${v}</div>`, km = x => x>=1e3 ? fmt(x/1e3,2)+' км' : fmt(x,2)+' м';
+    $('#b_k').innerHTML = P('Радиус Шварцшильда', km(r.rs))+P('Горизонт', fmt(r.horizon,3)+' M')+P('Последняя устойчивая орбита', fmt(r.isco,3)+' M')+P('Фотонная орбита', fmt(r.photon,3)+' M')+P('Радиус тени', fmt(r.shadow,3)+' M')+P('КПД аккреции', fmt(r.efficiency*100,1)+'%')+P('Температура Хокинга', r.t_hawking.toExponential(2)+' К')+P('Время испарения', r.evaporation_yr.toExponential(2)+' лет')+P('Прилив у горизонта', r.tide.toExponential(2)+' 1/с²');
+  },
+  async draw(fast){
+    const my = this.req = (this.req||0)+1, st = $('#stage'), ep = epoch;
+    if (!fast) busy(true,'Считаю лучи…');
+    // разрешение ограничено: расчёт идёт на процессоре, а пропорции кадра должны совпадать со сценой
+    const k = Math.min(fast ? .35 : Math.min(devicePixelRatio||1, 1.5), 1100/Math.max(st.clientWidth,1), 800/Math.max(st.clientHeight,1)), w = Math.max(160, Math.round(st.clientWidth*k)), h = Math.max(100, Math.round(st.clientHeight*k));
+    try {
+      const r = await api('/api/blackhole/render?'+qs({w,h,incl:$('#b_i').value,dist:$('#b_d').value,r_out:$('#b_o').value,doppler:$('#b_x').value}), {binary:true}), b = new Uint8Array(await r.arrayBuffer());
+      if (my !== this.req || ep !== epoch) return;
+      const c = $('#bh'); c.width = w; c.height = h; const im = this.ctx.createImageData(w,h); for (let i=0;i<w*h;i++){ im.data[i*4]=b[i*3]; im.data[i*4+1]=b[i*3+1]; im.data[i*4+2]=b[i*3+2]; im.data[i*4+3]=255; } this.ctx.putImageData(im,0,0);
+      if (fast){ clearTimeout(this.t); this.t = setTimeout(()=>this.draw(), 260); }
+    } catch(e){ if (my === this.req) $('#b_k').innerHTML = `<div class="no" style="grid-column:1/-1;text-align:left">${esc(e.message)}</div>`; }
+    finally { if (!fast) busy(false); }
+  },
+  update(){},
+  dispose(){ $('#bh').style.display='none'; clearTimeout(this.t); this.req = (this.req||0)+1; },
+};
+
+// ============================================================ вкладка: Лаборатория
+const LAB_TOPICS = {
+  tunnel:{label:'Квант: туннелирование', fields:[['e','Энергия частицы',.5,.05,1.5,.05],['v0','Высота барьера',.8,.1,2,.05],['a','Ширина барьера',1,.2,4,.1]]},
+  levels:{label:'Квант: уровни энергии', fields:[]},
+  hydrogen:{label:'Квант: спектр водорода', fields:[]},
+  sod:{label:'Газ: ударная волна Сода', fields:[['t','Время',.2,.02,.3,.01]]},
+  dam:{label:'Вода: разрушение плотины', fields:[['t','Время, с',4,.5,6,.5],['h0','Глубина, м',1,.2,5,.2]]},
+  chapman:{label:'Химия: озоновый цикл', fields:[['hours','Часов расчёта',2000,100,8000,100]]},
+  nozzle:{label:'Химия: сопло и Isp', fields:[['gamma','Показатель адиабаты',1.2,1.1,1.4,.01],['tc','Температура в камере, К',3600,1500,4000,50],['molar','Молярная масса, г/моль',13.5,2,40,.5]]},
+  crater:{label:'Удары: кратер', fields:[['d','Диаметр тела, м',50,1,20000,1],['v','Скорость, км/с',13,1,70,1],['angle','Угол, °',45,5,90,5],['g','Гравитация, м/с²',9.81,.5,25,.01]]},
+  collide:{label:'Удары: столкновение планет', fields:[['m1','Масса мишени, M⊕',1,.01,20,.01],['m2','Масса снаряда, M⊕',.1,.001,20,.001],['v','Скорость, км/с',12,1,80,1]]},
+  ocean:{label:'Тектоника: дно океана', fields:[]},
+};
+const labTab = {
+  async init(){
+    $('main').classList.add('plot');
+    panel.innerHTML = `<h2>Лаборатория</h2><div class="muted">Квантовые эффекты, газ и вода, химия, удары, тектоника. Везде показана и модель, и точный ответ, когда он есть.</div>
+      <div class="row"><label>Опыт</label><select id="l_t">${Object.entries(LAB_TOPICS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}</select></div><div id="l_f"></div><h3>Результат</h3><div id="l_r" class="kv"></div><div id="l_n" class="muted" style="margin-top:10px"></div>`;
+    $('#l_t').onchange = () => this.topic();
+    this.topic();
+  },
+  topic(){
+    const t = LAB_TOPICS[$('#l_t').value];
+    $('#l_f').innerHTML = t.fields.map(([k,l,d,mn,mx,st])=>`<div class="row"><label>${l}</label><input data-k="${k}" type="number" value="${d}" min="${mn}" max="${mx}" step="${st}"></div>`).join('');
+    $('#l_f').querySelectorAll('input').forEach(i => i.onchange = () => this.run());
+    this.run();
+  },
+  vals(){ const o = {}; $('#l_f').querySelectorAll('input').forEach(i => o[i.dataset.k]=i.value); return o; },
+  async run(){
+    const my = this.req = (this.req||0)+1, id = $('#l_t').value, P = (k,v) => `<div>${k}</div><div>${v}</div>`, res = h => $('#l_r').innerHTML = h, note = h => $('#l_n').innerHTML = h;
+    cancelAnimationFrame(this.raf);
+    try {
+      const r = await api(`/api/lab/${id}?`+qs(this.vals()));
+      if (my !== this.req) return;
+      note('');
+      if (id==='tunnel'){
+        res(P('Прохождение, точно', fmt(r.t_exact,4))+P('Прохождение, волновой пакет', fmt(r.t_numeric,4))+P('Норма в конце', fmt(r.norm,6)));
+        note('Классическая частица с энергией ниже барьера не прошла бы вообще.');
+        let f=0, last=0; const scale=Math.max(...r.frames[0]); const loop=(ts)=>{ if (my!==this.req) return; if (ts-last>60){ last=ts; chart([{x:r.x,y:r.frames[f],color:'#5aa2ff',label:'|ψ|²'},{x:r.x,y:r.v.map(v=>v/Math.max(...r.v,1e-9)*scale),color:'#fbbf4b',label:'барьер'}],{title:`Волновой пакет, кадр ${f+1} из ${r.frames.length}`,xlabel:'x, а.е.',yr:[0,scale*1.1]}); f=(f+1)%r.frames.length; } this.raf=requestAnimationFrame(loop); }; this.raf=requestAnimationFrame(loop);
+      } else if (id==='levels'){
+        res(r.rows.map(a=>P(esc(a.name), `${fmt(a.value,4)} <span class="muted">/ ${fmt(a.exact,4)}</span>`)).join('')); note('Слева численное решение уравнения Шрёдингера, справа точный ответ. Атомные единицы.');
+        chart(r.series.map((s,i)=>({x:s.n,y:s.e,dots:true,dot:7,color:['#5aa2ff','#fbbf4b'][i],label:s.name})),{title:'Уровни энергии',xlabel:'номер уровня'});
+      } else if (id==='hydrogen'){
+        res(r.lines.map(l=>P(esc(l.name), fmt(l.nm,2)+' нм')).join('')); note('Вакуумные длины волн, модель Бора с приведённой массой.');
+        chart([{x:r.levels.map(l=>l.n),y:r.levels.map(l=>l.ev),dots:true,dot:7,color:'#5aa2ff',label:'E, эВ'}],{title:'Уровни атома водорода',xlabel:'n'});
+      } else if (id==='sod'){
+        res(P('Ошибка L1 плотности', fmt(r.l1,5))+P('Ошибка массы', r.mass_error.toExponential(1)));
+        chart([{x:r.x,y:r.exact,color:'#fbbf4b',label:'точно'},{x:r.x,y:r.rho,color:'#5aa2ff',label:'расчёт'}],{title:'Плотность газа',xlabel:'x'});
+      } else if (id==='dam'){
+        res(P('Ошибка глубины', fmt(r.err*100,2)+'%')+P('Скорость фронта, теория', fmt(r.front,2)+' м/с'));
+        chart([{x:r.x,y:r.exact,color:'#fbbf4b',label:'Риттер'},{x:r.x,y:r.h,color:'#5aa2ff',label:'расчёт'}],{title:'Глубина воды, м',xlabel:'x, м'});
+      } else if (id==='chapman'){
+        res(P('O₃/O₂ в конце', r.ratio.toExponential(3))+P('O₃/O₂ стационарно', r.steady.toExponential(3))+P('Ошибка по атомам', r.atoms.toExponential(1))); note('Типичные учебные коэффициенты для стратосферы, это не прогноз озона.');
+        chart([{x:r.t,y:r.o3,color:'#5aa2ff',label:'O₃, 1/см³'}],{title:'Накопление озона',xlabel:'часы'});
+      } else if (id==='nozzle'){
+        res(P('Isp на уровне среза 1 атм', fmt(r.isp_sl,1)+' с')+P('Скорость истечения в пределе', fmt(r.ve_vac,0)+' м/с')); note('Идеальное сопло, без потерь. Результат можно подставить в параметр isp на вкладке Mission Lab.');
+        chart([{x:r.ratio,y:r.isp,color:'#5aa2ff',label:'Isp, с'}],{title:'Импульс от степени расширения',xlabel:'площадь среза / критического сечения',logx:true});
+      } else if (id==='crater'){
+        res(P('Переходный кратер', fmt(r.transient/1e3,2)+' км')+P('Итоговый кратер', fmt(r.final/1e3,2)+' км')+P('Энергия удара', r.energy_mt.toExponential(2)+' Мт')); note('Масштабная оценка по Коллинзу и др. (2005), железное тело и скальная мишень.');
+        chart([{x:r.ds,y:r.fs,color:'#5aa2ff',label:'диаметр кратера, км'}],{title:'Кратер от размера тела',xlabel:'диаметр тела, м',logx:true,logy:true});
+      } else if (id==='collide'){
+        res(P('Удельная энергия', r.q.toExponential(2)+' Дж/кг')+P('Порог разрушения', r.q_star.toExponential(2)+' Дж/кг')+P('Масса остатка', fmt(r.remnant*100,1)+'%')+P('Исход', esc(r.outcome)));
+        chart([{x:r.vs,y:r.fr,color:'#5aa2ff',label:'доля массы в остатке'}],{title:'Остаток от скорости удара',xlabel:'скорость, км/с',yr:[0,1]});
+      } else if (id==='ocean'){
+        res(P('Опускание, м·√млн лет', fmt(r.slope,0))+P('Поток в плите 80 млн лет', fmt(r.q80,1)+' мВт/м²')+P('Число Рэлея мантии', r.ra.toExponential(2))+P('Скорость конвекции', fmt(r.speed,1)+' см/год')); note('Оценки по порядку величины: остывающая плита и пограничный слой, а не движение реальных плит.');
+        chart([{x:r.age,y:r.depth,color:'#5aa2ff',label:'глубина дна, м'}],{title:'Глубина океана от возраста плиты',xlabel:'млн лет'});
+      }
+    } catch(e){ if (my===this.req) note(`<span class="no">${esc(e.message)}</span>`); }
+  },
+  update(){},
+  dispose(){ $('main').classList.remove('plot'); this.req=(this.req||0)+1; cancelAnimationFrame(this.raf); },
+};
+
+const tabs = {blackhole:blackholeTab, lab:labTab, mission:missionTab, robots:robotsTab, world:worldTab, climate:climateTab, solar:solarTab, system:systemTab, starmap:starmapTab, galaxy:galaxyTab, cosmo:cosmoTab, laws:lawsTab};
 let initChain = Promise.resolve(), intro = null;
 async function switchTab(name){
   const my = ++epoch;

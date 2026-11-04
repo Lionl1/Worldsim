@@ -454,8 +454,182 @@ pub fn env_checks() -> Vec<Check> {
     out
 }
 
+pub fn quantum_checks() -> Vec<Check> {
+    use crate::quantum as q;
+    let mut v = vec![
+        chk("Постоянная тонкой структуры", "1/α из e, ħ, c, ε₀", 1.0 / q::alpha(), 137.035999, 1e-6, ""),
+        chk("Спектр водорода", "Лайман-α, вакуум (NIST 121.567 нм)", q::hydrogen_line_nm(1.0, 2.0), 121.567, 1e-3, "нм"),
+        chk("Спектр водорода", "Бальмер-α, вакуум (NIST 656.46 нм)", q::hydrogen_line_nm(2.0, 3.0), 656.46, 1e-3, "нм"),
+        chk("Уравнение Шрёдингера", "атом водорода численно: E₁ = −1/2 а.е.", q::hydrogen_s_level(0, 40.0, 4000), -0.5, 0.002, "а.е."),
+        chk("Уравнение Шрёдингера", "атом водорода численно: E₂ = −1/8 а.е.", q::hydrogen_s_level(1, 60.0, 6000), -0.125, 0.002, "а.е."),
+        chk("Квантовый осциллятор", "E₀ = ½ħω численно", q::bound_level_1d(|x| 0.5 * x * x, 8.0, 2000, 0), 0.5, 1e-3, "а.е."),
+        chk("Квантовый осциллятор", "E₃ = 7/2 ħω численно", q::bound_level_1d(|x| 0.5 * x * x, 8.0, 2000, 3), 3.5, 1e-3, "а.е."),
+    ];
+    // Пакет: норма, неопределённость, расплывание
+    let mut w = q::Wave::gaussian(-60.0, 60.0, 2400, 0.01, 0.0, 1.0, 0.0, |_| 0.0);
+    v.push(chk("Соотношение неопределённостей", "гауссов пакет: Δx·Δp = ħ/2", w.sigma_x() * w.sigma_p(), 0.5, 0.005, "ħ"));
+    let n0 = w.norm();
+    for _ in 0..500 { w.step(); }
+    v.push(chk_max("Сохранение вероятности", "норма после 500 шагов Кранка–Николсон", (w.norm() - n0).abs(), 1e-9));
+    v.push(chk("Расплывание пакета", "σ(t) = σ₀√(1 + (t/2σ₀²)²), t = 5", w.sigma_x(), (1.0f64 + 2.5 * 2.5).sqrt(), 0.005, ""));
+    // Туннелирование: пакет с узким спектром против точной формулы
+    let (e0, v0, a) = (0.5f64, 0.8f64, 1.0f64);
+    let k0 = (2.0 * e0).sqrt();
+    let mut t = q::Wave::gaussian(-150.0, 150.0, 6000, 0.02, -60.0, 12.0, k0, move |x| if (0.0..a).contains(&x) { v0 } else { 0.0 });
+    for _ in 0..6500 { t.step(); }
+    v.push(chk("Туннельный эффект", "прохождение барьера при E < V₀", t.right_of(a), q::barrier_transmission(e0, v0, a), 0.03, ""));
+    let (eg, peak) = q::gamow(1.0, 1.0, crate::constants::M_P, crate::constants::M_P, 1.57e7);
+    v.push(chk("Туннелирование в звёздах", "энергия Гамова p–p", eg, 493.0, 0.01, "кэВ"));
+    v.push(chk("Туннелирование в звёздах", "пик Гамова в центре Солнца", peak, 6.0, 0.05, "кэВ"));
+    let (x1, w3) = q::lane_emden(3.0);
+    v.push(chk("Уравнение Лейна–Эмдена", "n = 3: первый ноль ξ₁", x1, 6.89685, 1e-4, ""));
+    v.push(chk("Уравнение Лейна–Эмдена", "n = 3: −ξ²θ'", w3, 2.01824, 1e-4, ""));
+    v.push(chk("Предел Чандрасекара", "белый карлик, μₑ = 2", q::chandrasekhar_mass(2.0), 1.44, 0.015, "M☉"));
+    v
+}
+
+pub fn blackhole_checks() -> Vec<Check> {
+    use crate::blackhole as b;
+    use crate::constants::G;
+    use crate::quantum::M_SUN;
+    let c = crate::constants::C;
+    let sec = 180.0 / std::f64::consts::PI * 3600.0;
+    let rg_sun = G * M_SUN / (c * c);
+    let r_sun = 6.957e8;
+    let mut v = vec![
+        chk("Метрика Шварцшильда", "ISCO из устойчивости орбиты", b::isco_numeric(), 6.0, 1e-3, "M"),
+        chk("Метрика Шварцшильда", "фотонная сфера", b::photon_sphere_numeric(), 3.0, 1e-3, "M"),
+        chk("Тень чёрной дыры", "критический прицельный параметр лучей", b::shadow_radius_numeric(), 27f64.sqrt(), 2e-3, "M"),
+        chk("Отклонение света", "геодезическая у края Солнца (Эддингтон 1.75″)", b::deflection(r_sun / rg_sun).unwrap_or(f64::NAN) * sec, 4.0 * rg_sun / r_sun * sec, 0.02, "″"),
+        chk("Отклонение света", "сильное поле, b = 20: 4/b + 15π/4b²", b::deflection(20.0).unwrap_or(f64::NAN), 4.0 / 20.0 + 15.0 * std::f64::consts::PI / 4.0 / 400.0 + 128.0 / 3.0 / 8000.0, 0.02, "рад"),
+        chk("Прецессия орбит", "численно против 6π/p при p = 1000", b::precession_per_orbit(1000.0 / (1.0 - 0.04), 0.2), 6.0 * std::f64::consts::PI / 1000.0, 0.01, "рад"),
+        chk("Метрика Керра", "ISCO a = 0 по минимуму энергии", b::kerr_isco_numeric(1e-9), 6.0, 1e-3, "M"),
+        chk("Метрика Керра", "ISCO a = 0.9: численно против формулы", b::kerr_isco_numeric(0.9), b::kerr_isco(0.9), 1e-3, "M"),
+        chk("Метрика Керра", "ISCO a = 0.998 (теория 1.237)", b::kerr_isco(0.998), 1.237, 2e-3, "M"),
+        chk("Эффективность аккреции", "a = 0: 1 − √(8/9)", b::radiative_efficiency(1e-9), 1.0 - (8f64 / 9.0).sqrt(), 1e-3, ""),
+        chk("Эффективность аккреции", "a = 0.998 (теория ≈ 0.32)", b::radiative_efficiency(0.998), 0.321, 0.01, ""),
+        chk("Излучение Хокинга", "T для 1 M☉ (6.17·10⁻⁸ К)", b::hawking_temperature(M_SUN) * 1e8, 6.17, 2e-3, "·10⁻⁸ К"),
+    ];
+    // первый закон термодинамики чёрных дыр проверяет T и S независимо друг от друга
+    let (m, dm) = (10.0 * M_SUN, 1e-6 * M_SUN);
+    let t_ds = b::hawking_temperature(m) * (b::bh_entropy(m + dm) - b::bh_entropy(m - dm)) / (2.0 * dm * c * c);
+    v.push(chk("Термодинамика чёрных дыр", "dE = T·dS", t_ds, 1.0, 1e-6, ""));
+    v.push(chk("Излучение Хокинга", "время испарения 1 M☉ (2.1·10⁶⁷ лет)", b::evaporation_years(M_SUN) / 1e67, 2.1, 0.02, "·10⁶⁷ лет"));
+    // PSR B1913+16: наблюдённая скорость убывания согласуется с ОТО
+    v.push(chk("Гравитационные волны", "PSR B1913+16: dP/dt (ОТО −2.40·10⁻¹²)", b::period_decay(1.4398 * M_SUN, 1.3886 * M_SUN, 27906.98, 0.6171) * 1e12, -2.402, 0.005, "·10⁻¹²"));
+    let (m1, m2, a) = (30.0 * M_SUN, 30.0 * M_SUN, 1e9);
+    v.push(chk("Гравитационные волны", "время слияния: численно против Петерса", b::merger_time_numeric(m1, m2, a), b::merger_time(m1, m2, a), 1e-3, "с"));
+    // GPS: суммарное расхождение часов
+    let (re, rs) = (6.371e6, 2.6571e7);
+    let gm = 3.986004418e14;
+    let grav = gm * (1.0 / re - 1.0 / rs) / (c * c);
+    let vel = gm / rs / (2.0 * c * c);
+    v.push(chk("Замедление времени", "часы GPS за сутки (+38.6 мкс)", (grav - vel) * 86400.0 * 1e6, 38.6, 0.02, "мкс"));
+    v
+}
+
+pub fn fluid_checks() -> Vec<Check> {
+    use crate::fluid as f;
+    let mut s = f::Euler1D::sod(800);
+    let (m0, e0) = (s.rho.iter().sum::<f64>(), s.en.iter().sum::<f64>());
+    s.run_to(0.2);
+    let n = s.rho.len();
+    let l1 = (0..n).map(|i| { let x = (i as f64 + 0.5) * s.dx; (s.rho[i] - f::sod_exact(x, s.t).0).abs() * s.dx }).sum::<f64>();
+    let mut v = vec![
+        chk_max("Задача Сода", "ошибка L1 плотности против точного решения", l1, 0.01),
+        chk_max("Сохранение массы", "уравнения Эйлера, относительная ошибка", (s.rho.iter().sum::<f64>() - m0).abs() / m0, 1e-12),
+        chk_max("Сохранение энергии", "уравнения Эйлера, относительная ошибка", (s.en.iter().sum::<f64>() - e0).abs() / e0, 1e-12),
+    ];
+    let (g, h0, l) = (9.81, 1.0, 100.0);
+    let mut d = f::Shallow1D::dam(1000, l, g, h0);
+    let v0: f64 = d.h.iter().sum();
+    d.run_to(4.0);
+    let err = (0..d.h.len()).map(|i| { let x = (i as f64 + 0.5) * d.dx; (d.h[i] - f::ritter_depth(x, l / 2.0, d.t, g, h0)).abs() * d.dx }).sum::<f64>() / (h0 * l / 2.0);
+    v.push(chk_max("Разрушение плотины (Риттер)", "ошибка глубины против точного решения", err, 0.02));
+    v.push(chk_max("Сохранение объёма", "мелкая вода, относительная ошибка", (d.h.iter().sum::<f64>() - v0).abs() / v0, 1e-10));
+    v
+}
+
+pub fn chemistry_checks() -> Vec<Check> {
+    use crate::chemistry as c;
+    let (kf, kr) = (2.0, 0.5);
+    let (a, b) = c::reversible(1.0, 0.0, kf, kr, 0.7, 2000);
+    let exact = kr / (kf + kr) + kf / (kf + kr) * (-(kf + kr) * 0.7f64).exp();
+    let (ae, be) = c::reversible(1.0, 0.0, kf, kr, 50.0, 20000);
+    let mut v = vec![
+        chk("Кинетика 1-го порядка", "A ⇌ B против точного решения", a, exact, 1e-8, ""),
+        chk_max("Сохранение вещества", "A + B = const", (a + b - 1.0).abs(), 1e-12),
+        chk("Химическое равновесие", "B/A → K = k₊/k₋", be / ae, kf / kr, 1e-6, ""),
+        chk("Закон Аррениуса", "Eₐ = 50 кДж/моль: рост k при 298 → 308 К", c::arrhenius(1.0, 5e4, 308.0) / c::arrhenius(1.0, 5e4, 298.0), 1.927, 0.01, "раз"),
+    ];
+    let ch = c::Chapman::stratosphere();
+    let mut y = [1e7, 0.21 * ch.m, 1e12];
+    let atoms0 = y[0] + 2.0 * y[1] + 3.0 * y[2];
+    for _ in 0..4000 { y = ch.implicit_step(y, 3600.0); }
+    v.push(chk("Цикл Чепмена", "стационарное O₃/O₂ против аналитики", y[2] / y[1], ch.steady_ratio(), 0.02, ""));
+    v.push(chk_max("Сохранение атомов", "цикл Чепмена, относительная ошибка", (y[0] + 2.0 * y[1] + 3.0 * y[2] - atoms0).abs() / atoms0, 1e-8));
+    // RS-25: водород–кислород, ~3600 К, M ≈ 13.5 г/моль, γ ≈ 1.2, степень расширения 69:1. Паспортный вакуумный Isp 452 с
+    let (g, tc, mol): (f64, f64, f64) = (1.2, 3600.0, 0.0135);
+    let (mut lo, mut hi): (f64, f64) = (1e-6, 0.5);
+    for _ in 0..80 { let m = (lo * hi).sqrt(); if c::area_ratio(g, m) > 69.0 { lo = m } else { hi = m } }
+    let pr = (lo * hi).sqrt();
+    let ve = c::exhaust_velocity(g, tc, mol, pr);
+    let area_e = c::area_ratio(g, pr);
+    // вакуумный импульс добавляет к скорости член давления на срезе; оценка через характеристическую величину
+    let cstar = (g * crate::constants::R_GAS / mol * tc).sqrt() / (g * (2.0 / (g + 1.0)).powf((g + 1.0) / (2.0 * (g - 1.0))).sqrt());
+    let isp_vac = (ve + pr * area_e * cstar) / crate::env::G0;
+    v.push(chk("Идеальное сопло", "водород–кислород, вакуум (RS-25 452 с, потери не учтены)", isp_vac, 452.0, 0.1, "с"));
+    v
+}
+
+pub fn collision_checks() -> Vec<Check> {
+    use crate::collisions as k;
+    let (m, u, de) = k::merge(3.0, Vec3::new(2.0, 0.0, 1.0), 1.0, Vec3::new(-6.0, 4.0, 1.0));
+    let p0 = Vec3::new(2.0, 0.0, 1.0) * 3.0 + Vec3::new(-6.0, 4.0, 1.0);
+    let mut v = vec![
+        chk_max("Сохранение импульса", "неупругое слияние", (u * m - p0).norm(), 1e-12),
+        Check { law: "Второе начало", test: "кинетическая энергия при слиянии только теряется".into(), value: format!("{de:.2} Дж"), expected: "> 0".into(), pass: de > 0.0 },
+        chk("Закон разрушения (Лейнхардт–Стюарт)", "при Q = Q* остаётся половина массы", k::largest_remnant_fraction(1.0, 1.0), 0.5, 1e-9, ""),
+    ];
+    // Гипотеза гигантского удара: 0.1 M⊕ со скоростью около 2-й космической не разрушает Землю
+    let (me, mt, vesc) = (5.972e24, 6.4e23, 1.12e4);
+    let q = k::impact_energy(me, mt, vesc * 1.1);
+    let qs = k::disruption_energy(me + mt, 5500.0, 1.9);
+    v.push(Check { law: "Закон разрушения (Лейнхардт–Стюарт)", test: "удар Тейи не разрушает Землю".into(), value: k::outcome(q, qs).into(), expected: "не катастрофа".into(), pass: q < qs });
+    // Кратер Бэрринджер (Метеоритный): около 1.2 км; тело около 50 м, железо, 12.8 км/с
+    v.push(chk("Масштабирование кратеров", "кратер Бэрринджер (1.19 км), порядок", k::crater_diameter(7800.0, 2500.0, 50.0, 12800.0, 9.81, 45.0).1 / 1e3, 1.19, 0.35, "км"));
+    // Чиксулуб: около 180 км; тело около 12 км, 20 км/с
+    v.push(chk("Масштабирование кратеров", "Чиксулуб (≈180 км), порядок", k::crater_diameter(2700.0, 2600.0, 12000.0, 20000.0, 9.81, 45.0).1 / 1e3, 180.0, 0.35, "км"));
+    let (d1, d2) = (k::crater_diameter(3000.0, 2500.0, 10.0, 1e4, 9.81, 45.0).0, k::crater_diameter(3000.0, 2500.0, 10.0, 1e4, 1.62, 45.0).0);
+    v.push(chk("Масштабирование кратеров", "тот же удар на Луне: D ∝ g^(−0.22)", d2 / d1, (9.81f64 / 1.62).powf(0.22), 1e-9, "раз"));
+    v.push(chk("Предел Роша", "Земля и лёд: кольца Сатурна в масштабе (Сатурн ≈ 2.2R при льде)", k::roche_limit(1.0, 687.0, 934.0), 2.2, 0.03, "R"));
+    v
+}
+
+pub fn tectonics_checks() -> Vec<Check> {
+    use crate::tectonics as t;
+    let l = t::Lithosphere::earth();
+    let myr = YEAR * 1e6;
+    let mut v = vec![
+        chk("Теплопроводность", "остывание плиты: численно против erf", l.temperature_numeric(5e4, 80.0 * myr), l.temperature_exact(5e4, 80.0 * myr), 0.005, "К"),
+        chk("Остывание литосферы", "глубина океана: ~350 м·√(млн лет) (Парсонс–Склейтер)", l.subsidence(myr), 350.0, 0.12, "м"),
+        chk("Остывание литосферы", "тепловой поток в плите 80 млн лет (наблюдается ≈ 55 мВт/м²)", l.heat_flow(80.0 * myr) * 1e3, 55.0, 0.2, "мВт/м²"),
+    ];
+    let ra = t::rayleigh(4000.0, 9.8, 3e-5, 3000.0, 2.9e6, 1e-6, 1e22);
+    v.push(Check { law: "Конвекция мантии", test: "число Рэлея выше критического (≈ 10³)".into(), value: format!("{ra:.2e}"), expected: "> 1e3".into(), pass: ra > 1e3 });
+    let s = t::convection_speed(1e-6, 2.9e6, ra) * YEAR * 100.0;
+    v.push(Check { law: "Конвекция мантии", test: "скорость плит по порядку величины (см/год)".into(), value: format!("{s:.1} см/год"), expected: "1…30 см/год".into(), pass: (1.0..=30.0).contains(&s) });
+    v
+}
+
 pub fn all() -> Vec<Check> {
     let mut v = Vec::new();
+    v.extend(quantum_checks());
+    v.extend(blackhole_checks());
+    v.extend(fluid_checks());
+    v.extend(chemistry_checks());
+    v.extend(collision_checks());
+    v.extend(tectonics_checks());
     v.extend(kepler());
     v.extend(conservation_solar_system(1.0));
     v.extend(mercury_precession());
