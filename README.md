@@ -7,10 +7,11 @@ with an in-browser 3D viewer, real star/exoplanet catalogs, dataset generation a
 
 ```bash
 git clone https://github.com/Lionl1/worldsim && cd worldsim
+./tools/fetch_data.sh        # один раз: скачать каталоги звёзд и экзопланет (нужны git и python3)
 cargo run --release          # соберёт и откроет 3D-интерфейс в браузере (http://localhost:8080)
 ```
 
-Нужен только Rust ≥ 1.75. Внешних крейтов нет. Браузеру нужен интернет только для загрузки three.js с CDN.
+Нужен только Rust ≥ 1.75 — внешних крейтов нет. Каталоги (вкладка «Карта») скачиваются скриптом из открытых репозиториев. Браузеру нужен интернет только для загрузки three.js с CDN.
 
 ## Что внутри
 
@@ -86,8 +87,8 @@ src/
   validate                                    — 59 проверок законов
   datagen  server  json  main                 — датасеты, HTTP-сервер, CLI
 web/index.html                                — 3D-интерфейс (three.js), встроен в бинарник
-data/                                         — каталоги HYG и OEC (свои лицензии)
-tools/build_data.py                           — пересборка данных из каталогов
+data/                                         — каталоги HYG и OEC (скачиваются tools/fetch_data.sh, свои лицензии)
+tools/fetch_data.sh, build_data.py           — загрузка и сборка данных из каталогов
 ```
 
 ## Сравнение с аналогами

@@ -21,6 +21,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ---
-Data files in data/ keep their own licenses:
+Data files in data/ (built by tools/fetch_data.sh) keep their own licenses:
   data/stars_hyg.json      — HYG Database v4.1, CC BY-SA 4.0 (see data/LICENSE_HYG_CC-BY-SA-4.0.md)
   data/exoplanets_oec.json — Open Exoplanet Catalogue, MIT (see data/LICENSE_OEC_MIT.md)

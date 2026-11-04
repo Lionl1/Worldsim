@@ -20,8 +20,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 const INDEX: &str = include_str!("../web/index.html");
-const STARS: &[u8] = include_bytes!("../data/stars_hyg.json");
-const EXOPLANETS: &[u8] = include_bytes!("../data/exoplanets_oec.json");
+
+/// Каталоги читаются с диска: ./data или папка проекта. Собрать: tools/fetch_data.sh
+fn data_file(name: &str) -> Option<Vec<u8>> {
+    let candidates = [std::path::PathBuf::from("data").join(name), std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data").join(name)];
+    candidates.iter().find_map(|p| std::fs::read(p).ok())
+}
+
+fn data_resp(name: &str) -> Resp {
+    match data_file(name) {
+        Some(b) => Resp { status: 200, ctype: "application/json", body: b, headers: vec![] },
+        None => Resp::err(404, "каталоги не скачаны: выполните ./tools/fetch_data.sh в папке проекта"),
+    }
+}
 
 enum Sim {
     NBody { sim: NBody, e0: f64 },
@@ -131,8 +142,8 @@ fn s<'a>(q: &'a Q, k: &str, d: &'a str) -> &'a str { q.get(k).map(|v| v.as_str()
 fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
     Ok(match path {
         "/" | "/index.html" => Resp { status: 200, ctype: "text/html; charset=utf-8", body: INDEX.as_bytes().to_vec(), headers: vec![] },
-        "/data/stars.json" => Resp { status: 200, ctype: "application/json", body: STARS.to_vec(), headers: vec![] },
-        "/data/exoplanets.json" => Resp { status: 200, ctype: "application/json", body: EXOPLANETS.to_vec(), headers: vec![] },
+        "/data/stars.json" => data_resp("stars_hyg.json"),
+        "/data/exoplanets.json" => data_resp("exoplanets_oec.json"),
         "/api/presets" => Resp::json(presets_json()),
         "/api/world" => Resp::json(world_json(&world_from(q)?)?),
         "/api/climate" => Resp::json(climate_json(q)?),
