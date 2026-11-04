@@ -159,10 +159,10 @@ float fbm(vec3 p){float s=0.,a=.5;for(int i=0;i<6;i++){s+=a*snoise(p);p*=2.03;a*
 function planetMaterial(u){
   return new THREE.ShaderMaterial({
     uniforms: Object.assign({uLow:{value:new THREE.Color(.3,.3,.3)}, uHigh:{value:new THREE.Color(.6,.6,.6)}, uOcean:{value:0}, uGas:{value:0},
-      uSun:{value:new THREE.Vector3(1,.3,.6).normalize()}, uTemp:{value:null}, uUseTemp:{value:0}, uIceT:{value:0}, uTlo:{value:200}, uThi:{value:320}, uSeed:{value:1}, uMap:{value:0}}, u),
+      uSun:{value:new THREE.Vector3(1,.25,-.15).normalize()}, uAmb:{value:.08}, uTemp:{value:null}, uUseTemp:{value:0}, uIceT:{value:0}, uTlo:{value:200}, uThi:{value:320}, uSeed:{value:1}, uMap:{value:0}}, u),
     vertexShader:`varying vec3 vP; varying vec3 vN; varying vec3 vW; void main(){ vP=position; vN=normalize(normalMatrix*normal); vW=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*viewMatrix*vec4(vW,1.);}`,
     fragmentShader: NOISE + `
-      uniform vec3 uLow,uHigh,uSun; uniform float uOcean,uGas,uUseTemp,uIceT,uTlo,uThi,uSeed,uMap; uniform sampler2D uTemp;
+      uniform vec3 uLow,uHigh,uSun; uniform float uOcean,uGas,uUseTemp,uIceT,uTlo,uThi,uSeed,uMap,uAmb; uniform sampler2D uTemp;
       varying vec3 vP; varying vec3 vN; varying vec3 vW;
       vec3 turbo(float x){x=clamp(x,0.,1.);vec3 a=vec3(.19,.07,.23),b=vec3(.27,.46,.92),c=vec3(.15,.85,.75),d=vec3(.64,.99,.24),e=vec3(.98,.73,.22),f=vec3(.85,.25,.06),g=vec3(.48,.02,.01);
         float s=x*6.;if(s<1.)return mix(a,b,s);if(s<2.)return mix(b,c,s-1.);if(s<3.)return mix(c,d,s-2.);if(s<4.)return mix(d,e,s-3.);if(s<5.)return mix(e,f,s-4.);return mix(f,g,s-5.);}
@@ -181,7 +181,7 @@ function planetMaterial(u){
           if(uIceT>0. && T<uIceT+fbm(p*6.)*3.) col=mix(col,vec3(.92,.95,1.),.9);
         }
         float diff=max(dot(normalize(vN),normalize((viewMatrix*vec4(uSun,0.)).xyz)),0.);
-        gl_FragColor=vec4(col*(.08+1.05*diff),1.);
+        gl_FragColor=vec4(col*(uAmb+(1.05-uAmb)*diff),1.);
       }`
   });
 }
@@ -215,7 +215,7 @@ function atmoColor(w){
 const worldTab = {
   async init(){
     const S = makeScene(40); Object.assign(this, S); starfield(S.scene);
-    this.camera.position.set(0,0.6,3.2);
+    this.camera.position.set(-0.5,0.5,3.6);
     this.group = new THREE.Group(); S.scene.add(this.group);
     const pr = this.presets = await api('/api/presets');
     const opt = (arr, sel, extra=[]) => extra.concat(arr).map(x=>`<option ${x===sel?'selected':''}>${x}</option>`).join('');
@@ -321,7 +321,7 @@ const climateTab = {
       const [low, high] = surfaceColors(w);
       const allT = r.temp.flat(); const lo = Math.min(...allT), hi = Math.max(...allT);
       this.mat = planetMaterial({uLow:{value:new THREE.Color(...low)}, uHigh:{value:new THREE.Color(...high)}, uOcean:{value: w.surface.name==='earth'&&w.atmosphere?.7:0},
-        uTemp:{value:this.tex}, uUseTemp:{value:1}, uIceT:{value:r.ice_t}, uTlo:{value:lo}, uThi:{value:Math.max(hi,lo+1)}, uMap:{value:+$('#c_map').value}, uSeed:{value:3}});
+        uTemp:{value:this.tex}, uUseTemp:{value:1}, uIceT:{value:r.ice_t}, uTlo:{value:lo}, uThi:{value:Math.max(hi,lo+1)}, uMap:{value:+$('#c_map').value}, uSeed:{value:3}, uAmb:{value:.55}});
       this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1,128,64), this.mat); this.scene.add(this.mesh);
       this.frame = 0; this.acc = 0;
       $('#c_info').innerHTML = `<h3>Итог (${r.world.split(' ').slice(0,2).join(' · ')})</h3><div class="kv">
@@ -352,7 +352,7 @@ function nbodyView(S, meta, opts){
     S.scene.add(mesh);
     if (b.star){ const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex(), color:col, blending:THREE.AdditiveBlending, depthWrite:false})); sp.scale.set(.6,.6,1); mesh.add(sp);
       const l = new THREE.PointLight(0xffffff, 3, 0, 0); mesh.add(l); }
-    const tg = new THREE.BufferGeometry(); const N = 1500; tg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3),3)); tg.setDrawRange(0,0);
+    const tg = new THREE.BufferGeometry(); const N = opts?.trail || 1500; tg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3),3)); tg.setDrawRange(0,0);
     const trail = new THREE.Line(tg, new THREE.LineBasicMaterial({color:col, transparent:true, opacity:.45})); S.scene.add(trail);
     return {mesh, trail, n:0, N, star:b.star, name:b.name};
   });
@@ -437,7 +437,7 @@ const systemTab = {
     this.meta = meta; this.id = meta.id; this.q = q;
     const sys = meta.system, st = sys.star, amax = Math.max(...sys.planets.map(p=>p.a*(1+p.e)), st.hz[1]);
     this.scale = 1/Math.sqrt(amax);
-    this.bodies = nbodyView(this, meta);
+    this.bodies = nbodyView(this, meta, {trail: 500});
     // обитаемая зона
     const s = this.scale, ring = new THREE.Mesh(new THREE.RingGeometry(Math.sqrt(st.hz[0]), Math.sqrt(st.hz[1]), 128), new THREE.MeshBasicMaterial({color:0x2fbf71, transparent:true, opacity:.18, side:THREE.DoubleSide}));
     ring.rotation.x = -Math.PI/2; ring.scale.setScalar(s); this.scene.add(ring);
@@ -500,7 +500,7 @@ const starmapTab = {
     this.hosts = [...hosts.values()];
     // Солнце и сетка
     const sun = new THREE.Mesh(new THREE.SphereGeometry(.25,16,8), new THREE.MeshBasicMaterial({color:0xffe08a})); this.scene.add(sun);
-    for (const r of [10, 25, 50, 100]){ const c = new THREE.LineLoop(new THREE.CircleGeometry(r, 128).setFromPoints(Array.from({length:129},(_,k)=>new THREE.Vector3(r*Math.cos(k/128*6.283),0,r*Math.sin(k/128*6.283)))), new THREE.LineBasicMaterial({color:0x22304d})); this.scene.add(c); }
+    for (const r of [10, 25, 50, 100]){ const c = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({length:129},(_,k)=>new THREE.Vector3(r*Math.cos(k/128*6.283),0,r*Math.sin(k/128*6.283)))), new THREE.LineBasicMaterial({color:0x22304d})); this.scene.add(c); }
     panel.innerHTML = `<h2>Звёзды и экзопланеты</h2><div class="muted">${n.toLocaleString('ru')} звёзд HYG (видимые глазом + всё ближе 25 пк), ${this.ex.length.toLocaleString('ru')} подтверждённых экзопланет. Кольца: 10, 25, 50, 100 пк.</div>
       <div class="row"><label>Хозяева планет до, пк</label><input id="m_d" type="range" min="10" max="1000" step="10" value="150"><span id="m_dv" style="flex:0 0 46px">150</span></div>
       <div class="row"><label>Поиск</label><input id="m_q" type="text" placeholder="TRAPPIST-1, Proxima, Kepler-452…"></div>
@@ -525,7 +525,7 @@ const starmapTab = {
     const dmax = +$('#m_d').value; this.visHosts = this.hosts.filter(h=>h.d && h.d <= dmax);
     const p = new Float32Array(this.visHosts.length*3); this.visHosts.forEach((h,i)=>p.set([h.xyz[0], h.xyz[2], -h.xyz[1]], i*3));
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(p,3));
-    this.scene.add(this.hostPts = new THREE.Points(g, new THREE.PointsMaterial({color:0x5fd38d, size:5, sizeAttenuation:false})));
+    this.scene.add(this.hostPts = new THREE.Points(g, new THREE.PointsMaterial({color:0x5fd38d, size:3, sizeAttenuation:false, transparent:true, opacity:.75})));
   },
   pick(e){
     const r = canvas.getBoundingClientRect(), m = new THREE.Vector2((e.clientX-r.left)/r.width*2-1, -(e.clientY-r.top)/r.height*2+1);
@@ -558,8 +558,8 @@ const galaxyTab = {
     panel.innerHTML = `<h2>Галактики (Барнс–Хат)</h2><div class="muted">Живое тёмное гало + балдж + экспоненциальный диск. Сила — деревом O(N log N), многопоточно.</div>
       <div class="row"><label>Пресет</label><select id="x_p"><option value="milky_way">Млечный Путь</option><option value="collision">Столкновение двух галактик</option><option value="plummer">Сфера Пламмера</option><option value="globular">Шаровое скопление</option></select></div>
       <div class="row"><label>Частиц</label><select id="x_n"><option>10000</option><option selected>20000</option><option>40000</option><option>80000</option></select></div>
-      <div class="row"><label>Шаг, млн лет</label><input id="x_dt" type="range" min="0.5" max="10" step="0.5" value="3"><span id="x_dtv" style="flex:0 0 40px">3</span></div>
-      <div class="row"><label>Тёмное гало</label><select id="x_h"><option value="1">показать</option><option value="0">скрыть</option></select></div>
+      <div class="row"><label>Шаг, млн лет</label><input id="x_dt" type="range" min="0.25" max="5" step="0.25" value="1"><span id="x_dtv" style="flex:0 0 40px">1</span></div>
+      <div class="row"><label>Тёмное гало</label><select id="x_h"><option value="0">скрыть</option><option value="1">показать</option></select></div>
       <div class="btns"><span class="btn" id="x_go">Создать</span><span class="btn sec" id="x_pp">Пауза</span><span class="btn sec" id="x_rc">Кривая вращения</span></div>
       <div class="legend" style="margin-top:8px"><span><i style="background:#9ab8ff"></i>диск</span><span><i style="background:#ffc27a"></i>балдж</span><span><i style="background:#6a4fa3"></i>тёмная материя</span></div>
       <div id="x_info" class="muted" style="margin-top:6px"></div>`;
@@ -577,10 +577,10 @@ const galaxyTab = {
     if (this.pts) this.scene.remove(this.pts);
     const n = meta.n, g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3),3)); g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n*3),3));
-    this.pts = new THREE.Points(g, new THREE.PointsMaterial({size: 1.6, vertexColors:true, sizeAttenuation:false, transparent:true, opacity:.85, blending:THREE.AdditiveBlending, depthWrite:false}));
+    this.pts = new THREE.Points(g, new THREE.PointsMaterial({size: 2.0, vertexColors:true, sizeAttenuation:false, transparent:true, opacity:.85, blending:THREE.AdditiveBlending, depthWrite:false}));
     this.scene.add(this.pts); this.recolor();
     const s = 50/meta.scale_kpc*0.1; this.pts.scale.setScalar(1/meta.scale_kpc*10);
-    this.camera.position.set(0, 35, 55); this.controls.target.set(0,0,0);
+    this.camera.position.set(0, 20, 30); this.controls.target.set(0,0,0);
     this.loop(epoch);
   },
   recolor(){
@@ -636,7 +636,7 @@ const cosmoTab = {
     if (this.pts) this.scene.remove(this.pts);
     const n = meta.n**3, g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3),3)); g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n*3),3));
-    this.pts = new THREE.Points(g, new THREE.PointsMaterial({size: meta.n>32?1.1:2.2, vertexColors:true, sizeAttenuation:false, transparent:true, opacity:.8, blending:THREE.AdditiveBlending, depthWrite:false}));
+    this.pts = new THREE.Points(g, new THREE.PointsMaterial({size: meta.n>32?1.1:2.2, vertexColors:true, sizeAttenuation:false, transparent:true, opacity: meta.n>32?.45:.8, blending:THREE.AdditiveBlending, depthWrite:false}));
     this.scene.add(this.pts);
     if (this.box) this.scene.remove(this.box);
     this.box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(meta.box,meta.box,meta.box)), new THREE.LineBasicMaterial({color:0x22304d})); this.scene.add(this.box);
@@ -717,6 +717,7 @@ renderer.setAnimationLoop(() => {
   if (current?.scene){ current.controls.update(); current.update(dt); renderer.render(current.scene, current.camera); }
   else { renderer.clear(); }
 });
+addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t in tabs && current !== tabs[t]) switchTab(t); });
 resize();
 switchTab((location.hash||'#world').slice(1) in tabs ? (location.hash||'#world').slice(1) : 'world');
 </script>
