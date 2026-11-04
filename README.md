@@ -3,7 +3,7 @@
 **Открытая модель вселенной на Rust: от броска камня до космической паутины. Каждый закон проверяется автоматически.**
 
 *An open, dependency-free Rust model of the universe — planets, climate, star systems, galaxies and cosmology —
-with an in-browser 3D viewer, real star/exoplanet catalogs, dataset generation and 59 automated physics checks.*
+with an in-browser 3D viewer, real star/exoplanet catalogs, a robot-training environment, dataset generation and 67 automated physics checks.*
 
 ```bash
 git clone https://github.com/Lionl1/worldsim && cd worldsim
@@ -24,7 +24,9 @@ cargo run --release          # соберёт и откроет 3D-интерф�
 | 🔭 **Карта** | 11 270 звёзд HYG + 5 283 экзопланеты | любую экзопланету — в модель мира одним кликом |
 | 🌀 **Галактики** | Млечный Путь, столкновение галактик, скопления | Барнс–Хат O(N log N), живое тёмное гало, вириал, кривая вращения |
 | 🕸️ **Космология** | ΛCDM, рост структур из Большого взрыва | Фридман, начальные условия Зельдовича, спектр BBKS/σ₈, particle-mesh через FFT |
-| ✅ **Законы** | 59 тестов | см. ниже |
+| ✅ **Законы** | 67 тестов | см. ниже |
+
+Отдельной вкладки у [среды для обучения роботов](#среда-для-обучения-роботов) нет: она работает через HTTP API и как библиотека.
 
 ## Проверка законов
 
@@ -49,6 +51,8 @@ cargo test --release                # то же, как тесты
 | Фридман | возраст Вселенной (Planck 2018) | 13.786 млрд лет |
 | Рост структур | P(k) в PM против D(a)² | в пределах 4% |
 | Планк → Стефан–Больцман, Вин | численное интегрирование спектра | 10⁻⁸ / 10⁻⁶ |
+| Уравнение Циолковского | посадочный модуль, полный расход топлива | Δv = 1093.18 м/с (теория 1093.14) |
+| Импульсная теория винта | дрон на Марсе: обычные винты / площадь ×40 | −3.41 / +8.88 м/с (падает / взлетает) |
 
 ## Командная строка
 
@@ -64,6 +68,70 @@ worldsim serve --port 8080
 
 Задачи датасетов: `projectile`, `orbit`, `thermal`, `particle`, `system`. У каждого сэмпла есть
 `validation_error` и `valid`, а `meta.json` хранит миры, seed и константы.
+
+## Среда для обучения роботов
+
+Три задачи в стиле Gymnasium. Агент видит только зашумлённые показания сенсоров и выдаёт непрерывные команды приводам,
+а физика та же, что в остальном worldsim, поэтому одного агента можно учить на разных и смешанных мирах.
+
+| Задача | Цель | Действия | Наблюдения |
+|---|---|---|---|
+| `lander` | мягко сесть на площадку | `throttle` 0…1, `torque_x/y/z` −1…1 | 26: GPS, скорость, ориентация, гироскоп, радиовысотомер, акселерометр, топливо, давление, лидар |
+| `drone` | долететь до точки и зависнуть | `rotor_1…4` 0…1 | 19: цель, скорость, ориентация, гироскоп, радиовысотомер, акселерометр, батарея, давление, плотность воздуха |
+| `rover` | доехать до цели по рельефу | `left`, `right` −1…1 | 28: цель, курс, скорость, наклон, батарея, высота Солнца, температура, давление, лидар |
+
+### HTTP API
+
+```bash
+worldsim serve --port 8080 --no-open
+
+curl 'http://localhost:8080/api/env/make?task=lander&physics=moon&seed=42'   # вернёт id сессии, имена и границы
+curl 'http://localhost:8080/api/env/step?id=1&action=0.5,0,0,0'              # одно действие
+curl 'http://localhost:8080/api/env/step?id=1&mode=auto&repeat=100&text=1'   # 100 шагов автопилота + описание текстом
+```
+
+`step` возвращает `obs`, `reward`, `terminated`, `truncated` и `info`. Сервер держит соединение открытым (keep-alive), поэтому
+агент может слать много запросов подряд через одно подключение.
+
+| Запрос `/api/env/…` | Параметры |
+|---|---|
+| `tasks`, `list` | — |
+| `make` | `task`, `physics`, `atmosphere`, `surface`, `gravity_scale`, `randomize=1`, `noise` (0 — идеальные сенсоры), `rotor_scale`, `max_steps`, `seed` |
+| `reset` | `id`, `seed` |
+| `step` | `id`, `action=a,b,…` или `mode=auto\|random`, `repeat` (1–100), `text=1` |
+| `state` | `id` |
+| `terrain` | `id`, `n` (сетка 17–257) |
+| `camera` | `id`, `w`, `h` (4–256), `fov` — карта глубины |
+
+### Из Rust
+
+```rust
+use worldsim::env::{Env, EnvConfig};
+let mut cfg = EnvConfig::new("lander", "moon")?;
+cfg.randomize = true;                  // случайные параметры в каждом эпизоде
+let mut env = Env::new(cfg)?;
+env.reset(42);
+loop {
+    let action = env.autopilot();      // замените своей политикой: наблюдения → действие
+    let (_obs, _reward, terminated, truncated) = env.step(&action);
+    if terminated || truncated { break; }
+}
+println!("{}: {:.1}", env.info.reason, env.ep_return);
+```
+
+### Базовая линия
+
+С этими числами можно сравнивать обученного агента. Встроенный ПД-автопилот, успешные эпизоды из 10, со случайными
+параметрами и стандартным размером винтов:
+
+| Задача | Земля | Луна | Марс |
+|---|---|---|---|
+| `lander` | 9 | 8 | 8 |
+| `drone` | 10 | 0 | 0 |
+| `rover` | 7 | 8 | 5 |
+
+На Луне дрону не на что опереться: там нет воздуха. На Марсе обычным винтам не хватает плотности атмосферы. Повторить замер:
+`cargo run --release --example probe_env`.
 
 ## Как библиотека
 
@@ -84,7 +152,8 @@ src/
   climate                                     — сезонная модель энергобаланса
   galaxy                                      — Барнс–Хат, начальные условия галактик
   cosmology                                   — Фридман, FFT, particle-mesh
-  validate                                    — 59 проверок законов
+  env                                         — среда для обучения роботов: lander, drone, rover
+  validate                                    — 67 проверок законов
   datagen  server  json  main                 — датасеты, HTTP-сервер, CLI
 web/index.html                                — 3D-интерфейс (three.js), встроен в бинарник
 data/                                         — каталоги HYG и OEC (скачиваются tools/fetch_data.sh, свои лицензии)
