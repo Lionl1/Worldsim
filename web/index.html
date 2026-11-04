@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>worldsim — модель вселенной</title>
 <style>
-:root{--bg:#0a0e15;--side:#10151f;--panel:#131925;--raised:#1a2230;--line:#2a3445;--text:#edf1f7;--soft:#c5cedc;--muted:#a3aec1;--accent:#5aa2ff;--accent-strong:#2f6fed;--good:#4ade80;--bad:#ff7b7b;--warn:#fbbf4b}
+:root{--bg:#0a0e15;--side:#10151f;--panel:#131925;--raised:#1a2230;--line:#2a3445;--hair:#222b3a;--field:#3a475c;--field-h:#52617a;--track:#232c3b;--axis:#7c8aa3;--code:#d8e4f7;--text:#edf1f7;--soft:#c5cedc;--muted:#a3aec1;--accent:#5aa2ff;--accent-strong:#2f6fed;--good:#4ade80;--bad:#ff7b7b;--warn:#fbbf4b;--good-bg:#123a26;--bad-bg:#451c20;--warn-bg:#40310f;--panel-w:384px;--chart-h:216px}
+:root[data-theme=light]{--bg:#f4f6f9;--side:#ffffff;--panel:#ffffff;--raised:#eef1f6;--line:#d5dbe5;--hair:#e3e7ee;--field:#b6c0cf;--field-h:#8b98ab;--track:#dfe4ec;--axis:#6b7789;--code:#1c2b45;--text:#141a24;--soft:#35404f;--muted:#566173;--accent:#1f66e0;--accent-strong:#1f66e0;--good:#0f7a3d;--bad:#c62f3a;--warn:#8f5e00;--good-bg:#dcf5e6;--bad-bg:#fbe2e4;--warn-bg:#fbeecb}
+.no-motion *,.no-motion *::before,.no-motion *::after{animation-duration:.01ms!important;transition-duration:.01ms!important}.no-chart #chartbox:not(main.plot #chartbox){display:none!important}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
 #app{display:grid;grid-template-columns:216px minmax(0,1fr);height:100%}
 /* меню */
@@ -17,13 +19,13 @@ nav button:hover{background:var(--raised);color:var(--text)}nav button:focus-vis
 nav button.on{background:var(--accent-strong);color:#fff;font-weight:600}
 nav .foot{margin-top:auto;padding:14px 8px 2px;color:var(--muted);font-size:12px;line-height:1.45}
 /* единая раскладка: сцена в центре, график под ней, управление справа */
-main{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 384px;grid-template-rows:auto minmax(0,1fr) auto}
+main{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) var(--panel-w);grid-template-rows:auto minmax(0,1fr) auto}
 #hud{grid-column:1;grid-row:1;background:var(--side);border-bottom:1px solid var(--line);padding:9px 16px;color:var(--soft);font-variant-numeric:tabular-nums;font-size:14px}.hud b{color:var(--text);font-weight:600}.hud .k{color:var(--muted)}
 #stage{grid-column:1;grid-row:2;position:relative;min-height:0;min-width:0;background:#05070c}
 #gl{position:absolute;inset:0;width:100%;height:100%;display:block;transition:opacity .25s}
 #bh{position:absolute;inset:0;width:100%;height:100%;display:none;background:#000;z-index:1;object-fit:contain}
 main.plot #stage{display:none}main.plot #chartbox{grid-row:1/4;height:auto;display:block!important;padding:18px}
-#chartbox{grid-column:1;grid-row:3;height:216px;background:var(--side);border-top:1px solid var(--line);padding:8px 10px}#chart{width:100%;height:100%;display:block}
+#chartbox{grid-column:1;grid-row:3;height:var(--chart-h);background:var(--side);border-top:1px solid var(--line);padding:8px 10px}#chart{width:100%;height:100%;display:block}
 #panel{grid-column:2;grid-row:1/4;background:var(--panel);border-left:1px solid var(--line);padding:18px;overflow:auto;min-height:0}
 .panel h2{margin:0 0 6px;font-size:18px;font-weight:650;letter-spacing:-.2px;line-height:1.3}.panel>.muted:first-of-type{margin-bottom:12px}
 h3{margin:20px 0 8px;font-size:13px;font-weight:650;color:var(--text);padding-top:14px;border-top:1px solid var(--line);text-transform:none;letter-spacing:0}
@@ -31,19 +33,23 @@ h3{margin:20px 0 8px;font-size:13px;font-weight:650;color:var(--text);padding-to
 .muted{color:var(--muted)}.ok{color:var(--good)}.no{color:var(--bad)}
 /* поля */
 .row{display:flex;gap:10px;align-items:center;margin:8px 0}.row label{flex:0 0 128px;color:var(--soft);font-size:14px;line-height:1.25}.row>*:last-child{flex:1;min-width:0}
-select,input[type=number],input[type=text],textarea{background:var(--bg);color:var(--text);border:1px solid #3a475c;border-radius:6px;padding:7px 9px;width:100%;font:inherit;transition:border-color .15s,box-shadow .15s}
-select:hover,input:hover,textarea:hover{border-color:#52617a}select:focus,input:focus,textarea:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px rgba(90,162,255,.25)}
+select,input[type=number],input[type=text],textarea{background:var(--bg);color:var(--text);border:1px solid var(--field);border-radius:6px;padding:7px 9px;width:100%;font:inherit;transition:border-color .15s,box-shadow .15s}
+select:hover,input:hover,textarea:hover{border-color:var(--field-h)}select:focus,input:focus,textarea:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px rgba(90,162,255,.25)}
 input[type=range]{width:100%;accent-color:var(--accent);height:20px}
 .btn{all:unset;cursor:pointer;background:var(--accent-strong);color:#fff;padding:8px 14px;border-radius:6px;text-align:center;font-weight:600;transition:background .15s}.btn:hover{background:#4383f7}.btn:focus-visible{outline:2px solid #fff;outline-offset:1px}
-.btn.sec{background:var(--raised);color:var(--text);font-weight:500;box-shadow:inset 0 0 0 1px #3a475c}.btn.sec:hover{background:#242e3f}.btn.off{opacity:.5;pointer-events:none}.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.btn.sec{background:var(--raised);color:var(--text);font-weight:500;box-shadow:inset 0 0 0 1px var(--field)}.btn.sec:hover{background:var(--track)}.btn.off{opacity:.5;pointer-events:none}.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 /* таблицы */
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--muted);font-weight:500;font-size:13px}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:0}.kv>div{padding:5px 0;border-bottom:1px solid #222b3a}.kv div:nth-child(odd){color:var(--soft);padding-right:12px}.kv div:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
-.pill{display:inline-block;padding:2px 9px;border-radius:4px;font-size:13px;font-weight:600;background:var(--raised);color:var(--soft);white-space:nowrap}.pill.g{background:#123a26;color:var(--good)}.pill.r{background:#451c20;color:var(--bad)}.pill.y{background:#40310f;color:var(--warn)}
-.bar{height:8px;border-radius:2px;background:#232c3b;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:0}.kv>div{padding:5px 0;border-bottom:1px solid var(--hair)}.kv div:nth-child(odd){color:var(--soft);padding-right:12px}.kv div:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:2px 9px;border-radius:4px;font-size:13px;font-weight:600;background:var(--raised);color:var(--soft);white-space:nowrap}.pill.g{background:var(--good-bg);color:var(--good)}.pill.r{background:var(--bad-bg);color:var(--bad)}.pill.y{background:var(--warn-bg);color:var(--warn)}
+.bar{height:8px;border-radius:2px;background:var(--track);overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--soft)}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
 .cam{width:100%;image-rendering:pixelated;border-radius:4px;background:#000;display:block}
 /* законы */
+#settings{position:absolute;inset:0;overflow:auto;padding:28px 36px;display:none;background:var(--bg);z-index:3}
+.pg{border-top:1px solid var(--line)}.pg summary{cursor:pointer;padding:9px 0;font-weight:600;list-style-position:inside}.pg .row{margin:6px 0}.badge{display:inline-block;min-width:18px;text-align:center;border-radius:9px;background:var(--accent-strong);color:#fff;font-size:12px;padding:0 5px}.badge:empty{display:none}
+.tabs2{display:flex;gap:6px;margin:12px 0 4px}.tabs2 .btn{flex:1}.item{padding:9px 0;border-bottom:1px solid var(--hair)}.item input[type=text]{margin-bottom:6px}.item .row{margin:6px 0 0}.item1{margin:6px 0}.del{padding:5px 9px;flex:0 0 auto!important}.pset{display:flex;gap:6px;margin:8px 0}.pset select{flex:1;min-width:0}
+input:invalid{border-color:var(--bad)}
 #laws{position:absolute;inset:0;overflow:auto;padding:26px 32px;display:none;background:var(--bg);z-index:3}#laws h2{font-size:22px;margin:0 0 14px}#laws table{max-width:1200px}#laws td{font-size:14px}
 #tip{position:absolute;pointer-events:none;background:var(--raised);border:1px solid var(--line);padding:6px 8px;border-radius:4px;display:none}
 #veil{position:absolute;inset:0;pointer-events:none;opacity:0;background:var(--bg);transition:opacity .16s ease;z-index:6}#veil.on{opacity:1}
@@ -54,10 +60,10 @@ table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,t
 .report h2{font-size:22px;margin:0 0 4px;letter-spacing:-.3px}.report h3{font-size:16px;margin:30px 0 10px;padding:0;border:0}.report td{font-size:14px}.report .sub{color:var(--muted);margin-bottom:18px}
 .ml-empty{max-width:520px;margin:18vh auto 0;text-align:center;color:var(--soft)}.ml-empty b{display:block;font-size:20px;margin-bottom:8px;color:var(--text)}
 .verdict{display:flex;gap:28px;align-items:center;flex-wrap:wrap;padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.verdict .num{font-size:44px;font-weight:700;letter-spacing:-1px;line-height:1;font-variant-numeric:tabular-nums}.verdict .txt{flex:1;min-width:240px}.advice{margin-top:14px;font-size:15px;color:var(--text);line-height:1.5}
-.hbar{display:grid;grid-template-columns:minmax(150px,34%) 1fr 62px;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid #222b3a}.hbar b{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}.hbar .bar{height:10px}.bar i.red,.tor i.red{background:var(--bad)}
-.tor{position:relative;height:10px;background:#232c3b;border-radius:2px;overflow:hidden}.tor::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:#7c8aa3}.tor i{position:absolute;top:0;bottom:0;display:block}.tor i.grn{background:var(--good)}.tor u{position:absolute;top:4px;height:2px;background:#fff;z-index:1;opacity:.75}.tor.ci{margin:5px 0 4px}tr.dim td{color:var(--muted)}.ml-foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+.hbar{display:grid;grid-template-columns:minmax(150px,34%) 1fr 62px;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--hair)}.hbar b{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}.hbar .bar{height:10px}.bar i.red,.tor i.red{background:var(--bad)}
+.tor{position:relative;height:10px;background:var(--track);border-radius:2px;overflow:hidden}.tor::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--axis)}.tor i{position:absolute;top:0;bottom:0;display:block}.tor i.grn{background:var(--good)}.tor u{position:absolute;top:4px;height:2px;background:var(--text);z-index:1;opacity:.75}.tor.ci{margin:5px 0 4px}tr.dim td{color:var(--muted)}.ml-foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
 .hrun{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:7px 0;border-bottom:1px solid var(--line);align-items:center}.hrun label{color:var(--text);display:flex;gap:6px;align-items:baseline}.hrun .muted{grid-column:1;font-size:13px}.hrun .btn{grid-column:2;grid-row:1/3;padding:4px 10px}
-#ml_s{height:420px;min-height:240px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#d8e4f7;resize:vertical}#ml_err{margin-top:8px}
+#ml_s{height:460px;min-height:240px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--code);resize:vertical}#ml_err{margin-top:8px}
 @media (max-width:1100px){main{grid-template-columns:minmax(0,1fr) 320px}.row label{flex-basis:108px}}
 @media (max-width:760px){#app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}nav{flex-direction:row;padding:6px;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;gap:2px;scrollbar-width:none}nav h1,nav .sub,nav .foot,nav .grp{display:none}nav button{white-space:nowrap;flex:0 0 auto}
 main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 40vh minmax(0,1fr)}#hud{grid-row:1;padding:6px 10px;font-size:13px}#stage{grid-row:2}#chartbox{display:none!important}#panel{grid-column:1;grid-row:3;border-left:0;border-top:1px solid var(--line);padding:14px}#laws{padding:14px}#laws table{min-width:640px}#mission{padding:14px}.hbar{grid-template-columns:minmax(110px,40%) 1fr 54px}#ml_s{height:240px}.report{overflow-x:auto}}
@@ -84,6 +90,8 @@ main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 40vh minmax(0,1
   <div class="grp">Физика</div>
   <button data-tab="blackhole">Чёрные дыры</button>
   <button data-tab="lab">Лаборатория</button>
+  <div class="grp">Прочее</div>
+  <button data-tab="settings">Настройки</button>
   <div class="foot">Данные: HYG v4.1 (CC BY-SA 4.0), Open Exoplanet Catalogue (MIT), Planck 2018, NASA Fact Sheets.<br>Мышь: вращение, колесо — масштаб.</div>
 </nav>
 <main>
@@ -92,6 +100,7 @@ main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 40vh minmax(0,1
   <div id="panel" class="panel"></div>
   <div id="chartbox" class="chartbox" style="display:none"><canvas id="chart"></canvas></div>
   <div id="laws"></div>
+  <div id="settings"></div>
   <div id="veil"></div>
   <div id="tip"></div>
   <div id="busy"><span id="busy_t">считаю…</span></div>
@@ -164,6 +173,7 @@ const RU_BODY = {sun:'Солнце', mercury:'Меркурий', venus:'Вене
 // ------------------------------------------------------------ графики
 let lastChart = null;
 function chart(series, o={}){
+  const css = getComputedStyle(document.documentElement), col = k => css.getPropertyValue(k).trim();
   chartbox.style.display = 'block'; lastChart = [series, o];
   // размер берём из раскладки: график тянется вместе с панелью и остаётся чётким на любом экране
   const dpr = devicePixelRatio || 1, W = chartEl.clientWidth || 460, H = chartEl.clientHeight || 200, c = chartEl.getContext('2d');
@@ -178,18 +188,18 @@ function chart(series, o={}){
   if (y1===y0){ y1+=1; y0-=1; } if (x1===x0){ x1+=1; x0-=1; }
   const pad=(y1-y0)*0.06; if (!o.yr){ y0-=pad; y1+=pad; }
   const X = v => L+(tx(v)-x0)/(x1-x0)*(W-L-R), Y = v => H-B-(ty(v)-y0)/(y1-y0)*(H-T-B);
-  c.strokeStyle='#2a3445'; c.fillStyle='#a3aec1'; c.font='12px -apple-system,Segoe UI,sans-serif'; c.lineWidth=1;
+  c.strokeStyle=col('--line'); c.fillStyle=col('--muted'); c.font='12px -apple-system,Segoe UI,sans-serif'; c.lineWidth=1;
   for (let k=0;k<=4;k++){ const yy=T+k*(H-T-B)/4; c.beginPath(); c.moveTo(L,yy); c.lineTo(W-R,yy); c.stroke();
     const v=y1-(y1-y0)*k/4; c.fillText(o.logy? '1e'+v.toFixed(1) : fmt(v, Math.abs(v)<10?2:0), 4, yy+3); }
   for (let k=0;k<=4;k++){ const v=x0+(x1-x0)*k/4, xx=L+k*(W-L-R)/4; c.fillText(o.logx? '1e'+v.toFixed(1) : fmt(v, Math.abs(v)<10?2:0), xx-12, H-B+13); }
-  c.fillStyle='#edf1f7'; c.font='600 13px -apple-system,Segoe UI,sans-serif'; c.fillText(o.title||'', L, 15); c.font='12px -apple-system,Segoe UI,sans-serif';
-  c.fillStyle='#a3aec1'; c.fillText(o.xlabel||'', W-R-c.measureText(o.xlabel||'').width, H-3);
+  c.fillStyle=col('--text'); c.font='600 13px -apple-system,Segoe UI,sans-serif'; c.fillText(o.title||'', L, 15); c.font='12px -apple-system,Segoe UI,sans-serif';
+  c.fillStyle=col('--muted'); c.fillText(o.xlabel||'', W-R-c.measureText(o.xlabel||'').width, H-3);
   let lx = L; // легенда отдельной строкой под заголовком: длинный заголовок на неё не наезжает
   for (const s of series){
     c.strokeStyle = c.fillStyle = s.color || '#6fb7ff'; c.lineWidth = s.width||1.6;
     if (s.dots){ for (let i=0;i<s.x.length;i++){ const xx=X(s.x[i]), yy=Y(s.y[i]); if(isFinite(xx)&&isFinite(yy)) c.fillRect(xx-1,yy-1,s.dot||2,s.dot||2);} }
     else { c.beginPath(); let st=false; for (let i=0;i<s.x.length;i++){ const xx=X(s.x[i]), yy=Y(s.y[i]); if(!isFinite(xx)||!isFinite(yy)) continue; st? c.lineTo(xx,yy) : c.moveTo(xx,yy); st=true; } if(s.dash) c.setLineDash([4,3]); c.stroke(); c.setLineDash([]); }
-    if (s.label){ c.fillRect(lx, 28, 12, 3); c.fillStyle='#c5cedc'; c.fillText(s.label, lx+16, 34); lx += 22 + c.measureText(s.label).width; }
+    if (s.label){ c.fillRect(lx, 28, 12, 3); c.fillStyle=col('--soft'); c.fillText(s.label, lx+16, 34); lx += 22 + c.measureText(s.label).width; }
   }
   if (o.marker!=null){ c.strokeStyle='#ffc361'; c.beginPath(); c.moveTo(X(o.marker),T); c.lineTo(X(o.marker),H-B); c.stroke(); }
 }
@@ -896,21 +906,37 @@ const robotsTab = {
       <div class="row"><label>Аппарат</label><select id="r_t"><option value="lander">Посадочный модуль</option><option value="drone">Дрон</option><option value="rover">Ровер</option></select></div>
       <div class="row"><label>Гравитация</label><select id="r_w">${opt(pr.physics.filter(x=>x!=='sun'),'moon')}</select></div>
       <div class="row"><label>Атмосфера</label><select id="r_a"><option>auto</option>${opt(pr.atmosphere)}</select></div>
-      <div class="row"><label>Винты, ×площадь</label><input id="r_r" type="number" min="1" value="1" title="На Марсе нужно около 16"></div>
-      <div class="row"><label>Порывы, м/с</label><input id="r_g" type="range" min="0" max="10" step="0.5" value="0"><span id="r_gv" style="flex:0 0 28px;text-align:right">0</span></div>
       <div class="row"><label>Управление</label><select id="r_m"><option value="auto">Автопилот</option><option value="random">Случайное</option></select></div>
       <div class="row"><label>Скорость</label><input id="r_s" type="range" min="1" max="10" step="1" value="2"><span id="r_sv" style="flex:0 0 28px;text-align:right">×2</span></div>
       <div class="row"><label>Лучи лидара</label><select id="r_l"><option value="1">Показать</option><option value="0">Скрыть</option></select></div>
       <div class="btns"><span class="btn" id="r_go">Новый эпизод</span><span class="btn sec" id="r_p">Пауза</span></div>
+      <h3>Параметры</h3><div class="muted" style="margin-bottom:4px">Изменения применяются к новому эпизоду. Пустое поле означает значение по умолчанию.</div>
+      <div class="pset"><select id="r_ps" aria-label="Пресеты"></select><span class="btn sec del" id="r_pl">Открыть</span><span class="btn sec del" id="r_pd">×</span></div>
+      <div class="btns" style="margin:0 0 8px"><span class="btn sec del" id="r_psv">Сохранить как…</span><span class="btn sec del" id="r_pex">Экспорт</span><span class="btn sec del" id="r_pim">Импорт</span><span class="btn sec del" id="r_prs">Сброс</span><span class="btn sec del" id="r_cli">Команда CLI</span></div>
+      <div id="r_pf"></div><div id="r_msg" class="muted" style="margin-top:6px"></div>
       <h3>Сейчас</h3><div id="r_info"></div>
       <h3>Камера аппарата</h3><canvas id="r_cam" width="96" height="64" class="cam"></canvas>
       <h3>Скрыто от агента</h3><div id="r_hidden" class="kv"></div>`;
-    $('#r_g').oninput = e => $('#r_gv').textContent = e.target.value;
     $('#r_s').oninput = e => $('#r_sv').textContent = '×'+e.target.value;
     $('#r_go').onclick = () => { this.seed = (this.seed||1)+1; this.start(); };
     $('#r_p').onclick = () => { this.paused = !this.paused; $('#r_p').textContent = this.paused?'Продолжить':'Пауза'; };
     $('#r_l').onchange = e => { if (this.rays) this.rays.visible = e.target.value==='1'; };
-    for (const id of ['r_t','r_w','r_a','r_r','r_g']) $('#'+id).onchange = () => this.start();
+    this.schema = await paramSchema(); this.pvals = {};
+    const rebuild = () => { paramForm($('#r_pf'), this.schema, $('#r_t').value, this.pvals, () => { clearTimeout(this.deb); this.deb = setTimeout(()=>this.start(), 400); }, this.schemaOpen||[]); $('#r_pf').querySelectorAll('details').forEach(d=>d.ontoggle=()=>{ this.schemaOpen=[...$('#r_pf').querySelectorAll('details[open] summary')].map(x=>x.firstChild.textContent.trim()); }); };
+    const presets = () => store.get('robot_presets', {});
+    const showPresets = () => { const p=presets(), n=Object.keys(p); $('#r_ps').innerHTML = n.length ? n.map(x=>`<option>${esc(x)}</option>`).join('') : '<option value="">Нет сохранённых</option>'; };
+    const current = () => ({task:$('#r_t').value, world:$('#r_w').value, atmosphere:$('#r_a').value, params:this.pvals});
+    const applyPreset = c => { if (!c || !c.task) throw new Error('файл не похож на пресет'); $('#r_t').value=c.task; $('#r_w').value=c.world||'moon'; $('#r_a').value=c.atmosphere||'auto'; this.pvals={...(c.params||{})}; rebuild(); this.start(); };
+    $('#r_t').onchange = () => { this.pvals = {}; rebuild(); this.start(); };
+    for (const id of ['r_w','r_a']) $('#'+id).onchange = () => this.start();
+    $('#r_psv').onclick = () => { const n=prompt('Название пресета:'); if (n){ store.set('robot_presets',{...presets(),[n]:current()}); showPresets(); $('#r_ps').value=n; } };
+    $('#r_pl').onclick = () => { const c=presets()[$('#r_ps').value]; if (c) applyPreset(c); };
+    $('#r_pd').onclick = () => { const p=presets(); delete p[$('#r_ps').value]; store.set('robot_presets',p); showPresets(); };
+    $('#r_pex').onclick = () => download(JSON.stringify(current(),null,2), 'worldsim_preset.json');
+    $('#r_pim').onclick = async () => { const t=await pickFile('.json,application/json'); if (!t) return; try { applyPreset(JSON.parse(t)); $('#r_msg').textContent='Пресет загружен.'; } catch(e){ $('#r_msg').innerHTML=`<span class="no">${esc(e.message)}</span>`; } };
+    $('#r_prs').onclick = () => { this.pvals={}; rebuild(); this.start(); };
+    $('#r_cli').onclick = async () => { const w=$('#r_a').value==='auto'?$('#r_w').value:`${$('#r_w').value}:${$('#r_a').value}:${$('#r_w').value}`, q=paramsQuery(this.pvals), cmd=`worldsim collect --task ${$('#r_t').value} --worlds ${w} --episodes 100 --randomize${q?` --set ${q}`:''} --out runs/data`; $('#r_msg').textContent=cmd; try { await navigator.clipboard.writeText(cmd); $('#r_msg').textContent='Скопировано: '+cmd; } catch(e){} };
+    rebuild(); showPresets();
     this.seed = 1; this.paused = false;
     // пыль от струи при посадке
     const P = 240, pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(P*3).fill(1e6),3));
@@ -921,7 +947,7 @@ const robotsTab = {
   heightAt(x, y){ const t=this.ter, n=t.n, c=t.size/(n-1), fx=Math.min(Math.max((x+t.size/2)/c,0),n-1.001), fy=Math.min(Math.max((y+t.size/2)/c,0),n-1.001), i=fx|0, j=fy|0, u=fx-i, v=fy-j, H=(a,b)=>t.h[b*n+a]; return H(i,j)*(1-u)*(1-v)+H(i+1,j)*u*(1-v)+H(i,j+1)*(1-u)*v+H(i+1,j+1)*u*v; },
   async start(){
     const my = this.run = (this.run||0)+1, ep0 = epoch, task = $('#r_t').value;
-    const q = {task, physics:$('#r_w').value, atmosphere:$('#r_a').value, rotor_scale:$('#r_r').value||1, gust:$('#r_g').value, seed:this.seed};
+    const q = {task, physics:$('#r_w').value, atmosphere:$('#r_a').value, params:paramsQuery(this.pvals), seed:this.seed};
     let meta, ter;
     try { meta = await api('/api/env/make?'+qs(q)); ter = await api(`/api/env/terrain?id=${meta.id}&n=161`); }
     catch(e){ $('#r_info').innerHTML = `<div class="no">${esc(e.message)}</div>`; return; }
@@ -952,7 +978,7 @@ const robotsTab = {
     const span = task==='lander' ? 500 : 160;
     for (let i=0;i<R;i++){ const a=hash(i,this.seed)*6.283, d=Math.sqrt(hash(i+.5,this.seed+1))*span+6, x=d*Math.cos(a), y=d*Math.sin(a), sc=.04+Math.pow(hash(i,3),3)*(task==='lander'?.8:.22); ax.set(hash(i,4)-.5,hash(i,5)-.5,hash(i,6)-.5).normalize(); rq.setFromAxisAngle(ax,hash(i,7)*6); mt.compose(new THREE.Vector3(x,this.heightAt(x,y)+sc*.2,-y),rq,new THREE.Vector3(sc,sc*.7,sc)); rock.setMatrixAt(i,mt); }
     rock.castShadow = rock.receiveShadow = true; this.rocks = rock; this.scene.add(rock);
-    this.body = task==='lander' ? buildLander() : task==='drone' ? buildDrone(+q.rotor_scale||1) : buildRover(); this.scene.add(this.body);
+    this.body = task==='lander' ? buildLander() : task==='drone' ? buildDrone(this.pvals.rotor_scale||1) : buildRover(); this.scene.add(this.body);
     if (task==='lander'){
       const pm = new THREE.Mesh(new THREE.ConeGeometry(.42,1,20,1,true).translate(0,-.5,0), new THREE.MeshBasicMaterial({color:0x9fd0ff, transparent:true, opacity:.65, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide})); pm.position.y=-.88; this.plume=pm; this.body.add(pm);
       const glow = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex(), color:0xffc98a, blending:THREE.AdditiveBlending, depthWrite:false})); glow.scale.set(2.4,2.4,1); glow.position.y=-.1; pm.add(glow);
@@ -962,8 +988,8 @@ const robotsTab = {
     const v3 = p => new THREE.Vector3(p[0],p[2],-p[1]), gp = v3(st.goal);
     // цель: посадочная площадка, точка зависания или флаг
     this.goal = new THREE.Group(); this.goal.position.copy(gp);
-    const green = new THREE.MeshBasicMaterial({color:0x4ade80, side:THREE.DoubleSide});
-    if (task==='lander'){ gp.y; this.goal.position.y += .12; this.goal.add(new THREE.Mesh(new THREE.RingGeometry(24.3,25,96).rotateX(-Math.PI/2), green), new THREE.Mesh(new THREE.RingGeometry(5.5,6,64).rotateX(-Math.PI/2), green)); for (let i=0;i<4;i++){ const b=new THREE.Mesh(new THREE.PlaneGeometry(.6,6).rotateX(-Math.PI/2), green); b.rotation.y=i*Math.PI/2; b.position.set(Math.sin(i*Math.PI/2)*9,0,Math.cos(i*Math.PI/2)*9); this.goal.add(b); } }
+    const green = new THREE.MeshBasicMaterial({color:0x4ade80, side:THREE.DoubleSide}), pad = meta.params[meta.param_names.indexOf('pad_radius')];
+    if (task==='lander'){ gp.y; this.goal.position.y += .12; this.goal.add(new THREE.Mesh(new THREE.RingGeometry(pad-.7,pad,96).rotateX(-Math.PI/2), green), new THREE.Mesh(new THREE.RingGeometry(5.5,6,64).rotateX(-Math.PI/2), green)); for (let i=0;i<4;i++){ const b=new THREE.Mesh(new THREE.PlaneGeometry(.6,6).rotateX(-Math.PI/2), green); b.rotation.y=i*Math.PI/2; b.position.set(Math.sin(i*Math.PI/2)*9,0,Math.cos(i*Math.PI/2)*9); this.goal.add(b); } }
     else if (task==='drone'){ this.goal.add(new THREE.Mesh(new THREE.TorusGeometry(2,.03,8,64).rotateX(Math.PI/2), green)); this.goal.add(new THREE.Mesh(new THREE.SphereGeometry(.12,14,10), green)); const stem=new THREE.Mesh(new THREE.CylinderGeometry(.012,.012,40,6), new THREE.MeshBasicMaterial({color:0x4ade80, transparent:true, opacity:.4})); stem.position.y=-20; this.goal.add(stem); }
     else { this.goal.add(new THREE.Mesh(new THREE.RingGeometry(2.85,3,64).rotateX(-Math.PI/2).translate(0,.1,0), green)); const pole=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,2.2,8).translate(0,1.1,0), std(0xd8dde6)); const flag=new THREE.Mesh(new THREE.PlaneGeometry(.7,.42).translate(.35,1.95,0), green); this.goal.add(pole,flag); }
     this.scene.add(this.goal);
@@ -1045,12 +1071,28 @@ const missionTab = {
     panel.innerHTML = `<h2>Mission Lab</h2><div class="muted">Опишите аппарат, разбросы, требования и варианты технологий.</div>
       <div class="row"><label>Пример</label><select id="ml_p"><option value="lunar_lander">Лунный модуль</option><option value="mars_helicopter">Вертолёт на Марсе</option><option value="lunar_rover">Лунный ровер</option></select></div>
       <div class="btns"><span class="btn" id="ml_go">Рассчитать миссию</span><span class="btn sec" id="ml_x" style="display:none">Отменить</span></div>
-      <div id="ml_err" class="no"></div><h3>История запусков</h3><div id="ml_h" class="muted">Пока пусто.</div><h3>Описание миссии, JSON</h3><textarea id="ml_s" spellcheck="false" aria-label="Описание миссии"></textarea>`;
+      <div id="ml_err" class="no" style="margin-top:6px"></div>
+      <h3>Мои миссии</h3><div class="pset"><select id="ml_sv" aria-label="Сохранённые миссии"></select><span class="btn sec del" id="ml_so">Открыть</span><span class="btn sec del" id="ml_sd">×</span></div>
+      <div class="btns" style="margin:0"><span class="btn sec del" id="ml_ss">Сохранить как…</span><span class="btn sec del" id="ml_se">Экспорт</span><span class="btn sec del" id="ml_si">Импорт</span></div>
+      <h3>Описание миссии</h3><div class="tabs2"><span class="btn" id="ml_mf">Форма</span><span class="btn sec" id="ml_mj">JSON</span></div>
+      <div id="ml_form"></div><div id="ml_json" style="display:none"><textarea id="ml_s" spellcheck="false" aria-label="Описание миссии"></textarea></div>
+      <h3>История запусков</h3><div id="ml_h" class="muted">Пока пусто.</div>`;
     el.innerHTML = `<div class="ml-empty"><b>Выполнима ли миссия и что её ломает?</b>Нажмите «Рассчитать миссию». Сотни полётов с разбросами параметров дадут проверку требований, причины отказов и ценность каждой технологии.</div>`;
     $('#ml_p').onchange = () => this.load();
     $('#ml_go').onclick = () => this.calc();
     $('#ml_x').onclick = () => { if (this.job) api(`/api/jobs/${this.job}/cancel`, {method:'POST'}).catch(()=>{}); };
-    await this.load(); this.history();
+    $('#ml_mf').onclick = () => this.setMode('form');
+    $('#ml_mj').onclick = () => this.setMode('json');
+    $('#ml_s').onchange = () => { try { this.spec = JSON.parse($('#ml_s').value); store.set('mission_draft', $('#ml_s').value); $('#ml_err').textContent=''; } catch(e){ $('#ml_err').textContent='В тексте ошибка: '+e.message; } };
+    $('#ml_ss').onclick = () => { const n=prompt('Название миссии:', this.spec?.name||''); if (n){ store.set('missions',{...this.savedList(),[n]:$('#ml_s').value}); this.renderSaved(); $('#ml_sv').value=n; } };
+    $('#ml_so').onclick = () => { const t=this.savedList()[$('#ml_sv').value]; if (t){ $('#ml_s').value=t; this.setMode(this.mode||'form'); } };
+    $('#ml_sd').onclick = () => { const m=this.savedList(); delete m[$('#ml_sv').value]; store.set('missions',m); this.renderSaved(); };
+    $('#ml_se').onclick = () => download($('#ml_s').value, `${(this.spec?.name||'mission').replace(/[^\wа-яё-]+/gi,'_')}.json`);
+    $('#ml_si').onclick = async () => { const t=await pickFile('.json,application/json'); if (!t) return; try { JSON.parse(t); $('#ml_s').value=t; this.setMode('form'); } catch(e){ $('#ml_err').textContent='Файл не разобран: '+e.message; } };
+    this.renderSaved(); this.mode='form';
+    const draft = store.get('mission_draft', null);
+    if (draft){ $('#ml_s').value = draft; this.setMode('form'); } else await this.load();
+    this.history();
   },
   /* сохранённые запуски: открыть отчёт или сравнить два */
   async history(){
@@ -1072,10 +1114,62 @@ const missionTab = {
       <h3>Требования</h3><table><tr><th>Требование</th><th>Было</th><th>Стало</th></tr>${c.requirements.map(q=>`<tr><td>${esc(q.text)}</td><td>${num(q.a)} <span class="pill ${VERDICT[q.a_verdict]||''}">${esc(q.a_verdict)}</span></td><td>${num(q.b)} <span class="pill ${VERDICT[q.b_verdict]||''}">${esc(q.b_verdict)}</span></td></tr>`).join('')}</table>
       <h3>Что поменялось в описании</h3>${c.spec_changes.length?`<table><tr><th>Параметр</th><th>Было</th><th>Стало</th></tr>${c.spec_changes.map(x=>`<tr><td>${esc(x.key)}</td><td>${esc(x.a)}</td><td>${esc(x.b)}</td></tr>`).join('')}</table>`:'<div class="muted">Описания совпадают.</div>'}</div>`;
   },
-  async load(){ $('#ml_s').value = JSON.stringify(await api('/api/mission/example?name='+$('#ml_p').value), null, 2); },
+  async load(){ this.spec = await api('/api/mission/example?name='+$('#ml_p').value); $('#ml_s').value = JSON.stringify(this.spec, null, 2); store.set('mission_draft', $('#ml_s').value); this.setMode(this.mode||'form'); },
+  /* форма: описание миссии без JSON. Текст и форма показывают один и тот же объект this.spec */
+  async buildForm(){
+    const sp = this.spec, pr = this.presets || (this.presets = await api('/api/presets')), schema = await paramSchema(), task = sp.task||'lander';
+    const [ph,at,su] = String(sp.world||'moon').split(':'), opt = (a,v,ex=[]) => ex.concat(a).map(x=>`<option ${x===v?'selected':''}>${x}</option>`).join(''), defs = schema.filter(d=>d.tasks.includes(task));
+    const metric = {success:'Доля успешных полётов', crashed:'Доля аварий', touch_speed:'Скорость касания, м/с', touch_tilt:'Наклон при касании, °', touch_offset:'Промах, м', fuel_used:'Расход топлива, кг', energy_used_kj:'Энергия, кДж', duration_s:'Длительность, с'};
+    const dispOpts = [['gravity','Гравитация'],['nav_noise','Шум навигации'],['gust','Порывы, м/с'],['actuator_lag','Задержка приводов, с'],['fault','Вероятность отказа']].concat(defs.filter(d=>!['noise','gust','actuator_lag','fault_prob'].includes(d.name)&&d.defaults[task]>0).map(d=>[d.name,d.label]));
+    const techParam = t => t.set ? Object.entries(t.set)[0] : t.set_dispersion ? Object.entries(t.set_dispersion)[0] : t.set_top ? Object.entries(t.set_top)[0] : ['',''];
+    const techOpts = defs.map(d=>[d.name,d.label]).concat([['nav_noise','Шум навигации (разброс)'],['actuator_lag_d','Задержка приводов (разброс)']]);
+    const f = $('#ml_form');
+    f.innerHTML = `<div class="row"><label>Название</label><input id="f_n" type="text" value="${esc(sp.name||'')}"></div>
+      <div class="row"><label>Аппарат</label><select id="f_t">${[['lander','Посадочный модуль'],['drone','Дрон'],['rover','Ровер']].map(([k,l])=>`<option value="${k}" ${k===task?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="row"><label>Гравитация</label><select id="f_p">${opt(pr.physics.filter(x=>x!=='sun'),ph)}</select></div>
+      <div class="row"><label>Атмосфера</label><select id="f_a">${opt(pr.atmosphere,at||'auto',['auto'])}</select></div>
+      <div class="row"><label>Поверхность</label><select id="f_s">${opt(pr.surface,su||'auto',['auto'])}</select></div>
+      <div class="row"><label>Запусков</label><input id="f_r" type="number" min="1" max="20000" value="${sp.runs??300}"></div>
+      <div class="row"><label>Seed</label><input id="f_e" type="number" min="0" value="${sp.seed??1}"></div>
+      <h3>Требования</h3><div id="f_q">${(sp.requirements||[]).map((q,i)=>`<div class="item" data-i="${i}"><input data-k="text" type="text" value="${esc(q.text||'')}" placeholder="Описание"><div class="row"><select data-k="metric">${Object.entries(metric).map(([k,l])=>`<option value="${k}" ${k===q.metric?'selected':''}>${l}</option>`).join('')}</select><select data-k="op" style="flex:0 0 58px"><option ${q.op==='<='?'selected':''} value="<=">≤</option><option ${q.op==='>='?'selected':''} value=">=">≥</option></select><input data-k="value" type="number" step="any" value="${q.value??''}" style="flex:0 0 76px" aria-label="Значение"></div><div class="row"><label>Перцентиль</label><input data-k="percentile" type="number" min="0" max="100" value="${q.percentile??''}" placeholder="для долей не нужен"><span class="btn sec del" data-del="q">Удалить</span></div></div>`).join('')}</div><span class="btn sec" id="f_qa">Добавить требование</span>
+      <h3>Разбросы</h3><div class="muted" style="margin-bottom:6px">Относительное СКО, кроме порывов, задержки и вероятности отказа.</div><div id="f_d">${Object.entries(sp.dispersions||{}).map(([k,v])=>`<div class="row item1"><select data-dk>${dispOpts.map(([a,l])=>`<option value="${a}" ${a===k?'selected':''}>${esc(l)}</option>`).join('')}</select><input data-dv type="number" min="0" step="any" value="${v}" style="flex:0 0 76px" aria-label="Величина"><span class="btn sec del" data-del="d">×</span></div>`).join('')}</div><span class="btn sec" id="f_da">Добавить разброс</span>
+      <h3>Варианты технологий</h3><div id="f_c">${(sp.technologies||[]).map((t,i)=>{const [k,v]=techParam(t);return `<div class="item" data-i="${i}"><input data-t="name" type="text" value="${esc(t.name||'')}" placeholder="Название"><div class="row"><select data-t="param">${techOpts.map(([a,l])=>`<option value="${a}" ${a===k||(a==='actuator_lag_d'&&k==='actuator_lag'&&t.set_dispersion)?'selected':''}>${esc(l)}</option>`).join('')}</select><input data-t="value" type="number" step="any" value="${v}" style="flex:0 0 84px" aria-label="Новое значение"></div><div class="row"><label>Добавка массы, кг</label><input data-t="mass" type="number" step="any" value="${t.dry_mass_delta??''}"><span class="btn sec del" data-del="c">Удалить</span></div></div>`}).join('')}</div><span class="btn sec" id="f_ca">Добавить вариант</span>
+      <h3>Параметры аппарата и среды</h3><div id="f_pf"></div>`;
+    sp.vehicle = sp.vehicle || {};
+    paramForm($('#f_pf'), schema, task, sp.vehicle, () => this.sync(), this.openGroups||[]);
+    $('#f_pf').querySelectorAll('details').forEach(d => d.ontoggle = () => { this.openGroups = [...$('#f_pf').querySelectorAll('details[open] summary')].map(x=>x.firstChild.textContent.trim()); });
+    const on = (id, fn) => { $(id).onchange = fn; };
+    on('#f_n', e => { sp.name = e.target.value; this.sync(); });
+    on('#f_t', e => { sp.task = e.target.value; sp.vehicle = {}; sp.technologies = []; sp.dispersions = {}; sp.requirements = (sp.requirements||[]).filter(q=>q.metric==='success'||q.metric==='crashed'); delete sp.rotor_scale; this.sync(); this.buildForm(); });
+    const world = () => { const a=$('#f_a').value, su2=$('#f_s').value; sp.world = (a==='auto'&&su2==='auto') ? $('#f_p').value : `${$('#f_p').value}:${a==='auto'?$('#f_p').value:a}:${su2==='auto'?$('#f_p').value:su2}`; this.sync(); };
+    on('#f_p', world); on('#f_a', world); on('#f_s', world);
+    on('#f_r', e => { sp.runs = +e.target.value; this.sync(); });
+    on('#f_e', e => { sp.seed = +e.target.value; this.sync(); });
+    $('#f_q').querySelectorAll('[data-k]').forEach(i => i.onchange = () => { const q=sp.requirements[+i.closest('.item').dataset.i], k=i.dataset.k; if (k==='value'||k==='percentile'){ if (i.value==='') delete q[k]; else q[k]=+i.value; } else q[k]=i.value; this.sync(); });
+    $('#f_qa').onclick = () => { (sp.requirements=sp.requirements||[]).push({id:`REQ-${String(sp.requirements.length+1).padStart(2,'0')}`, text:'', metric:'success', op:'>=', value:.9}); this.sync(); this.buildForm(); };
+    const readD = () => { const d={}; $('#f_d').querySelectorAll('.item1').forEach(r=>{ d[r.querySelector('[data-dk]').value]=+r.querySelector('[data-dv]').value||0; }); sp.dispersions=d; this.sync(); };
+    $('#f_d').querySelectorAll('select,input').forEach(i=>i.onchange=readD);
+    $('#f_da').onclick = () => { const free=dispOpts.find(([k])=>!(k in (sp.dispersions||{}))); if (free){ (sp.dispersions=sp.dispersions||{})[free[0]]=.05; this.sync(); this.buildForm(); } };
+    $('#f_c').querySelectorAll('[data-t]').forEach(i => i.onchange = () => {
+      const row=i.closest('.item'), t=sp.technologies[+row.dataset.i], k=i.dataset.t;
+      if (k==='name') t.name=i.value;
+      else if (k==='mass'){ if (i.value==='') delete t.dry_mass_delta; else t.dry_mass_delta=+i.value; }
+      else { const p=row.querySelector('[data-t=param]').value, v=+row.querySelector('[data-t=value]').value; delete t.set; delete t.set_dispersion; delete t.set_top;
+        if (p==='nav_noise') t.set_dispersion={nav_noise:v}; else if (p==='actuator_lag_d') t.set_dispersion={actuator_lag:v}; else if (p==='rotor_scale') t.set_top={rotor_scale:v}; else t.set={[p]:v}; }
+      this.sync();
+    });
+    $('#f_ca').onclick = () => { const d=defs[0]; (sp.technologies=sp.technologies||[]).push({name:'', set:{[d.name]:d.defaults[task]}}); this.sync(); this.buildForm(); };
+    f.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { const w=b.dataset.del, row=b.closest('.item,.item1'); if (w==='q') sp.requirements.splice(+row.dataset.i,1); if (w==='c') sp.technologies.splice(+row.dataset.i,1); if (w==='d'){ row.remove(); readD(); } this.sync(); this.buildForm(); });
+  },
+  sync(){ if (this.spec && Object.keys(this.spec.vehicle||{}).length===0) delete this.spec.vehicle; $('#ml_s').value = JSON.stringify(this.spec, null, 2); if (this.spec && !this.spec.vehicle) this.spec.vehicle = {}; store.set('mission_draft', $('#ml_s').value); },
+  setMode(m){ this.mode = m; $('#ml_form').style.display = m==='form'?'':'none'; $('#ml_json').style.display = m==='json'?'':'none'; $('#ml_mf').classList.toggle('sec', m!=='form'); $('#ml_mj').classList.toggle('sec', m!=='json');
+    if (m==='form'){ try { this.spec = JSON.parse($('#ml_s').value); $('#ml_err').textContent=''; this.buildForm(); } catch(e){ $('#ml_err').textContent='В тексте ошибка: '+e.message; this.setMode('json'); } } },
+  savedList(){ return store.get('missions', {}); },
+  renderSaved(){ const s=this.savedList(), names=Object.keys(s); $('#ml_sv').innerHTML = names.length ? names.map(n=>`<option>${esc(n)}</option>`).join('') : '<option value="">Нет сохранённых</option>'; },
+
   async calc(){
     const my = epoch; $('#ml_err').textContent=''; let spec;
-    try { spec = JSON.stringify(JSON.parse($('#ml_s').value)); } catch(e){ $('#ml_err').textContent = 'Не удалось разобрать описание: '+e.message; return; }
+    try { this.spec = JSON.parse($('#ml_s').value); spec = JSON.stringify(this.spec); } catch(e){ $('#ml_err').textContent = 'Не удалось разобрать описание: '+e.message; return; }
     $('#ml_go').classList.add('off'); $('#ml_x').style.display='';
     try {
       const job = await api('/api/jobs/mission', {method:'POST', body:spec});
@@ -1114,6 +1208,81 @@ const missionTab = {
   },
   update(){},
   dispose(){ $('#mission').style.display='none'; },
+};
+
+// ============================================================ настройка: реестр параметров, пресеты, настройки интерфейса
+/* localStorage может быть недоступен (приватный режим): настройка просто не сохранится */
+const store = { get(k, d){ try { const v = localStorage.getItem('ws_'+k); return v === null ? d : JSON.parse(v); } catch(e){ return d; } }, set(k, v){ try { localStorage.setItem('ws_'+k, JSON.stringify(v)); } catch(e){} } };
+let _schema = null;
+const paramSchema = async () => _schema || (_schema = await api('/api/env/schema'));
+const download = (txt, name, type='application/json') => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt],{type})); a.download = name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); };
+const pickFile = accept => new Promise(res => { const i = document.createElement('input'); i.type='file'; i.accept=accept; i.onchange=async()=>res(i.files[0] ? await i.files[0].text() : null); i.click(); });
+
+/* форма параметров по реестру: группы раскрываются, пустое поле значит значение по умолчанию */
+function paramForm(el, schema, task, vals, onchange, openGroups=[]){
+  const defs = schema.filter(d => d.tasks.includes(task)), groups = [...new Set(defs.map(d=>d.group))];
+  const changed = g => defs.filter(d=>d.group===g && vals[d.name]!==undefined).length;
+  el.innerHTML = groups.map(g => `<details class="pg" ${openGroups.includes(g)?'open':''}><summary>${esc(g)} <span class="badge" data-b="${esc(g)}">${changed(g)||''}</span></summary>${defs.filter(d=>d.group===g).map(d=>`<div class="row pr" title="${esc(d.help)}"><label for="p_${d.name}">${esc(d.label)}${d.unit?`, <span class="muted">${esc(d.unit)}</span>`:''}</label><input id="p_${d.name}" data-p="${d.name}" type="number" min="${d.min}" max="${d.max}" step="any" value="${vals[d.name]??''}" placeholder="${d.defaults[task]}"></div>`).join('')}</details>`).join('');
+  el.querySelectorAll('input[data-p]').forEach(i => i.onchange = () => {
+    const d = defs.find(x=>x.name===i.dataset.p), v = i.value.trim();
+    if (v === ''){ delete vals[d.name]; i.setCustomValidity(''); }
+    else {
+      const x = Number(v);
+      if (!isFinite(x) || x < d.min || x > d.max){ i.setCustomValidity(`От ${d.min} до ${d.max}`); i.reportValidity(); return; }
+      i.setCustomValidity('');
+      if (x === d.defaults[task]) delete vals[d.name]; else vals[d.name] = x;
+    }
+    const b = el.querySelector(`[data-b="${CSS.escape(d.group)}"]`); if (b) b.textContent = changed(d.group)||'';
+    onchange();
+  });
+}
+const paramsQuery = vals => Object.entries(vals).map(([k,v])=>`${k}=${v}`).join(',');
+
+// ============================================================ вкладка: Настройки
+const SETTINGS_DEFAULT = {theme:'dark', text:14, panel:384, chart:216, quality:'high', shadows:true, chartOn:true, motion:true};
+const settings = () => ({...SETTINGS_DEFAULT, ...store.get('settings', {})});
+function applySettings(){
+  const s = settings(), root = document.documentElement;
+  root.dataset.theme = s.theme === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : s.theme;
+  root.style.setProperty('--panel-w', s.panel+'px'); root.style.setProperty('--chart-h', s.chart+'px'); root.style.setProperty('--text', '');
+  document.body.style.fontSize = s.text+'px';
+  root.classList.toggle('no-chart', !s.chartOn); root.classList.toggle('no-motion', !s.motion);
+  renderer.setPixelRatio(s.quality==='low' ? 1 : s.quality==='medium' ? Math.min(devicePixelRatio,1.5) : Math.min(devicePixelRatio,2));
+  renderer.shadowMap.enabled = !!s.shadows;
+  resize(); if (lastChart && chartbox.style.display !== 'none') chart(...lastChart);
+}
+const settingsTab = {
+  async init(){
+    const el = $('#settings'); el.style.display='block'; panel.style.display='none';
+    const s = settings(), opt = (arr,v) => arr.map(([k,l])=>`<option value="${k}" ${k===v?'selected':''}>${l}</option>`).join('');
+    el.innerHTML = `<div class="report" style="max-width:620px"><h2>Настройки</h2><div class="sub">Хранятся только в этом браузере.</div>
+      <h3>Внешний вид</h3>
+      <div class="row"><label>Тема</label><select id="s_th">${opt([['dark','Тёмная'],['light','Светлая'],['auto','Как в системе']],s.theme)}</select></div>
+      <div class="row"><label>Размер текста</label><input id="s_tx" type="range" min="12" max="18" step="1" value="${s.text}"><span id="s_txv" style="flex:0 0 44px;text-align:right">${s.text} px</span></div>
+      <div class="row"><label>Анимация</label><select id="s_mo">${opt([['1','Включена'],['0','Выключена']],s.motion?'1':'0')}</select></div>
+      <h3>Раскладка</h3>
+      <div class="row"><label>Ширина панели</label><input id="s_pw" type="range" min="300" max="560" step="4" value="${s.panel}"><span id="s_pwv" style="flex:0 0 58px;text-align:right">${s.panel} px</span></div>
+      <div class="row"><label>Высота графика</label><input id="s_ch" type="range" min="120" max="420" step="4" value="${s.chart}"><span id="s_chv" style="flex:0 0 58px;text-align:right">${s.chart} px</span></div>
+      <div class="row"><label>График под сценой</label><select id="s_co">${opt([['1','Показывать'],['0','Скрывать']],s.chartOn?'1':'0')}</select></div>
+      <h3>Качество графики</h3>
+      <div class="row"><label>Разрешение</label><select id="s_q">${opt([['high','Высокое'],['medium','Среднее'],['low','Низкое']],s.quality)}</select></div>
+      <div class="row"><label>Тени</label><select id="s_sh">${opt([['1','Включены'],['0','Выключены']],s.shadows?'1':'0')}</select></div>
+      <h3>Данные браузера</h3>
+      <div class="btns"><span class="btn sec" id="s_rs">Сбросить настройки</span><span class="btn sec" id="s_tk">Забыть токен доступа</span></div><div id="s_msg" class="muted" style="margin-top:8px"></div></div>`;
+    const set = (k,v) => { store.set('settings', {...settings(), [k]:v}); applySettings(); };
+    $('#s_th').onchange = e => set('theme', e.target.value);
+    $('#s_tx').oninput = e => { $('#s_txv').textContent = e.target.value+' px'; set('text', +e.target.value); };
+    $('#s_pw').oninput = e => { $('#s_pwv').textContent = e.target.value+' px'; set('panel', +e.target.value); };
+    $('#s_ch').oninput = e => { $('#s_chv').textContent = e.target.value+' px'; set('chart', +e.target.value); };
+    $('#s_co').onchange = e => set('chartOn', e.target.value==='1');
+    $('#s_mo').onchange = e => set('motion', e.target.value==='1');
+    $('#s_q').onchange = e => set('quality', e.target.value);
+    $('#s_sh').onchange = e => set('shadows', e.target.value==='1');
+    $('#s_rs').onclick = () => { store.set('settings', {}); applySettings(); this.init(); };
+    $('#s_tk').onclick = () => { try { sessionStorage.removeItem('ws_token'); } catch(e){} $('#s_msg').textContent = 'Токен забыт.'; };
+  },
+  update(){},
+  dispose(){ $('#settings').style.display='none'; panel.style.display=''; },
 };
 
 // ============================================================ вкладка: Чёрные дыры
@@ -1229,7 +1398,7 @@ const labTab = {
   dispose(){ $('main').classList.remove('plot'); this.req=(this.req||0)+1; cancelAnimationFrame(this.raf); },
 };
 
-const tabs = {blackhole:blackholeTab, lab:labTab, mission:missionTab, robots:robotsTab, world:worldTab, climate:climateTab, solar:solarTab, system:systemTab, starmap:starmapTab, galaxy:galaxyTab, cosmo:cosmoTab, laws:lawsTab};
+const tabs = {settings:settingsTab, blackhole:blackholeTab, lab:labTab, mission:missionTab, robots:robotsTab, world:worldTab, climate:climateTab, solar:solarTab, system:systemTab, starmap:starmapTab, galaxy:galaxyTab, cosmo:cosmoTab, laws:lawsTab};
 let initChain = Promise.resolve(), intro = null;
 async function switchTab(name){
   const my = ++epoch;
@@ -1267,6 +1436,7 @@ renderer.setAnimationLoop(() => {
   if (current?.scene){ current.controls.update(); current.update(dt); renderer.render(current.scene, current.camera); }
   else { renderer.clear(); }
 });
+applySettings();
 /* клавиши 1–9: быстрый переход между вкладками */
 addEventListener('keydown', e => { if (e.metaKey||e.ctrlKey||e.altKey||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; const b = document.querySelectorAll('nav button')[+e.key-1]; if (b && /[1-9]/.test(e.key)) switchTab(b.dataset.tab); });
 addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t in tabs && current !== tabs[t]) switchTab(t); });

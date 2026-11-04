@@ -383,9 +383,10 @@ class ProductGaps(Base):
 
     def test_lerobot_export(self):
         try:
+            import pandas  # noqa: F401
             import pyarrow.parquet as pq
         except ImportError:
-            self.skipTest("нет pyarrow")
+            self.skipTest("нет pyarrow или pandas")
         from worldsim.export import to_lerobot
         d = collect(self.tmp / "lr", episodes=6)
         out = to_lerobot(d, self.tmp / "lr_out")
@@ -396,6 +397,9 @@ class ProductGaps(Base):
         self.assertEqual(info["features"]["action"]["shape"], [d.act.shape[1]])
         e = pq.read_table(out / "meta" / "episodes" / "chunk-000" / "file-000.parquet")
         self.assertEqual(int(e["dataset_to_index"][5].as_py()), len(d))
+        import pandas as pd
+        tasks = pd.read_parquet(out / "meta" / "tasks.parquet")
+        self.assertIn("lander", tasks.index[0])  # LeRobot берёт текст задачи из индекса
 
 
 class Security(unittest.TestCase):

@@ -253,11 +253,13 @@ worldsim collect --task rover --worlds moon --terrain-file site.asc --episodes 1
 
 В описании миссии: `"terrain": {"file": "site.asc"}` при локальном запуске или `"terrain": {"n": 65, "size": 800, "heights": [...]}` через API. Сервер не читает файлы по пути из запроса.
 
-**Экспорт для обучения.** Формат LeRobotDataset v3, нужен `pyarrow`:
+**Экспорт для обучения.** Формат LeRobotDataset v3, загрузка проверена на lerobot 0.6.1. Нужны `pyarrow` и `pandas`:
 
 ```bash
 cd python && python -m worldsim.export --data ../runs/moon --out ../runs/moon_lerobot
 ```
+
+**Настройка в интерфейсе.** Параметры, требования и варианты технологий редактируются в формах вкладок «Роботы» и «Mission Lab». Там же сохранение и импорт пресетов, а на вкладке «Настройки» — тема, размер текста, ширина панели и качество графики. Всё это хранится в браузере.
 
 **Параметры.** Список всех настраиваемых величин с единицами и диапазонами: `worldsim params --task lander`. Они работают в `collect --set`, в описании миссии, в API (`params=isp=320,gust=2`) и в `VectorEnv(params={...})`.
 

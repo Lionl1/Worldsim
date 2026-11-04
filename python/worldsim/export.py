@@ -1,9 +1,9 @@
-"""Экспорт в LeRobotDataset v3.0 (https://huggingface.co/docs/lerobot/lerobot-dataset-v3). Нужен пакет pyarrow.
+"""Экспорт в LeRobotDataset v3.0 (https://huggingface.co/docs/lerobot/lerobot-dataset-v3). Нужны pyarrow и pandas.
 
     python -m worldsim.export --data runs/moon --out runs/moon_lerobot
 
 Экспортируются наблюдения, действия, награды и признаки конца эпизода. Истинное состояние кладётся в `observation.environment_state`.
-Камера не экспортируется. Частота кадров берётся из шага управления.
+Камера не экспортируется. Частота кадров берётся из шага управления. Загрузка проверена на lerobot 0.6.1.
 """
 import argparse
 import json
@@ -26,8 +26,9 @@ def to_lerobot(ds, out, chunk_rows=1_000_000):
     try:
         import pyarrow as pa
         import pyarrow.parquet as pq
+        import pandas  # noqa: F401
     except ImportError as e:
-        raise RuntimeError("для экспорта нужен pyarrow: pip install pyarrow") from e
+        raise RuntimeError("для экспорта нужны pyarrow и pandas: pip install pyarrow pandas") from e
     out = Path(out)
     (out / "meta" / "episodes" / "chunk-000").mkdir(parents=True, exist_ok=True)
     (out / "data" / "chunk-000").mkdir(parents=True, exist_ok=True)
@@ -71,7 +72,9 @@ def to_lerobot(ds, out, chunk_rows=1_000_000):
         "meta/episodes/chunk_index": pa.array(np.zeros(len(e_starts), np.int64)),
         "meta/episodes/file_index": pa.array(np.zeros(len(e_starts), np.int64)),
     }), out / "meta" / "episodes" / "chunk-000" / "file-000.parquet")
-    pq.write_table(pa.table({"task_index": pa.array([0], type=pa.int64()), "__index_level_0__": pa.array([task_text])}), out / "meta" / "tasks.parquet")
+    # LeRobot читает текст задачи из индекса pandas, поэтому файл пишем именно с таким индексом
+    import pandas as pd
+    pd.DataFrame({"task_index": [0]}, index=pd.Index([task_text], name="task")).to_parquet(out / "meta" / "tasks.parquet")
     scalar = lambda dtype: {"dtype": dtype, "shape": [1], "names": None}
     info = {
         "codebase_version": "v3.0", "robot_type": f"worldsim_{ds.task}", "total_episodes": len(e_starts), "total_frames": int(n), "total_tasks": 1,

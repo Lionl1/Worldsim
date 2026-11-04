@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: cargo build --release --locked
-      - run: pip install numpy
+      - run: pip install numpy pyarrow pandas
       - run: python -m unittest discover tests
         working-directory: python
         env:
