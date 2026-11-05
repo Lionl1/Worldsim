@@ -294,7 +294,7 @@ pub const PARAMS: &[ParamDef] = &[
     // Link and compute: all off by default
     p("cmd_delay", "Link and compute", "Command latency", "steps", 0.0, 1000.0, ALL, 0.0, "Control steps between issuing and executing a command."),
     p("link_period", "Link and compute", "Link cycle", "s", 0.0, 1e6, ALL, 0.0, "0 — no outages."),
-    p("link_outage", "Link and compute", "Outage in each cycle", "s", 0.0, 1e6, ALL, 0.0, "At the end of a cycle no commands arrive and observations freeze. The last command stays active."),
+    p("link_outage", "Link and compute", "Outage in each cycle", "s", 0.0, 9e5, ALL, 0.0, "At the end of a cycle no commands arrive and observations freeze. The last command stays active."),
     p("compute_ms", "Link and compute", "Decision time", "ms", 0.0, 1e5, ALL, 0.0, "A decision longer than a control step acts late and counts as an overrun."),
     p("compute_jitter_ms", "Link and compute", "Decision time spread", "ms", 0.0, 1e5, ALL, 0.0, "Half-normal, added to the decision time."),
     // Soil: Bekker model on the rover, off by default; values are typical lunar regolith from the Lunar Sourcebook

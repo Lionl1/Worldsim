@@ -307,6 +307,125 @@ pub fn climate_checks() -> Vec<Check> {
     ]
 }
 
+/// SPH gas, winds on a sphere and P3M against exact solutions.
+pub fn extended_checks() -> Vec<Check> {
+    use crate::{cosmology::{Cosmology, PmSim}, fluid, shallow, sph::Sph};
+    let mut out = vec![];
+    let mut s = Sph::sod(400);
+    let e0 = s.energy();
+    s.run_to(0.15);
+    s.density();
+    let (mut err, mut count) = (0.0, 0);
+    for (x, r) in s.x.iter().zip(&s.rho) {
+        if x.x > 0.1 && x.x < 0.9 { err += (r - fluid::sod_exact(x.x, s.t).0).abs(); count += 1; }
+    }
+    let l1 = err / count as f64;
+    out.push(Check { law: "SPH (Sod shock tube)", test: "density error against the exact solution".into(), value: format!("{l1:.4}"), expected: "< 0.02".into(), pass: l1 < 0.02 });
+    let de = ((s.energy() - e0) / e0).abs();
+    out.push(Check { law: "SPH conservation", test: "Sod: energy and momentum".into(), value: format!("{de:.1e} / {:.1e}", s.momentum().norm()), expected: "< 1e-3 / < 1e-10".into(), pass: de < 1e-3 && s.momentum().norm() < 1e-10 });
+    let mut g = Sph::evrard(600, 1);
+    let mut eg = g.clone();
+    eg.density();
+    let e0 = eg.energy();
+    let mut peak_kin: f64 = 0.0;
+    let rho0 = eg.rho.iter().cloned().fold(0.0, f64::max);
+    let mut rho_peak: f64 = 0.0;
+    while g.t < 1.2 { g.step(); peak_kin = peak_kin.max(g.kinetic()); rho_peak = rho_peak.max(g.rho.iter().cloned().fold(0.0, f64::max)); }
+    let de = ((g.energy() - e0) / e0).abs();
+    out.push(Check { law: "SPH with gravity (Evrard collapse)", test: "600 particles: energy error, density growth".into(), value: format!("{de:.3} / ×{:.0}", rho_peak / rho0), expected: "< 0.05 / > ×5".into(), pass: de < 0.05 && rho_peak / rho0 > 5.0 });
+    let err = shallow::williamson2(21, std::f64::consts::FRAC_PI_4, 5.0, 900.0);
+    out.push(Check { law: "Shallow water on a sphere", test: "Williamson test 2, tilted 45°, T21, 5 days: depth error".into(), value: format!("{err:.1e}"), expected: "< 1e-3".into(), pass: err < 1e-3 });
+    // a steady flow says nothing if the equations did nothing: wave dynamics against the dispersion law
+    let ratio = shallow::gravity_wave_period(4);
+    out.push(chk("Gravity waves on a sphere", "degree 4: period against ω² = n(n+1)Φ/a²", ratio, 1.0, 1e-3, ""));
+    // P3M: the force of one particle on another against Newton's law
+    let force = |p3m: bool, sep: f64| {
+        let c = Cosmology::planck2018();
+        let mut pm = PmSim::new(c, 16, 16.0, 1.0, 1);
+        pm.p3m = p3m;
+        pm.pos = vec![[8.3, 8.3, 8.3], [8.3 + sep, 8.3, 8.3]];
+        pm.mom = vec![[0.0; 3]; 2];
+        let a = pm.accelerations(1.0);
+        let newton = 1.5 * c.omega_m / (4.0 * std::f64::consts::PI * sep * sep);
+        ((a[0][0] / newton - 1.0).abs(), newton)
+    };
+    let seps = [0.3, 0.6, 1.0, 2.0, 4.0];
+    let worst_p3m = seps.iter().map(|s| force(true, *s).0).fold(0.0, f64::max);
+    let close_pm = force(false, 0.3).0;
+    out.push(Check { law: "P3M (particle-particle, particle-mesh)", test: "pair force at 0.3–4 mesh cells against Newton, and mesh alone at 0.3".into(), value: format!("{:.1}% / {:.0}%", worst_p3m * 100.0, close_pm * 100.0), expected: "< 10% / > 50%".into(), pass: worst_p3m < 0.10 && close_pm > 0.5 });
+    out
+}
+
+/// IAS15, Wisdom–Holman and live collisions against exact two-body motion and conservation laws.
+fn integrator_checks() -> Vec<Check> {
+    use crate::impacts::ImpactSim;
+    use crate::nbody::{kepler_step, Integrator};
+    let mut out = vec![];
+    // eccentric orbit: e = 0.9, the hard case for a fixed step
+    let mu: f64 = 1.327e20;
+    let a: f64 = 1.5e11;
+    let e = 0.9;
+    let r0 = Vec3::new(a * (1.0 - e), 0.0, 0.0);
+    let v0 = Vec3::new(0.0, (mu / a * (1.0 + e) / (1.0 - e)).sqrt(), 0.0);
+    let period = 2.0 * PI * (a * a * a / mu).sqrt();
+    let two_body = |i: Integrator| {
+        let mut s = NBody::new(vec![Body { name: "star".into(), gm: mu, r: Vec3::ZERO, v: Vec3::ZERO }, Body { name: "test".into(), gm: 0.0, r: r0, v: v0 }]);
+        s.integrator = i;
+        s
+    };
+    let mut s = two_body(Integrator::Ias15);
+    for _ in 0..10 { s.step(period); }
+    let miss = (s.bodies[1].r - r0).norm() / a;
+    let specific = |r: Vec3, v: Vec3| 0.5 * v.norm2() - mu / r.norm();
+    let de = ((specific(s.bodies[1].r, s.bodies[1].v) - specific(r0, v0)) / specific(r0, v0)).abs();
+    out.push(Check { law: "IAS15 (Gauss–Radau 15th order)", test: "e = 0.9, 10 orbits: return to the start, relative to a".into(), value: format!("{miss:.2e}"), expected: "< 1e-9".into(), pass: miss < 1e-9 });
+    out.push(Check { law: "IAS15 (Gauss–Radau 15th order)", test: "e = 0.9, 10 orbits: energy error".into(), value: format!("{de:.2e}"), expected: "< 1e-12".into(), pass: de < 1e-12 });
+    let (k, kv) = kepler_step(mu, r0, v0, period);
+    let miss = (k - r0).norm().max((kv - v0).norm() * period) / a;
+    out.push(Check { law: "Kepler solver (universal variables)", test: "e = 0.9, one period: exact return".into(), value: format!("{miss:.2e}"), expected: "< 1e-9".into(), pass: miss < 1e-9 });
+    // Jupiter and Saturn: Wisdom–Holman keeps accuracy at a step where a leapfrog cannot
+    let planets = |i: Integrator| {
+        let mut s = NBody::from_presets(&["sun", "jupiter", "mercury"]).unwrap();
+        s.integrator = i;
+        s
+    };
+    let drift = |mut s: NBody, dt: f64, years: f64| {
+        let e0 = s.invariants().energy;
+        let n = (years * YEAR / dt) as usize;
+        let mut worst: f64 = 0.0;
+        for _ in 0..n { s.step(dt); worst = worst.max(((s.invariants().energy - e0) / e0).abs()); }
+        worst
+    };
+    let (dt, years) = (5.0 * DAY, 300.0);
+    let (wh, lf) = (drift(planets(Integrator::WisdomHolman), dt, years), drift(planets(Integrator::Leapfrog), dt, years));
+    out.push(Check { law: "Wisdom–Holman (symplectic map)", test: "Sun, Jupiter, Mercury, 5-day step, 300 yr: energy error against a leapfrog".into(), value: format!("{wh:.1e} / {lf:.1e}"), expected: "≥ 100 times smaller".into(), pass: wh * 100.0 < lf });
+    let mut wh_s = planets(Integrator::WisdomHolman);
+    let mut ias_s = planets(Integrator::Ias15);
+    for _ in 0..(10.0 * YEAR / DAY) as usize { wh_s.step(DAY); }
+    ias_s.step(wh_s.t);
+    let gap = (wh_s.bodies[1].r - ias_s.bodies[1].r).norm() / crate::constants::AU;
+    out.push(Check { law: "Wisdom–Holman against IAS15", test: "Jupiter after 10 yr, 1-day step".into(), value: format!("{gap:.1e} AU"), expected: "< 1e-5 AU".into(), pass: gap < 1e-5 });
+    // Live collisions: a slow impact merges, a fast one breaks up, and mass and momentum stay exact
+    let run = |ratio: f64, speed: f64| {
+        let mut s = ImpactSim::two_bodies(6e24, 6.4e6, ratio, speed, 0.0, 5000.0).unwrap();
+        let total0 = s.sim.bodies.iter().map(|b| b.gm).sum::<f64>();
+        let mom0 = s.sim.bodies.iter().fold(Vec3::ZERO, |p, b| p + b.v * b.gm);
+        let scale = s.sim.bodies.iter().map(|b| b.gm * b.v.norm()).sum::<f64>();
+        for _ in 0..600 { s.step(10.0); if !s.events.is_empty() { break; } }
+        let total1 = s.sim.bodies.iter().map(|b| b.gm).sum::<f64>();
+        let mom1 = s.sim.bodies.iter().fold(Vec3::ZERO, |p, b| p + b.v * b.gm);
+        (s, ((total1 - total0) / total0).abs(), (mom1 - mom0).norm() / scale)
+    };
+    let (slow, dm, dp) = run(0.1, 1.1);
+    let (fast, dm2, dp2) = run(1.0, 8.0);
+    let slow_outcome = slow.events.first().map(|e| e.outcome.clone()).unwrap_or("none".into());
+    let fast_outcome = fast.events.first().map(|e| e.outcome.clone()).unwrap_or("none".into());
+    out.push(Check { law: "Live collision (Leinhardt–Stewart)", test: "0.1 mass at 1.1 v_esc merges; equal masses at 8 v_esc break up".into(), value: format!("{slow_outcome} / {fast_outcome}"), expected: "merger / disruption".into(),
+        pass: slow_outcome == "merger" && slow.sim.bodies.len() == 1 && fast_outcome.contains("disruption") && fast.sim.bodies.len() == 7 });
+    out.push(Check { law: "Mass and momentum in a collision", test: "merger and breakup: relative error".into(), value: format!("{:.1e} / {:.1e}", dm.max(dm2), dp.max(dp2)), expected: "< 1e-9".into(), pass: dm.max(dm2) < 1e-9 && dp.max(dp2) < 1e-9 });
+    out
+}
+
 fn e_steps_for_seconds(e: &crate::env::Env, s: f64) -> usize { (s / e.control_dt()) as usize }
 
 pub fn env_checks() -> Vec<Check> {
@@ -452,6 +571,7 @@ pub fn env_checks() -> Vec<Check> {
         loop { let a = e.autopilot(); let (_, _, t, tr) = e.step(&a); if t || tr { break; } }
         if e.info.success { ok += 1; }
     }
+    out.extend(integrator_checks());
     // Latency: a delayed command must give exactly the flight of the same commands shifted in time
     let flown = |set: &[(&str, f64)], shift: usize| {
         let mut c = EnvConfig::new("lander", "moon").unwrap();
@@ -762,6 +882,7 @@ pub fn tectonics_checks() -> Vec<Check> {
 
 pub fn all() -> Vec<Check> {
     let mut v = Vec::new();
+    v.extend(extended_checks());
     v.extend(quantum_checks());
     v.extend(blackhole_checks());
     v.extend(fluid_checks());

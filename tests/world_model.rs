@@ -185,6 +185,8 @@ fn every_parameter_works_at_both_limits() {
             if probe.clone().set(d.name, d.min).is_err() { continue; } // does not apply to this task
             for v in [d.min, d.max] {
                 let mut c = EnvConfig::new(task, "mars").unwrap();
+                // an outage needs a link cycle to happen in
+                if d.name == "link_outage" { c.set("link_period", 1e6).unwrap(); }
                 c.set(d.name, v).unwrap();
                 if d.name == "max_steps" { c.max_steps = c.max_steps.min(300); }
                 let mut e = Env::new(c).unwrap_or_else(|x| panic!("{task} {} = {v}: {x}", d.name));
@@ -319,4 +321,37 @@ fn controller_analysis_matches_the_autopilot_run() {
     assert!(own.get("markdown").unwrap().as_str().unwrap().contains("Value of technologies"));
     // after the analysis a plain report still describes the mission itself
     assert!(r.report("again").is_ok());
+}
+
+/// Winds of Earth from its temperature contrast: the mean flow must be in gradient balance and westerly in midlatitudes.
+#[test]
+fn earth_winds_are_balanced_westerlies() {
+    use worldsim::{climate::{simulate, ClimateOptions}, shallow::world_winds, world::World};
+    let w = World::preset("earth").unwrap();
+    let c = simulate(&w, &ClimateOptions::default());
+    let r = world_winds(&w, &c, 21, 60.0).unwrap();
+    assert!(r.peak_u > 10.0 && r.peak_u < 80.0, "peak {} m/s", r.peak_u);
+    assert!(r.peak_lat.abs() > 15.0 && r.peak_lat.abs() < 65.0, "jet at {}°", r.peak_lat);
+    assert!(r.balance_error < 0.2, "balance {}", r.balance_error);
+    // air rises near the warm equator: the cloudiest zone sits there
+    let at = |lat: f64| r.lat.iter().position(|x| (x - lat).abs() < 3.0).map(|i| r.cloud[i]).unwrap();
+    assert!(at(2.8) > at(25.0), "cloud {} at the equator, {} at 25°", at(2.8), at(25.0));
+    assert!(world_winds(&World::preset("moon").unwrap(), &c, 21, 1.0).is_err());
+}
+
+/// The pair sum must not disturb the linear growth of large scales.
+#[test]
+fn p3m_keeps_linear_growth() {
+    use worldsim::cosmology::{Cosmology, PmSim};
+    let c = Cosmology::planck2018();
+    let growth = |p3m: bool| {
+        let mut pm = PmSim::new(c, 16, 200.0, 0.1, 3);
+        pm.p3m = p3m;
+        let before = pm.measure_power(4)[0].1;
+        for _ in 0..8 { pm.step(0.025); }
+        pm.measure_power(4)[0].1 / before
+    };
+    let expected = (c.growth(0.3) / c.growth(0.1)).powi(2);
+    let got = growth(true);
+    assert!((got / expected - 1.0).abs() < 0.2, "P(k) grew ×{got:.2}, linear theory ×{expected:.2}");
 }

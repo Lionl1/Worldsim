@@ -107,6 +107,51 @@ pub fn run(topic: &str, q: &Q) -> Result<J, String> {
             let fr: Vec<f64> = vs.iter().map(|x| co::largest_remnant_fraction(co::impact_energy(m1, m2, x * 1e3), qs)).collect();
             Ok(J::obj().set("q", qr).set("q_star", qs).set("remnant", co::largest_remnant_fraction(qr, qs)).set("outcome", co::outcome(qr, qs)).set("vs", vs).set("fr", fr))
         }
+        "sph" => {
+            let t = num(q, "t", 0.15, 0.02, 0.2)?;
+            let mut s = crate::sph::Sph::sod(num(q, "n", 300.0, 50.0, 1000.0)? as usize);
+            let e0 = s.energy();
+            s.run_to(t);
+            s.density();
+            let (mut x, mut rho, mut exact, mut err) = (vec![], vec![], vec![], 0.0);
+            for (p, r) in s.x.iter().zip(&s.rho) {
+                if p.x > 0.0 && p.x < 1.0 { x.push(p.x); rho.push(*r); let e = fl::sod_exact(p.x, s.t).0; exact.push(e); err += (r - e).abs(); }
+            }
+            let l1 = err / x.len().max(1) as f64;
+            Ok(J::obj().set("x", x).set("rho", rho).set("exact", exact).set("l1", l1).set("energy_error", ((s.energy() - e0) / e0).abs()).set("particles", s.x.len()))
+        }
+        "evrard" => {
+            let mut s = crate::sph::Sph::evrard(num(q, "n", 500.0, 200.0, 1500.0)? as usize, 1);
+            s.density();
+            let e0 = s.energy();
+            let (mut t, mut kin, mut th, mut pot) = (vec![], vec![], vec![], vec![]);
+            let end = num(q, "t", 1.5, 0.2, 3.0)?;
+            let mut next = 0.0;
+            while s.t < end {
+                s.step();
+                if s.t >= next { t.push(s.t); kin.push(s.kinetic()); th.push(s.thermal()); pot.push(s.potential()); next = s.t + 0.02; }
+            }
+            Ok(J::obj().set("t", t).set("kinetic", kin).set("thermal", th).set("potential", pot).set("energy_error", ((s.energy() - e0) / e0).abs()))
+        }
+        "winds" => {
+            let name = q.get("world").map(|s| s.as_str()).unwrap_or("earth");
+            let world = crate::world::World::preset(name)?;
+            let climate = crate::climate::simulate(&world, &crate::climate::ClimateOptions::default());
+            let r = crate::shallow::world_winds(&world, &climate, 21, num(q, "days", 45.0, 5.0, 90.0)?)?;
+            Ok(J::obj().set("lat", r.lat).set("u", r.u).set("v", r.v).set("cloud", r.cloud).set("peak_u", r.peak_u).set("peak_lat", r.peak_lat).set("balance_error", r.balance_error).set("global_mean", climate.global_mean))
+        }
+        "impact" => {
+            let mut s = crate::impacts::ImpactSim::two_bodies(5.972e24, 6.371e6, num(q, "ratio", 0.1, 0.001, 1.0)?, num(q, "speed", 1.1, 0.1, 20.0)?, num(q, "b", 0.3, 0.0, 0.95)?, 5500.0)?;
+            let mut frames = vec![];
+            let scale = 6.371e6;
+            for _ in 0..160 {
+                for _ in 0..5 { s.step(10.0); }
+                let body: Vec<J> = s.sim.bodies.iter().zip(&s.radius).map(|(b, r)| J::obj().set("x", b.r.x / scale).set("y", b.r.y / scale).set("r", r / scale)).collect();
+                frames.push(J::Arr(body));
+            }
+            let events: Vec<J> = s.events.iter().map(|e| J::obj().set("t", e.t).set("outcome", e.outcome.clone()).set("speed", e.speed).set("remnant_share", e.remnant_share).set("heat", e.heat)).collect();
+            Ok(J::obj().set("frames", J::Arr(frames)).set("events", J::Arr(events)).set("bodies", s.sim.bodies.len()))
+        }
         "ocean" => {
             let l = te::Lithosphere::earth();
             let myr = YEAR * 1e6;

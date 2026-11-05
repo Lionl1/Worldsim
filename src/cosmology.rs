@@ -116,6 +116,9 @@ impl Cosmology {
 }
 
 // ------------------------------------------------------------------ FFT
+/// Force split scale of P3M, in mesh cells.
+const P3M_RS: f64 = 1.25;
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Cx { pub re: f64, pub im: f64 }
 
@@ -179,6 +182,8 @@ pub struct PmSim {
     pub pos: Vec<[f64; 3]>,
     pub mom: Vec<[f64; 3]>, // u = a² dx/dt (Mpc/h · H₀)
     pub density: Vec<f64>,  // δ+1 on the grid after the last step
+    /// P3M: the mesh carries the long range, close pairs are summed directly. Slower, but resolves below the mesh cell.
+    pub p3m: bool,
 }
 
 impl PmSim {
@@ -227,7 +232,7 @@ impl PmSim {
             pos.push(p);
             mom.push(u);
         }}}
-        PmSim { cosmo, n, box_size, a: a_init, pos, mom, density: vec![1.0; n3] }
+        PmSim { cosmo, n, box_size, a: a_init, pos, mom, density: vec![1.0; n3], p3m: false }
     }
 
     fn deposit(&mut self) {
@@ -265,7 +270,13 @@ impl PmSim {
             let s = |m: usize| { let x = PI * m as f64 / n as f64; (2.0 * x.sin() / cell).powi(2) };
             let k2 = s(i) + s(j) + s(k);
             if k2 == 0.0 { d[idx] = Cx::default(); continue; }
-            let g = -pref / k2;
+            // the force split: the mesh keeps only what the pair sum leaves out
+            // with P3M the mesh must be accurate at short range, so the assignment window is taken out as well
+            let split = if self.p3m {
+                let sinc = |m: usize| { let m = if m > n / 2 { n - m } else { m }; let x = PI * m as f64 / n as f64; if x == 0.0 { 1.0 } else { x.sin() / x } };
+                (-k2 * (P3M_RS * cell).powi(2)).exp() / (sinc(i) * sinc(j) * sinc(k)).powi(4)
+            } else { 1.0 };
+            let g = -pref * split / k2;
             d[idx] = Cx { re: d[idx].re * g, im: d[idx].im * g };
         }}}
         fft3(&mut d, n, true);
@@ -281,7 +292,88 @@ impl PmSim {
         acc
     }
 
+    /// Acceleration on every particle.
+    pub fn accelerations(&mut self, a_force: f64) -> Vec<[f64; 3]> {
+        let saved = self.a;
+        self.a = a_force;
+        let acc = self.forces();
+        let n = self.n;
+        let cell = self.box_size / n as f64;
+        let mut out: Vec<[f64; 3]> = self.pos.iter().map(|p| {
+            let (x, y, z) = (p[0] / cell, p[1] / cell, p[2] / cell);
+            let (i, j, k) = (x.floor(), y.floor(), z.floor());
+            let (dx, dy, dz) = (x - i, y - j, z - k);
+            let (i, j, k) = (i as isize, j as isize, k as isize);
+            let mut g = [0.0; 3];
+            for (oi, wx) in [(0, 1.0 - dx), (1, dx)] { for (oj, wy) in [(0, 1.0 - dy), (1, dy)] { for (ok, wz) in [(0, 1.0 - dz), (1, dz)] {
+                let ii = (i + oi).rem_euclid(n as isize) as usize;
+                let jj = (j + oj).rem_euclid(n as isize) as usize;
+                let kk = (k + ok).rem_euclid(n as isize) as usize;
+                let idx = (ii * n + jj) * n + kk;
+                for c in 0..3 { g[c] += wx * wy * wz * acc[c][idx]; }
+            }}}
+            g
+        }).collect();
+        if self.p3m { self.add_pairs(&mut out, 1.5 * self.cosmo.omega_m / a_force); }
+        self.a = saved;
+        out
+    }
+
+    /// Short-range part: Newton's force times the complement of the mesh filter, for pairs within 5 r_s.
+    fn add_pairs(&self, out: &mut [[f64; 3]], pref: f64) {
+        let cell = self.box_size / self.n as f64;
+        let (rs, l) = (P3M_RS * cell, self.box_size);
+        let cut = 5.0 * rs;
+        let side = ((l / cut).floor() as usize).max(1);
+        let size = l / side as f64;
+        let key = |p: &[f64; 3]| { let f = |x: f64| ((x / size) as usize).min(side - 1); (f(p[0]) * side + f(p[1])) * side + f(p[2]) };
+        let mut lists = vec![vec![]; side * side * side];
+        for (i, p) in self.pos.iter().enumerate() { lists[key(p)].push(i as u32); }
+        // the source mass is one cell volume at the mean density
+        let strength = pref * cell.powi(3) / (4.0 * PI);
+        let eps2 = (0.05 * cell).powi(2);
+        let threads = std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1);
+        let per = out.len().div_ceil(threads).max(1);
+        let (pos, lists) = (&self.pos, &lists);
+        std::thread::scope(|sc| {
+            for (chunk, block) in out.chunks_mut(per).enumerate() {
+                sc.spawn(move || {
+                    for (b, o) in block.iter_mut().enumerate() {
+                        let i = chunk * per + b;
+                        let p = pos[i];
+                        let c = |x: f64| ((x / size) as usize).min(side - 1) as isize;
+                        let (ci, cj, ck) = (c(p[0]), c(p[1]), c(p[2]));
+                        let reach = if side >= 3 { 1isize } else { 0 };
+                        let w = |x: isize| x.rem_euclid(side as isize) as usize;
+                        for di in -reach..=reach { for dj in -reach..=reach { for dk in -reach..=reach {
+                            for &j in &lists[(w(ci + di) * side + w(cj + dj)) * side + w(ck + dk)] {
+                                if j as usize == i { continue; }
+                                let q = pos[j as usize];
+                                let mut d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+                                for x in &mut d { if *x > l / 2.0 { *x -= l; } else if *x < -l / 2.0 { *x += l; } }
+                                let r2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+                                if r2 >= cut * cut { continue; }
+                                let r = r2.sqrt();
+                                let u = r / (2.0 * rs);
+                                let keep = (1.0 - crate::tectonics::erf(u)) + r / (rs * PI.sqrt()) * (-u * u).exp();
+                                let f = strength * keep / (r2 + eps2).powf(1.5);
+                                for k in 0..3 { o[k] += d[k] * f; }
+                            }
+                        }}}
+                    }
+                });
+            }
+        });
+    }
+
     fn kick(&mut self, da: f64, a_force: f64) {
+        if self.p3m {
+            let fac = da / (a_force * self.cosmo.e(a_force));
+            // the same expansion factor as the mesh-only kick takes in forces()
+            let g = self.accelerations(self.a);
+            for (u, g) in self.mom.iter_mut().zip(&g) { for c in 0..3 { u[c] += g[c] * fac; } }
+            return;
+        }
         let acc = self.forces();
         let n = self.n;
         let cell = self.box_size / n as f64;

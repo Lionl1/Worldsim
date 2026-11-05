@@ -27,7 +27,7 @@ COMMANDS
             [--no-drag] [--no-rotation] [--no-j2] [--out traj.csv]
   thermal   [world] --lat 0 --dec 0 --days 15 [--out temp.csv]
   particle  [world] --species proton --mev 1 --L 3 --pitch 40 --time 20 [--out p.csv]
-  system    --bodies sun,earth,moon,mars --years 1 --dt-hours 1 [--gr] [--leapfrog] [--out sys.csv]
+  system    --bodies sun,earth,moon,mars --years 1 --dt-hours 1 [--gr] [--integrator yoshida|leapfrog|ias15|wh] [--out sys.csv]
   dataset   --task projectile|orbit|thermal|particle|system --n 1000
             --worlds earth,moon,mars --out data/ --seed 42 [--points 100] [--noise 0.01] [--strict]
   serve     [--host 127.0.0.1] [--port 8080] [--no-open] [--token T] [--viewer-token V] [--data-dir runs] [--cors] [--log] [--insecure]
@@ -105,7 +105,7 @@ fn allowed_flags(cmd: &str) -> Option<&'static [&'static str]> {
         "throw" => &["speed", "elev", "az", "lat", "lon", "alt", "radius", "density", "cd", "no-drag", "no-rotation", "no-j2", "sample-dt", "max-time", "out"],
         "thermal" => &["lat", "dec", "days", "sample-days", "out"],
         "particle" => &["species", "mev", "L", "pitch", "time", "out", "lon"],
-        "system" => &["bodies", "years", "dt-hours", "gr", "leapfrog", "out"],
+        "system" => &["bodies", "years", "dt-hours", "gr", "leapfrog", "integrator", "out"],
         "dataset" => &["task", "n", "worlds", "out", "seed", "points", "noise", "strict"],
         "loop" => &["task", "port", "realtime", "seed", "noise", "set", "once", "max-steps"],
         "serve" => &["host", "port", "no-open", "token", "viewer-token", "data-dir", "cors", "log", "insecure"],
@@ -207,6 +207,10 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
             let mut s = NBody::from_presets(&refs)?;
             if flag(kv, "gr") { s.enable_relativity("sun")?; }
             if flag(kv, "leapfrog") { s.integrator = Integrator::Leapfrog; }
+            if let Some(i) = kv.get("integrator") {
+                s.integrator = worldsim::nbody::integrator_by_name(i)?;
+                if s.integrator == Integrator::WisdomHolman && flag(kv, "gr") { return Err("--integrator wh does not support --gr: use ias15".into()); }
+            }
             let dt = num(kv, "dt-hours", 1.0)? * 3600.0;
             let total = num(kv, "years", 1.0)? * YEAR;
             let every = (num(kv, "sample-days", 1.0)? * DAY / dt).max(1.0) as usize;

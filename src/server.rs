@@ -234,7 +234,7 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
 /// What a read-only token may do: see results and descriptions, but not spend the server's cores or change anything.
 fn viewer_may(method: &str, path: &str) -> bool {
     (method == "GET" || method == "HEAD")
-        && (matches!(path, "/api/version" | "/api/openapi.json" | "/api/presets" | "/api/env/schema" | "/api/env/tasks" | "/api/mission/example" | "/api/jobs" | "/data/stars.json" | "/data/exoplanets.json")
+        && (matches!(path, "/api/version" | "/api/openapi.json" | "/api/presets" | "/api/env/schema" | "/api/env/tasks" | "/api/mission/example" | "/api/jobs" | "/data/stars.json" | "/data/exoplanets.json" | "/textures/earth.jpg" | "/textures/moon.jpg")
             || path.starts_with("/api/runs") || (path.starts_with("/api/jobs/") && !path.ends_with("/cancel")))
 }
 
@@ -333,6 +333,10 @@ fn route(path: &str, q: &Q, st: &State) -> Result<Resp, String> {
         "/api/runs/compare" => match crate::store::compare(&st.opts.data_dir, s(q, "a", ""), s(q, "b", "")) { Ok(c) => Resp::json(c), Err(e) => Resp::err(404, &e) },
         p if p.starts_with("/api/runs/") => match crate::store::load_report(&st.opts.data_dir, &p["/api/runs/".len()..]) { Ok(r) => Resp::json(r), Err(e) => Resp::err(404, &e) },
         p if p.starts_with("/api/jobs/") => job_route(&p["/api/jobs/".len()..], st)?,
+        "/textures/earth.jpg" | "/textures/moon.jpg" => match data_file(&path[1..]) {
+            Some(b) => Resp { status: 200, ctype: "image/jpeg", body: b, headers: vec![] },
+            None => Resp::err(404, "textures not downloaded: run ./tools/fetch_textures.sh in the project folder"),
+        },
         "/data/stars.json" => data_resp("stars_hyg.json"),
         "/data/exoplanets.json" => data_resp("exoplanets_oec.json"),
         "/api/presets" => Resp::json(presets_json()),
@@ -585,6 +589,9 @@ fn nbody_new(q: &Q, st: &State) -> Result<Resp, String> {
         (sim, J::obj().set("bodies", J::Arr(meta)).set("system", system_json(&sys)))
     };
     if s(q, "gr", "0") == "1" { if let Some(i) = sim.index("sun") { sim.relativity_center = Some(i); } }
+    sim.integrator = crate::nbody::integrator_by_name(s(q, "integrator", "yoshida"))?;
+    if sim.integrator == crate::nbody::Integrator::WisdomHolman && sim.relativity_center.is_some() { return Err("the wh integrator does not support the GR correction: use ias15".into()); }
+    if sim.integrator == crate::nbody::Integrator::WisdomHolman && kind == "solar" && s(q, "bodies", "sun,mercury,venus,earth,moon,mars,jupiter").contains("moon") { return Err("the wh integrator has no close encounters, so it cannot carry the Moon: remove it or use ias15".into()); }
     let e0 = sim.invariants().energy;
     let id = store(st, Sim::NBody { sim, e0 });
     Ok(Resp::json(meta.set("id", id)))
@@ -642,10 +649,11 @@ fn galaxy_rotation(q: &Q, st: &State) -> Result<Resp, String> {
 
 fn cosmo_new(q: &Q, st: &State) -> Result<Resp, String> {
     let c = Cosmology::preset(s(q, "preset", "planck2018"))?;
-    let n = match f(q, "n", 32.0) as usize { x if x >= 64 => 64, x if x >= 32 => 32, _ => 16 };
+    let n = match f(q, "n", 32.0) as usize { x if x >= 128 => 128, x if x >= 64 => 64, x if x >= 32 => 32, _ => 16 };
     let bx = f(q, "box", 200.0).clamp(10.0, 2000.0);
     let a0 = f(q, "a0", 0.02).clamp(0.005, 0.5);
-    let pm = PmSim::new(c, n, bx, a0, f(q, "seed", 1.0) as u64);
+    let mut pm = PmSim::new(c, n, bx, a0, f(q, "seed", 1.0) as u64);
+    pm.p3m = s(q, "p3m", "0") == "1";
     let id = store(st, Sim::Pm(pm));
     Ok(Resp::json(J::obj().set("id", id).set("n", n).set("box", bx).set("a", a0).set("age_gyr", c.age_gyr(a0)).set("age_now", c.age_gyr(1.0))))
 }

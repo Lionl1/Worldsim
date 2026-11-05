@@ -322,6 +322,16 @@ const worldTab = {
     await this.load(this.q);
   },
   query(){ return this.q || {physics:$('#w_phys').value, atmosphere:$('#w_atm').value, surface:$('#w_srf').value, gravity_scale:$('#w_g').value, distance_au:$('#w_d').value}; },
+  async applyPhoto(name, ep){
+    try {
+      const r = await api(`/textures/${name}.jpg`, {binary:true});
+      const img = await createImageBitmap(await r.blob(), {imageOrientation:'flipY'});
+      if (ep !== epoch || !this.planet) { img.close(); return; }
+      const map = new THREE.Texture(img); map.flipY = false; map.colorSpace = THREE.SRGBColorSpace; map.needsUpdate = true;
+      this.planet.material = new THREE.MeshLambertMaterial({map});
+      const sun = new THREE.DirectionalLight(0xffffff, 3); sun.position.set(3, 1, 2); this.group.add(sun, new THREE.AmbientLight(0xffffff, .12));
+    } catch(e){ /* not downloaded: the procedural surface stays */ }
+  },
   async load(q){
     if (!q){ this.q = null; q = this.query(); } else this.q = q;
     busy(true);
@@ -333,6 +343,9 @@ const worldTab = {
       const mat = planetMaterial({uLow:{value:new THREE.Color(...(gas?[.75,.6,.45]:low))}, uHigh:{value:new THREE.Color(...(gas?[.95,.88,.75]:high))},
         uOcean:{value: w.surface.name==='earth' && w.atmosphere ? .7 : 0}, uGas:{value: gas?1:0}, uSeed:{value: w.radius_km % 17}});
       this.planet = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), mat); this.group.add(this.planet);
+      // a photo map only where the surface is the real one; mixed worlds keep the color computed from chemistry
+      const photo = {earth:'earth', moon:'moon'}[w.surface.name];
+      if (photo && settings().photo !== false && (!q.physics || q.physics===photo) && (!q.world || q.world===photo)) this.applyPhoto(photo, epoch);
       const ac = atmoColor(w); if (ac) this.group.add(atmosphereShell(1, ac[0], ac[1]));
       const P = (k,v) => `<div>${k}</div><div>${v}</div>`;
       let h = `<h3>${w.name.replaceAll(' ', ' · ')}</h3><div class="kv">${P('Mass', fmt(w.mass_earth,3)+' M⊕')}${P('Radius', fmt(w.radius_km,0)+' km')}${P('g', fmt(w.g,3)+' m/s²')}
@@ -462,6 +475,7 @@ const solarTab = {
       <div class="row"><label>Bodies</label><input id="s_b" type="text" value="sun,mercury,venus,earth,moon,mars,jupiter"></div>
       <div class="row"><label>Distance scale</label><select id="s_m"><option value="sqrt">√r (everything visible)</option><option value="lin">linear</option></select></div>
       <div class="row"><label>Days per frame</label><input id="s_v" type="range" min="0.1" max="20" step="0.1" value="3"><span id="s_vv" style="flex:0 0 40px">3</span></div>
+      <div class="row"><label>Integrator</label><select id="s_i"><option value="yoshida">Yoshida, 4th order</option><option value="ias15">IAS15, adaptive 15th order</option><option value="wh">Wisdom–Holman (no Moon, no GR)</option><option value="leapfrog">Leapfrog</option></select></div>
       <div class="row"><label>GR (1PN)</label><select id="s_gr"><option value="0">off</option><option value="1">on</option></select></div>
       <div class="row"><label>Moon ×</label><input id="s_moon" type="number" value="40" title="visual enlargement of the lunar orbit"></div>
       <div class="btns"><span class="btn" id="s_go">Restart</span><span class="btn sec" id="s_p">Pause</span></div><div id="s_info" class="muted" style="margin-top:8px"></div>`;
@@ -472,7 +486,7 @@ const solarTab = {
   },
   async start(){
     let meta;
-    try { meta = await api('/api/nbody/new?' + qs({kind:'solar', bodies:$('#s_b').value, gr:$('#s_gr').value})); $('#s_info').innerHTML = ''; }
+    try { meta = await api('/api/nbody/new?' + qs({kind:'solar', bodies:$('#s_b').value, gr:$('#s_gr').value, integrator:$('#s_i').value})); $('#s_info').innerHTML = ''; }
     catch(e){ $('#s_info').innerHTML = `<span class="no">${esc(e.message)}</span>`; return; }
     this.scene.children.filter(o=>o.type!=='Points').forEach(o=>this.scene.remove(o));
     this.meta = meta; this.id = meta.id; this.bodies = nbodyView(this, meta); this.loop(epoch);
@@ -712,7 +726,8 @@ const cosmoTab = {
     const S = makeScene(50, 0.1, 1e5); Object.assign(this, S); this.camera.position.set(260, 180, 260);
     panel.innerHTML = `<h2>Structure formation (ΛCDM)</h2><div class="muted">Friedmann equation + particle-mesh: Zeldovich initial conditions from the BBKS spectrum (σ₈), gravity via FFT. The cosmic web grows from a nearly uniform field.</div>
       <div class="row"><label>Cosmology</label><select id="k_c"><option value="planck2018">Planck 2018</option><option value="eds">Einstein–de Sitter (Ω_m=1)</option><option value="open">Open (Ω_m=0.3, Λ=0)</option><option value="lambda_heavy">High Λ (Ω_Λ=0.85)</option></select></div>
-      <div class="row"><label>Particles</label><select id="k_n"><option value="32">32³ = 32,768</option><option value="64" selected>64³ = 262,144</option></select></div>
+      <div class="row"><label>Particles</label><select id="k_n"><option value="32">32³ = 32,768</option><option value="64" selected>64³ = 262,144</option><option value="128">128³ = 2,097,152 (seconds per step)</option></select></div>
+      <div class="row"><label>Short-range force</label><select id="k_p"><option value="0">mesh only</option><option value="1">P3M, close pairs summed (slower)</option></select></div>
       <div class="row"><label>Box size, Mpc/h</label><input id="k_b" type="number" value="200"></div>
       <div class="row"><label>Δa per step</label><input id="k_da" type="range" min="0.002" max="0.03" step="0.002" value="0.01"></div>
       <div class="btns"><span class="btn" id="k_go">Big Bang ↺</span><span class="btn sec" id="k_pp">Pause</span><span class="btn sec" id="k_pk">Spectrum P(k)</span><span class="btn sec" id="k_bg">History a(t)</span></div>
@@ -726,7 +741,7 @@ const cosmoTab = {
   },
   async start(){
     busy(true);
-    const meta = await api('/api/cosmo/new?' + qs({preset:$('#k_c').value, n:$('#k_n').value, box:$('#k_b').value, seed:Math.floor(Math.random()*1e6)})); busy(false);
+    const meta = await api('/api/cosmo/new?' + qs({preset:$('#k_c').value, n:$('#k_n').value, p3m:$('#k_p').value, box:$('#k_b').value, seed:Math.floor(Math.random()*1e6)})); busy(false);
     this.id = meta.id; this.meta = meta; this.paused = false;
     if (this.pts) this.scene.remove(this.pts);
     const n = meta.n**3, g = new THREE.BufferGeometry();
@@ -1273,6 +1288,7 @@ const settingsTab = {
       <div class="row"><label>Chart height</label><input id="s_ch" type="range" min="120" max="420" step="4" value="${s.chart}"><span id="s_chv" style="flex:0 0 58px;text-align:right">${s.chart} px</span></div>
       <div class="row"><label>Chart below the scene</label><select id="s_co">${opt([['1','Show'],['0','Hide']],s.chartOn?'1':'0')}</select></div>
       <h3>Graphics quality</h3>
+      <div class="row"><label>Photo maps</label><select id="s_ph">${opt([['on','On (after tools/fetch_textures.sh)'],['off','Off']], s.photo===false?'off':'on')}</select></div>
       <div class="row"><label>Resolution</label><select id="s_q">${opt([['high','High'],['medium','Medium'],['low','Low']],s.quality)}</select></div>
       <div class="row"><label>Shadows</label><select id="s_sh">${opt([['1','On'],['0','Off']],s.shadows?'1':'0')}</select></div>
       <h3>Browser data</h3>
@@ -1284,6 +1300,7 @@ const settingsTab = {
     $('#s_ch').oninput = e => { $('#s_chv').textContent = e.target.value+' px'; set('chart', +e.target.value); };
     $('#s_co').onchange = e => set('chartOn', e.target.value==='1');
     $('#s_mo').onchange = e => set('motion', e.target.value==='1');
+    $('#s_ph').onchange = e => set('photo', e.target.value==='on');
     $('#s_q').onchange = e => set('quality', e.target.value);
     $('#s_sh').onchange = e => set('shadows', e.target.value==='1');
     $('#s_rs').onclick = () => { store.set('settings', {}); applySettings(); this.init(); };
@@ -1344,7 +1361,11 @@ const LAB_TOPICS = {
   nozzle:{label:'Chemistry: nozzle and Isp', fields:[['gamma','Adiabatic index',1.2,1.1,1.4,.01],['tc','Chamber temperature, K',3600,1500,4000,50],['molar','Molar mass, g/mol',13.5,2,40,.5]]},
   crater:{label:'Impacts: crater', fields:[['d','Body diameter, m',50,1,20000,1],['v','Speed, km/s',13,1,70,1],['angle','Angle, °',45,5,90,5],['g','Gravity, m/s²',9.81,.5,25,.01]]},
   collide:{label:'Impacts: planetary collision', fields:[['m1','Target mass, M⊕',1,.01,20,.01],['m2','Projectile mass, M⊕',.1,.001,20,.001],['v','Speed, km/s',12,1,80,1]]},
+  impact:{label:'Impacts: live collision', fields:[['ratio','Impactor mass, of the target',.1,.001,1,.001],['speed','Speed, of escape velocity',1.1,.1,20,.1],['b','Impact parameter',.3,0,.95,.05]]},
   ocean:{label:'Tectonics: ocean floor', fields:[]},
+  sph:{label:'Gas: SPH particles, Sod tube', fields:[['n','Particles per unit length',300,50,1000,50],['t','Time',.15,.02,.2,.01]]},
+  evrard:{label:'Gas: SPH with gravity, Evrard collapse', fields:[['n','Particles',500,200,1500,100],['t','Time',1.5,.2,3,.1]]},
+  winds:{label:'Climate: winds and clouds', fields:[['world','World',['earth','mars','venus','jupiter']],['days','Days to compute',45,5,90,5]]},
 };
 const labTab = {
   async init(){
@@ -1356,11 +1377,13 @@ const labTab = {
   },
   topic(){
     const t = LAB_TOPICS[$('#l_t').value];
-    $('#l_f').innerHTML = t.fields.map(([k,l,d,mn,mx,st])=>`<div class="row"><label>${l}</label><input data-k="${k}" type="number" value="${d}" min="${mn}" max="${mx}" step="${st}"></div>`).join('');
-    $('#l_f').querySelectorAll('input').forEach(i => i.onchange = () => this.run());
+    $('#l_f').innerHTML = t.fields.map(([k,l,d,mn,mx,st])=>Array.isArray(d)
+      ? `<div class="row"><label>${l}</label><select data-k="${k}">${d.map(o=>`<option>${o}</option>`).join('')}</select></div>`
+      : `<div class="row"><label>${l}</label><input data-k="${k}" type="number" value="${d}" min="${mn}" max="${mx}" step="${st}"></div>`).join('');
+    $('#l_f').querySelectorAll('input,select').forEach(i => i.onchange = () => this.run());
     this.run();
   },
-  vals(){ const o = {}; $('#l_f').querySelectorAll('input').forEach(i => o[i.dataset.k]=i.value); return o; },
+  vals(){ const o = {}; $('#l_f').querySelectorAll('input,select').forEach(i => o[i.dataset.k]=i.value); return o; },
   async run(){
     const my = this.req = (this.req||0)+1, id = $('#l_t').value, P = (k,v) => `<div>${k}</div><div>${v}</div>`, res = h => $('#l_r').innerHTML = h, note = h => $('#l_n').innerHTML = h;
     cancelAnimationFrame(this.raf);
@@ -1396,6 +1419,24 @@ const labTab = {
       } else if (id==='collide'){
         res(P('Specific energy', r.q.toExponential(2)+' J/kg')+P('Disruption threshold', r.q_star.toExponential(2)+' J/kg')+P('Remnant mass', fmt(r.remnant*100,1)+'%')+P('Outcome', esc(r.outcome)));
         chart([{x:r.vs,y:r.fr,color:'#5aa2ff',label:'mass fraction in the remnant'}],{title:'Remnant vs impact speed',xlabel:'speed, km/s',yr:[0,1]});
+      } else if (id==='impact'){
+        const e = r.events[0];
+        res(e ? P('Outcome', esc(e.outcome))+P('Impact speed', fmt(e.speed/1e3,1)+' km/s')+P('Largest remnant', fmt(e.remnant_share*100,1)+'% of the mass')+P('Energy into heat', e.heat.toExponential(2)+' J')+P('Bodies at the end', r.bodies) : P('Outcome','the bodies did not touch'));
+        note('The outcome follows the Leinhardt–Stewart scaling law. Fragments are six schematic bodies, not a hydrodynamic result.');
+        const circle = (b,i) => { const a=[...Array(33).keys()].map(k=>k/32*2*Math.PI); return {x:a.map(t=>b.x+b.r*Math.cos(t)),y:a.map(t=>b.y+b.r*Math.sin(t)),color:i?'#fbbf4b':'#5aa2ff'}; };
+        const box = Math.max(...r.frames[0].flatMap(b=>[Math.abs(b.x)+b.r,Math.abs(b.y)+b.r]))*1.1, wide = Math.max(1, $('main').clientWidth/Math.max(1,$('main').clientHeight));
+        let f=0, last=0; const loop=(ts)=>{ if (my!==this.req) return; if (ts-last>50){ last=ts; chart(r.frames[f].map(circle),{title:`Collision, frame ${f+1} of ${r.frames.length}`,xlabel:'x, Earth radii',xr:[-box*wide,box*wide],yr:[-box,box]}); f=(f+1)%r.frames.length; } this.raf=requestAnimationFrame(loop); }; loop(1e9);
+      } else if (id==='sph'){
+        res(P('Density error, L1', fmt(r.l1,4))+P('Energy error', r.energy_error.toExponential(1))+P('Particles', r.particles));
+        chart([{x:r.x,y:r.exact,color:'#fbbf4b',label:'exact'},{x:r.x,y:r.rho,dots:true,dot:3,color:'#5aa2ff',label:'SPH'}],{title:'Gas density',xlabel:'x'});
+      } else if (id==='evrard'){
+        res(P('Energy error', fmt(r.energy_error*100,2)+'%')+P('Peak kinetic energy', fmt(Math.max(...r.kinetic),3)));
+        note('Cold gas falls in, heats up and bounces. G = M = R = 1. Conservation is checked here, not agreement with a published run.');
+        chart([{x:r.t,y:r.kinetic,color:'#5aa2ff',label:'kinetic'},{x:r.t,y:r.thermal,color:'#fbbf4b',label:'thermal'},{x:r.t,y:r.potential,color:'#5fd38d',label:'potential'}],{title:'Energy during the collapse',xlabel:'time'});
+      } else if (id==='winds'){
+        res(P('Strongest zonal wind', fmt(r.peak_u,1)+' m/s')+P('At latitude', fmt(r.peak_lat,0)+'°')+P('Gradient balance error', fmt(r.balance_error*100,0)+'%')+P('Mean surface T', fmt(r.global_mean,1)+' K'));
+        note('One-layer model on a sphere, driven by the temperature contrast of the energy balance model. Not a general circulation model: jet strength and position differ from the real atmosphere. Clouds are a rule of thumb from ascent and do not change the temperature.');
+        chart([{x:r.lat,y:r.u,color:'#5aa2ff',label:'zonal wind, m/s'},{x:r.lat,y:r.cloud.map(c=>c*Math.max(...r.u.map(Math.abs))),color:'#fbbf4b',label:'cloud cover, 1 = top of the axis'}],{title:'Mean winds and clouds by latitude',xlabel:'latitude, °'});
       } else if (id==='ocean'){
         res(P('Subsidence, m·√Myr', fmt(r.slope,0))+P('Heat flow in an 80 Myr plate', fmt(r.q80,1)+' mW/m²')+P('Mantle Rayleigh number', r.ra.toExponential(2))+P('Convection speed', fmt(r.speed,1)+' cm/yr')); note('Order-of-magnitude estimates: a cooling plate and a boundary layer, not the motion of real plates.');
         chart([{x:r.age,y:r.depth,color:'#5aa2ff',label:'seafloor depth, m'}],{title:'Ocean depth vs plate age',xlabel:'Myr'});
