@@ -293,6 +293,9 @@ pub struct WindResult { pub lat: Vec<f64>, pub u: Vec<f64>, pub v: Vec<f64>, pub
 /// and it does not feed back on temperature.
 pub fn world_winds(world: &World, climate: &ClimateResult, trunc: usize, days: f64) -> Result<WindResult, String> {
     let atm = world.atmosphere.as_ref().ok_or("this world has no atmosphere, so there are no winds")?;
+    // outside these limits the model gives a number with nothing behind it: Venus comes out calm and Jupiter almost still
+    if world.physics.rotation_period.abs() > 10.0 * 86400.0 { return Err("winds: the model does not apply to a slowly rotating world: superrotation is not in it".into()); }
+    if !world.physics.has_surface || world.physics.gm / crate::constants::G > 15.0 * 5.972e24 { return Err("winds: the model does not apply to a giant planet: its winds do not come from a surface energy balance".into()); }
     let rs = R_GAS / atm.molar_mass;
     let omega = world.omega().abs();
     let mut sw = Sphere::new(trunc, world.physics.radius, omega, 0.0);

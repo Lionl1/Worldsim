@@ -30,15 +30,15 @@ worldsim does not replace these tools and should not try to. In orbit accuracy, 
 | Proven on real missions | **no** | yes (GMAT) | — | yes | — | **partial** (transfer to a robot, SRB) |
 | Monte Carlo requirements scorecard | yes | — | has Monte Carlo | yes | — | no |
 | Value of technologies, paired comparison | yes | — | — | — | — | no |
-| Coupled subsystems: power, communications, thermal | **weak**: battery and bus load only; no communications or thermal | partial | yes | — | yes | planned (OmniLRS) |
-| Working with real flight software and hardware | **no** | — | yes | — | yes | ROS (OmniLRS) |
+| Coupled subsystems: power, communications, thermal | **basic**: bus load, one thermal node, link and compute delays | partial | yes | — | yes | planned (OmniLRS) |
+| Working with real flight software and hardware | **TCP loop for software, no hardware** | — | yes | — | yes | ROS (OmniLRS) |
 | Photorealism | **no** | STK visualization | Vizard | no | CesiumJS | yes |
-| Deformable soil | **no** | no | no | no | — | in development |
+| Deformable soil | **Bekker model, rover only** | no | no | no | — | in development |
 | Massive parallelism | CPU | — | multiprocess Monte Carlo | — | cloud | GPU |
 | Qualification of trained models | yes | no | no | no | — | no |
 | True counterfactual branches | yes | no | — | no | — | no |
 | Mixed worlds | yes | no | — | no | — | no |
-| Automatic checks of physical laws | yes, 133 | code tests | code tests | — | — | — |
+| Automatic checks of physical laws | yes, 157 | code tests | code tests | — | — | — |
 | Running without installing dependencies | yes | installer | Python and a build | limited, NASA | cloud | GPU and Isaac Sim |
 
 ## Gaps and what we do about them
@@ -48,13 +48,13 @@ worldsim does not replace these tools and should not try to. In orbit accuracy, 
 | 1 | No check against real data | **critical** | Telemetry calibration | tool exists, verified on synthetic data; **no check against a real flight** |
 | 2 | Our autopilot is evaluated, not the customer system | **critical** | `MissionRunner.analyze`: custom controller, scorecard, main drivers, value of technologies, comparison with the autopilot | closed; a controller in Python only, no flight software |
 | 3 | Terrain is procedural only | high | Loading `.asc`, `.csv`, `.npy` | closed |
-| 4 | No industrial delivery: CI, image, versions, API | high | CI, Docker, releases, OpenAPI | done, see the repository for CI results; no releases published yet |
-| 5 | No token access or limits; server open to requests from other sites | high | Token, limits, origin check | closed; TLS and roles not done, no independent audit |
+| 4 | No industrial delivery: CI, image, versions, API | high | CI, Docker, releases, OpenAPI | closed; see the repository for CI results and releases |
+| 5 | No token access or limits; server open to requests from other sites | high | Token, read-only token, limits, origin check, TLS through Caddy | closed; only two roles, no independent audit |
 | 6 | Long calculations block a request, runs are not saved | high | Background jobs, run storage and comparison | closed |
 | 7 | Configuration only through JSON | medium | Forms from the parameter registry, presets | closed |
 | 8 | Data exchange with the training ecosystem | medium | LeRobot export, verified on lerobot 0.6.1 | closed, without camera |
-| 9 | Power, communications, thermal | medium | Bus load and battery on all vehicles; the rest is separate work, also pointed out by the [simulator survey](https://arxiv.org/html/2609.34743v1) | power closed; **communications and thermal not closed** |
-| 10 | No work with flight software and hardware | medium, for later stages | Real-time input, a ROS 2 bridge | **not closed** |
+| 9 | Power, communications, computing, thermal, also pointed out by the [simulator survey](https://arxiv.org/html/2609.34743v1) | medium | Bus load and battery, link delays and outages, decision time, one thermal node | closed at the level of simple models; **no data rates, no multi-node thermal, no coupling between them** |
+| 10 | No work with flight software and hardware | medium, for later stages | TCP loop with soft real time | partly closed: external software can drive it; **no ROS 2 bridge, no hardware, no hard timing** |
 | 11 | Exact orbits | low for the niche | Do not compete; import a trajectory from GMAT or STK | **not closed** |
 | 12 | Photorealism | low for the niche | Use OmniLRS where vision is needed | **not closed** |
 | 13 | Flight heritage, certification, support | **critical for trust** | Cannot be closed with code: needs pilot projects with companies | **not closed** |

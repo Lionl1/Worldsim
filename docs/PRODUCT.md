@@ -45,6 +45,7 @@ Qualification ladder `python/worldsim/qualify.py`:
 | L3 Response | Does it respond to actions correctly? | R² of the action effect against true branches |
 | L4 Optimism | Does it see a crash in advance? | Share of missed crashes and false alarms |
 | L5 Boundaries | Where does the model apply? | The same levels in worlds absent from training |
+| L6 Planning | Can you act on it? | Flying the mission by planning in imagination, judged by the requirements |
 
 ### What sets it apart
 
@@ -74,10 +75,12 @@ Measured on a MacBook (8 cores), one seed. The numbers show the order of magnitu
 
 | What | Result |
 |---|---|
-| Transition collection, `collect`, 8 threads | lander 271 thousand steps/s (219–252 thousand with branches), rover 297 thousand, drone 860 thousand |
-| Vector environment from Python, 64 environments | 78 thousand steps/s (1 thread), 184 thousand (8 threads) |
+| Transition collection, `collect`, 8 threads | lander 271 thousand steps/s (218–252 thousand with branches), rover 295 thousand, drone 848 thousand |
+| Vector environment from Python, 64 environments | 78 thousand steps/s (1 thread), 183 thousand (8 threads) |
 | HTTP API, Python client | about 17 thousand steps/s per connection |
 | Baseline MLP, Moon landing | trust horizon 0.46 s, 94% of crashes missed, 14% false alarms |
+| L6 with the baseline MLP, `lunar_lander`, 32 flights | 0% success, autopilot 87.5% |
+| L6 with an exact rigid-body model, short test mission, 6 flights | at least 80% success, a model that predicts nothing 0% (from the test suite) |
 | Example `lunar_lander`, 300 runs | 89.3% success, 0 of 4 requirements; best technology: 7 kN engine, +6.0 ± 3.2 pp. |
 
 The low result of the baseline MLP is expected: it is the simplest model for comparison. The tool shows where it breaks, despite a median one-step R² above 0.99 across channels.
@@ -86,22 +89,21 @@ The low result of the baseline MLP is expected: it is the simplest model for com
 
 These are worth telling a customer directly.
 
-- **This is not a flight qualification tool.** The physics is simplified: no deformable soil, no propellant slosh, the contact is a model, the rover moves on a simplified model. The results are suitable for early design decisions and comparing options.
+- **This is not a flight qualification tool.** The physics is simplified: soil is a rigid-wheel Bekker model and off by default, no propellant slosh, the contact is a model, the rover moves on a simplified model, thermal is one node. The results are suitable for early design decisions and comparing options.
 - **Not verified on real data.** The calibration tool has been checked only on synthetic recordings. There is no comparison with telemetry of real vehicles. Absolute numbers cannot be trusted, relative comparisons only with care.
-- **The controller affects the result.** Technology analysis evaluates the vehicle together with a controller. The default is the built-in autopilot; `MissionRunner.analyze` runs the same analysis on a custom Python controller. Real flight software is not connected.
+- **The controller affects the result.** Technology analysis evaluates the vehicle together with a controller. The default is the built-in autopilot; `MissionRunner.analyze` runs the same analysis on a custom Python controller. `worldsim loop` lets external software drive the simulation over TCP, but this has not been tried with real flight software.
 - **No compliance with standards is claimed.** The report is not evidence of ECSS compliance. We know the content of the handbook from reviews and have not yet matched it line by line.
 - **Demand is not verified.** There have been no conversations with space companies. The described value is a hypothesis.
 
 ## Parameters to add next
 
-The registry has 66 parameters today. These are not in it yet, and each needs a physics model, not only a new number:
+The registry has 89 parameters today. These are not in it yet, and each needs a physics model, not only a new number:
 
 | Parameter group | What it would add | Why it matters |
 |---|---|---|
-| Thermal limits | Component temperature range, engine duty limits, survival heating | A mission can pass today while overheating |
-| Communications | Link windows, data rate, signal blackout, command latency | Only a fixed observation delay exists |
-| Compute budget | Control loop overrun, inference time for a learned model | Decides whether a trained model fits flight hardware |
-| Terramechanics | Bekker soil constants, wheel sinkage, slip | Rover traction is Coulomb only |
+| Thermal, more detail | Several nodes, engine duty limits, survival heating | Thermal is one lumped node today |
+| Communications, more detail | Data rate, packet loss, schedule from geometry | Only latency and periodic outages exist |
+| Soil, more detail | Grousers, slip sinkage, fitted wheel data | The Bekker model is steady and generic |
 | Propellant slosh | Slosh mass, frequency and damping | Affects attitude control at low fuel |
 | Engine behavior | Ignition delay, restart count, minimum impulse bit | Throttle limits exist, but start and pulse behavior does not |
 | Structural limits | Maximum acceleration and leg load | The current limits only cover touchdown speed, tilt and slope |
@@ -113,7 +115,6 @@ The registry has 66 parameters today. These are not in it yet, and each needs a 
 |---|---|---|
 | 1 | Talk to 5–10 GNC and autonomy engineers | Check that this is the right pain before investing further |
 | 2 | Run calibration on real telemetry | Customer trust cannot be earned without it; the tool exists, the data does not |
-| 3 | L6: planning in imagination and checking in the simulator | Closest to real use |
-| 4 | Communications and computing budgets, thermal limits | The simulator survey points to this gap |
-| 5 | Mapping to ECSS-E-HB-40-02A | Entry into company processes |
-| 6 | Deformable soil ([example approach](https://arxiv.org/html/2601.04547)) | The main physical simplification for rovers |
+| 3 | Try `worldsim loop` with real flight software | The interface exists, but nobody has driven it with such software |
+| 4 | Mapping to ECSS-E-HB-40-02A | Entry into company processes |
+| 5 | Soil beyond rigid wheels ([example approach](https://arxiv.org/html/2601.04547)) | The main physical simplification for rovers |

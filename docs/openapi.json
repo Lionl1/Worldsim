@@ -1,12 +1,14 @@
 {
   "openapi": "3.0.3",
-  "info": { "title": "worldsim API", "version": "0.3.0", "description": "Simulations, training environments and Mission Lab. If the server runs with a token, pass Authorization: Bearer <token>. Open without a token: only / and /healthz." },
+  "info": { "title": "worldsim API", "version": "0.3.0", "description": "Simulations, training environments and Mission Lab. If the server runs with a token, pass Authorization: Bearer <token>; a read-only token gets 403 on calculations. Open without a token: only / and /healthz." },
   "components": { "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } } },
   "security": [{ "bearer": [] }],
   "paths": {
     "/healthz": { "get": { "summary": "Server liveness", "security": [], "responses": { "200": { "description": "ok" } } } },
     "/api/version": { "get": { "summary": "Version and server settings", "responses": { "200": { "description": "ok" } } } },
     "/api/openapi.json": { "get": { "summary": "This description", "responses": { "200": { "description": "ok" } } } },
+    "/textures/earth.jpg": { "get": { "summary": "Photo map of Earth, after tools/fetch_textures.sh", "responses": { "200": { "description": "image/jpeg" }, "404": { "description": "not downloaded" } } } },
+    "/textures/moon.jpg": { "get": { "summary": "Photo map of the Moon, after tools/fetch_textures.sh", "responses": { "200": { "description": "image/jpeg" }, "404": { "description": "not downloaded" } } } },
     "/api/presets": { "get": { "summary": "Presets of worlds, stars, galaxies", "responses": { "200": { "description": "ok" } } } },
     "/api/world": { "get": { "summary": "World parameters", "responses": { "200": { "description": "ok" } } } },
     "/api/climate": { "get": { "summary": "Seasonal climate model", "responses": { "200": { "description": "ok" } } } },
@@ -53,7 +55,7 @@
     "/api/runs/{id}": { "get": { "summary": "Run report", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "ok" } } } },
     "/api/blackhole/props": { "get": { "summary": "Black hole quantities", "responses": { "200": { "description": "ok" } } } },
     "/api/blackhole/render": { "get": { "summary": "Render, binary RGB", "responses": { "200": { "description": "rgb" } } } },
-    "/api/lab/{topic}": { "get": { "summary": "Experiment: tunnel, levels, hydrogen, sod, dam, chapman, nozzle, crater, collide, ocean", "parameters": [{ "name": "topic", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "ok" } } } },
+    "/api/lab/{topic}": { "get": { "summary": "Experiment: tunnel, levels, hydrogen, sod, dam, chapman, nozzle, crater, collide, impact, ocean, sph, evrard, winds", "parameters": [{ "name": "topic", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "ok" } } } },
     "/api/validate": { "get": { "summary": "Law checks", "responses": { "200": { "description": "ok" } } } },
     "/data/stars.json": { "get": { "summary": "Star catalog", "responses": { "200": { "description": "ok" }, "404": { "description": "catalog not downloaded" } } } },
     "/data/exoplanets.json": { "get": { "summary": "Exoplanet catalog", "responses": { "200": { "description": "ok" }, "404": { "description": "catalog not downloaded" } } } }

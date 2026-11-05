@@ -2,16 +2,20 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/). The API may change before 1.0.
 
-## 0.3.0 — unreleased
+## 0.3.0 — 2026-11-05
 
 ### Added
 - Mission Lab: requirements, failure modes, main drivers, value of technologies; background jobs with progress and cancellation, run storage and comparison.
 - World model qualification: accuracy, physical laws, action effect, optimism, applicability boundaries.
 - Transition collection `collect`, counterfactual branching, vector environment for Python.
-- Parameter registry: 66 parameters available in the API, CLI, missions and Python.
-- Physics: quantum mechanics, black holes, fluid dynamics, chemistry, collisions, tectonics; 133 checks.
+- Parameter registry: 89 parameters available in the API, CLI, missions and Python.
+- Physics: quantum mechanics, black holes, fluid dynamics, chemistry, collisions, tectonics; 157 checks.
 - Custom controller in Mission Lab with the full analysis (`MissionRunner.analyze`: main drivers and value of technologies), telemetry calibration, terrain of a real site, export to LeRobot.
-- Power budget: `bus_power` on every vehicle and `lander_battery_kwh` on the lander.
+- Budgets, all off by default: power (`bus_power`, `lander_battery_kwh`), thermal node, command latency and link outages, decision time, Bekker soil for the rover.
+- L6 Planning: `planning_check` flies missions by planning in the model's imagination.
+- `worldsim loop`: external software in the loop over TCP, lockstep or soft real time.
+- Read-only token, Docker Compose with Caddy for TLS.
+- IAS15 and Wisdom–Holman integrators, live collisions, SPH gas, one-layer winds on a sphere with rule-of-thumb clouds, P3M, 128³ particles, NASA photo maps of Earth and the Moon.
 - Settings forms, presets, import and export, theme, text size, panel width, graphics quality.
 - Access token, limits, request origin check, `/healthz`, `/api/version`, OpenAPI, Docker, CI, releases.
 

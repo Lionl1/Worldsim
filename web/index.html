@@ -1139,7 +1139,7 @@ const missionTab = {
   async buildForm(){
     const sp = this.spec, pr = this.presets || (this.presets = await api('/api/presets')), schema = await paramSchema(), task = sp.task||'lander';
     const [ph,at,su] = String(sp.world||'moon').split(':'), opt = (a,v,ex=[]) => ex.concat(a).map(x=>`<option ${x===v?'selected':''}>${x}</option>`).join(''), defs = schema.filter(d=>d.tasks.includes(task));
-    const metric = {success:'Share of successful flights', crashed:'Share of crashes', touch_speed:'Touchdown speed, m/s', touch_tilt:'Touchdown tilt, °', touch_offset:'Miss distance, m', fuel_used:'Fuel used, kg', energy_used_kj:'Energy, kJ', duration_s:'Duration, s'};
+    const metric = {success:'Share of successful flights', crashed:'Share of crashes', touch_speed:'Touchdown speed, m/s', touch_tilt:'Touchdown tilt, °', touch_offset:'Miss distance, m', fuel_used:'Fuel used, kg', energy_used_kj:'Energy, kJ', peak_temp_k:'Peak temperature, K', min_temp_k:'Lowest temperature, K', max_slip:'Wheel slip, peak', overruns:'Decision overruns', duration_s:'Duration, s'};
     const dispOpts = [['gravity','Gravity'],['nav_noise','Navigation noise'],['gust','Gusts, m/s'],['actuator_lag','Actuator lag, s'],['fault','Fault probability']].concat(defs.filter(d=>!['noise','gust','actuator_lag','fault_prob'].includes(d.name)&&d.defaults[task]>0).map(d=>[d.name,d.label]));
     const techParam = t => t.set ? Object.entries(t.set)[0] : t.set_dispersion ? Object.entries(t.set_dispersion)[0] : t.set_top ? Object.entries(t.set_top)[0] : ['',''];
     const techOpts = defs.map(d=>[d.name,d.label]).concat([['nav_noise','Navigation noise (dispersion)'],['actuator_lag_d','Actuator lag (dispersion)']]);
@@ -1365,7 +1365,7 @@ const LAB_TOPICS = {
   ocean:{label:'Tectonics: ocean floor', fields:[]},
   sph:{label:'Gas: SPH particles, Sod tube', fields:[['n','Particles per unit length',300,50,1000,50],['t','Time',.15,.02,.2,.01]]},
   evrard:{label:'Gas: SPH with gravity, Evrard collapse', fields:[['n','Particles',500,200,1500,100],['t','Time',1.5,.2,3,.1]]},
-  winds:{label:'Climate: winds and clouds', fields:[['world','World',['earth','mars','venus','jupiter']],['days','Days to compute',45,5,90,5]]},
+  winds:{label:'Climate: winds and clouds', fields:[['world','World',['earth','mars']],['days','Days to compute',45,5,90,5]]},
 };
 const labTab = {
   async init(){

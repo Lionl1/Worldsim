@@ -336,7 +336,9 @@ fn earth_winds_are_balanced_westerlies() {
     // air rises near the warm equator: the cloudiest zone sits there
     let at = |lat: f64| r.lat.iter().position(|x| (x - lat).abs() < 3.0).map(|i| r.cloud[i]).unwrap();
     assert!(at(2.8) > at(25.0), "cloud {} at the equator, {} at 25°", at(2.8), at(25.0));
-    assert!(world_winds(&World::preset("moon").unwrap(), &c, 21, 1.0).is_err());
+    // worlds where the model would give a number with nothing behind it are refused
+    for name in ["moon", "venus", "jupiter"] { assert!(world_winds(&World::preset(name).unwrap(), &c, 21, 1.0).is_err(), "{name}"); }
+    assert!(world_winds(&World::preset("mars").unwrap(), &simulate(&World::preset("mars").unwrap(), &ClimateOptions::default()), 21, 5.0).is_ok());
 }
 
 /// The pair sum must not disturb the linear growth of large scales.

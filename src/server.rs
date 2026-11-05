@@ -249,7 +249,7 @@ fn guard(st: &State, method: &str, path: &str, auth: &str, origin: &str, host: &
             let o = origin.split("://").nth(1).unwrap_or(origin);
             if o != host { return Some(Resp::err(403, "cross-site request rejected; can be allowed with the --cors flag")); }
         }
-        // without a token respond only to local names: protection against DNS rebinding DNS
+        // without a token respond only to local names: protection against DNS rebinding
         if st.opts.token.is_none() && is_loopback(&st.opts.host) {
             let name = if host.starts_with('[') { host.split(']').next().map(|x| format!("{x}]")).unwrap_or_default() } else { host.split(':').next().unwrap_or("").to_string() };
             if !name.is_empty() && !is_loopback(&name) { return Some(Resp::err(403, "unknown server name")); }
