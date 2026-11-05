@@ -50,7 +50,7 @@ const MAX_OTHER_SESSIONS: usize = 64;
 
 /// Server settings.
 #[derive(Clone, Debug)]
-pub struct ServerOpts { pub host: String, pub port: u16, pub open: bool, pub token: Option<String>, pub data_dir: std::path::PathBuf, pub cors: bool, pub log: bool, pub insecure: bool }
+pub struct ServerOpts { pub host: String, pub port: u16, pub open: bool, pub token: Option<String>, pub viewer_token: Option<String>, pub data_dir: std::path::PathBuf, pub cors: bool, pub log: bool, pub insecure: bool }
 
 const MAX_CONNECTIONS: usize = 512;
 const MAX_BODY: usize = 1 << 20;
@@ -93,12 +93,15 @@ impl Resp {
 }
 
 pub fn serve(port: u16, open_browser: bool) -> Result<(), String> {
-    serve_opts(ServerOpts { host: "127.0.0.1".into(), port, open: open_browser, token: None, data_dir: "runs".into(), cors: false, log: false, insecure: false })
+    serve_opts(ServerOpts { host: "127.0.0.1".into(), port, open: open_browser, token: None, viewer_token: None, data_dir: "runs".into(), cors: false, log: false, insecure: false })
 }
 
 fn is_loopback(host: &str) -> bool { matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]") }
 
 pub fn serve_opts(opts: ServerOpts) -> Result<(), String> {
+    if opts.viewer_token.is_some() && (opts.token.is_none() || opts.token == opts.viewer_token) {
+        return Err("the read-only token needs a separate main token: without it the server would stay open".into());
+    }
     if !is_loopback(&opts.host) && opts.token.is_none() && !opts.insecure {
         return Err(format!("address {} is reachable from the network: set a token through WORLDSIM_TOKEN or --token. Running unprotected requires an explicit flag: --insecure", opts.host));
     }
@@ -207,7 +210,7 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
         }
         let resp = if !(method == "GET" || method == "POST" || method == "HEAD") {
             Resp::err(405, "only GET/POST/HEAD")
-        } else if let Some(r) = guard(&st, &path, &auth, &origin, &host, &fetch_site) {
+        } else if let Some(r) = guard(&st, &method, &path, &auth, &origin, &host, &fetch_site) {
             r
         } else if method != "POST" && (path == "/api/mission/run" || path == "/api/jobs/mission" || (path.starts_with("/api/jobs/") && path.ends_with("/cancel"))) {
             // start and cancel change state: a stray link or prefetch must not trigger them
@@ -228,8 +231,15 @@ fn handle(mut stream: TcpStream, st: State) -> std::io::Result<()> {
     }
 }
 
+/// What a read-only token may do: see results and descriptions, but not spend the server's cores or change anything.
+fn viewer_may(method: &str, path: &str) -> bool {
+    (method == "GET" || method == "HEAD")
+        && (matches!(path, "/api/version" | "/api/openapi.json" | "/api/presets" | "/api/env/schema" | "/api/env/tasks" | "/api/mission/example" | "/api/jobs" | "/data/stars.json" | "/data/exoplanets.json")
+            || path.starts_with("/api/runs") || (path.starts_with("/api/jobs/") && !path.ends_with("/cancel")))
+}
+
 /// Origin and access. None means the request may be processed.
-fn guard(st: &State, path: &str, auth: &str, origin: &str, host: &str, fetch_site: &str) -> Option<Resp> {
+fn guard(st: &State, method: &str, path: &str, auth: &str, origin: &str, host: &str, fetch_site: &str) -> Option<Resp> {
     if path == "/healthz" { return None; }
     if !st.opts.cors {
         // a simple GET, such as an image on another site, arrives without Origin but with this header
@@ -248,7 +258,11 @@ fn guard(st: &State, path: &str, auth: &str, origin: &str, host: &str, fetch_sit
     if let Some(t) = &st.opts.token {
         if path == "/" || path == "/index.html" { return None; } // page without data: it asks for the token itself
         let given = auth.strip_prefix("Bearer ").unwrap_or("");
-        if !token_eq(given, t) { return Some(Resp::err(401, "token required: Authorization: Bearer <token>")); }
+        if token_eq(given, t) { return None; }
+        if st.opts.viewer_token.as_deref().is_some_and(|v| token_eq(given, v)) {
+            return if viewer_may(method, path) { None } else { Some(Resp::err(403, "this token is read-only: it cannot start calculations or change anything")) };
+        }
+        return Some(Resp::err(401, "token required: Authorization: Bearer <token>"));
     }
     None
 }

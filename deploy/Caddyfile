@@ -1,0 +1,5 @@
+# TLS for worldsim: Caddy gets a certificate and forwards to the server.
+# For a real domain set DOMAIN; on localhost Caddy issues its own local certificate.
+{$DOMAIN:localhost} {
+	reverse_proxy worldsim:8080
+}

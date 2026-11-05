@@ -181,7 +181,7 @@ pub unsafe extern "C" fn ws_mission_spec(p: *mut MissionHandle, buf: *mut u8, ca
     let h = unsafe { &*p };
     let e = &h.runner.envs[0];
     let (lo, hi) = e.act_bounds();
-    write_str(&J::obj().set("runs", h.runner.envs.len()).set("obs_names", e.obs_names()).set("act_names", e.act_names()).set("act_low", lo).set("act_high", hi).set("control_dt", e.control_dt()).render(), buf, cap)
+    write_str(&J::obj().set("runs", h.runner.envs.len()).set("obs_names", e.obs_names()).set("act_names", e.act_names()).set("act_low", lo).set("act_high", hi).set("control_dt", e.control_dt()).set("param_names", PARAM_NAMES.iter().map(|s| s.to_string()).collect::<Vec<_>>()).render(), buf, cap)
 }
 
 #[no_mangle]
@@ -219,6 +219,16 @@ pub unsafe extern "C" fn ws_mission_report(p: *mut MissionHandle, buf: *mut u8, 
     let name = unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned();
     let text = match h.runner.report(&name) { Ok(r) => r.render(), Err(e) => J::obj().set("error", e).render() };
     write_str(&text, buf, cap)
+}
+
+/// Hidden parameters of the current flights, by rows (see `param_names` in the spec).
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_params(p: *mut MissionHandle, out: *mut f32) {
+    let h = unsafe { &*p };
+    let w = PARAM_NAMES.len();
+    let out = unsafe { std::slice::from_raw_parts_mut(out, h.runner.envs.len() * w) };
+    for (e, o) in h.runner.envs.iter().zip(out.chunks_mut(w)) { copy(o, &e.params()); }
 }
 
 /// The flight series of a full analysis, JSON.

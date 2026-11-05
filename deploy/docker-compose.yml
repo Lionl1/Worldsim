@@ -1,0 +1,26 @@
+# worldsim behind TLS. Usage: WORLDSIM_TOKEN=... docker compose -f deploy/docker-compose.yml up -d
+services:
+  worldsim:
+    build: ..
+    environment:
+      WORLDSIM_TOKEN: ${WORLDSIM_TOKEN:?set a token}
+      WORLDSIM_VIEWER_TOKEN: ${WORLDSIM_VIEWER_TOKEN:-}
+    volumes:
+      - worldsim-data:/data
+    restart: unless-stopped
+  caddy:
+    image: caddy:2.8-alpine
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - worldsim
+    restart: unless-stopped
+volumes:
+  worldsim-data:
+  caddy-data:

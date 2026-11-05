@@ -29,6 +29,7 @@ class MissionRunner:
         lib.ws_mission_step.argtypes = [P, _F, _F, C.POINTER(C.c_ubyte)]
         lib.ws_mission_report.restype = C.c_size_t
         lib.ws_mission_report.argtypes = [P, C.c_char_p, C.c_size_t, C.c_char_p]
+        lib.ws_mission_params.argtypes = [P, _F]
         lib.ws_mission_plan.restype = C.c_size_t
         lib.ws_mission_plan.argtypes = [P, C.c_char_p, C.c_size_t]
         lib.ws_mission_select.restype = C.c_size_t
@@ -84,6 +85,12 @@ class MissionRunner:
             raise ValueError(report["error"])
         return report
 
+    def params(self):
+        """Hidden parameters of the current flights, N×P: what `WorldModel.init` receives."""
+        out = np.zeros((self.n, len(self.spec["param_names"])), np.float32)
+        self.lib.ws_mission_params(self._p, out.ctypes.data_as(_F))
+        return out
+
     def _select(self, i):
         n = self.lib.ws_mission_select(self._p, i)
         if n == 0:
@@ -97,6 +104,7 @@ class MissionRunner:
             controller.reset(self.n)
         obs = np.zeros((self.n, self.obs_dim), np.float32)
         done = np.zeros(self.n, np.uint8)
+        self.finished = done
         self.lib.ws_mission_reset(self._p, obs.ctypes.data_as(_F))
         U = C.POINTER(C.c_ubyte)
         left, step = self.n, 0

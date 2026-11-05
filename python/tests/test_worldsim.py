@@ -3,10 +3,13 @@ import http.client
 import json
 import os
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -574,6 +577,128 @@ class Security(unittest.TestCase):
     def test_health_command(self):
         self.assertEqual(subprocess.run([str(BIN), "health", "--port", str(self.PORT)], capture_output=True).returncode, 0)
         self.assertNotEqual(subprocess.run([str(BIN), "health", "--port", "18799"], capture_output=True).returncode, 0)
+
+
+class RigidBodyModel(worldsim.WorldModel):
+    """Exact thrust, gravity and rotation for the test lander; horizontal drift is left out. Enough to plan a straight landing."""
+    name = "rigid-body"
+
+    def __init__(self, spec):
+        self.dt, self.n = spec["control_dt"], {k: i for i, k in enumerate(spec["obs_names"])}
+        mass = 1000.0 + 120.0
+        self.accel = 8000.0 / mass
+        self.spin = 3000.0 / np.array([mass * (3 * 1.5 ** 2 + 9) / 12, mass * (3 * 1.5 ** 2 + 9) / 12, mass * 1.5 ** 2 / 2])
+
+    def init(self, obs, params):
+        return np.array(obs, np.float32)
+
+    def step(self, state, action):
+        s, n, dt = state.copy(), self.n, self.dt
+        wx, wy, wz = (s[:, n["gyro_" + k]] + action[:, i + 1] * self.spin[i] * dt for i, k in enumerate("xyz"))
+        ux, uy, uz = s[:, n["up_bx"]], s[:, n["up_by"]], s[:, n["up_bz"]]
+        s[:, n["gyro_x"]], s[:, n["gyro_y"]], s[:, n["gyro_z"]] = wx, wy, wz
+        s[:, n["up_bx"]], s[:, n["up_by"]], s[:, n["up_bz"]] = ux - (wy * uz - wz * uy) * dt, uy - (wz * ux - wx * uz) * dt, uz - (wx * uy - wy * ux) * dt
+        s[:, n["vel_z"]] += (self.accel * action[:, 0] * uz - 1.625) * dt
+        s[:, n["gps_dz"]] += s[:, n["vel_z"]] * dt
+        return s, s
+
+
+class NullModel(worldsim.WorldModel):
+    name = "nothing-changes"
+
+    def init(self, obs, params):
+        return np.array(obs, np.float32)
+
+    def step(self, state, action):
+        return state, state
+
+
+class PlanningLevel(unittest.TestCase):
+    SPEC = {"name": "plan", "task": "lander", "world": "moon", "runs": 6, "seed": 2, "vehicle": {"t_max": 8000, "fuel": 120, "start_offset": 0, "start_vh": 0, "start_tilt": 0, "start_alt_min": 60, "start_alt_max": 80, "start_vz_min": 2, "start_vz_max": 5, "terrain_scale": 0, "crater_scale": 0},
+            "requirements": [{"metric": "success", "op": ">=", "value": 0.5}]}
+
+    def test_planning_tells_a_useful_model_from_a_useless_one(self):
+        r = worldsim.MissionRunner(self.SPEC)
+        good = worldsim.planning_check(RigidBodyModel(r.spec), self.SPEC, plans=64, horizon=30)
+        bad = worldsim.planning_check(NullModel(), self.SPEC, plans=64, horizon=30)
+        self.assertGreaterEqual(good["success"], 0.8, good["failure_modes"])
+        self.assertEqual(bad["success"], 0.0)
+        self.assertFalse(bad["passed"])
+        self.assertLess(good["plan_error"], 1.0)
+        self.assertIn("L6 Planning", worldsim.planning_markdown(good))
+
+
+class Loop(unittest.TestCase):
+    def _start(self, port, *extra):
+        p = subprocess.Popen([str(BIN), "loop", "moon", "--task", "lander", "--port", str(port), "--noise", "0", "--once", *extra], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self.addCleanup(p.kill)
+        p.stdout.readline()
+        s = socket.create_connection(("127.0.0.1", port), timeout=10)
+        self.addCleanup(s.close)
+        return s, s.makefile("r"), None
+
+    def test_lockstep_matches_the_vector_environment(self):
+        s, f, _ = self._start(18731)
+        hello = json.loads(f.readline())
+        self.assertEqual(hello["task"], "lander")
+        s.sendall(b'{"action":[1,2]}\n')
+        self.assertIn("error", json.loads(f.readline()))
+        for _ in range(5):
+            s.sendall(b'{"action":[0.5,0,0,0]}\n')
+            r = json.loads(f.readline())
+        self.assertEqual(r["misses"], 0)
+        self.assertAlmostEqual(r["t"], 5 * hello["control_dt"], places=6)
+        s.sendall(b'{"reset":7}\n')
+        self.assertEqual(json.loads(f.readline())["t"], 0)
+
+    def test_real_time_counts_missed_commands(self):
+        s, f, _ = self._start(18732, "--realtime")
+        hello = json.loads(f.readline())
+        r = json.loads(f.readline())  # no command sent: the tick passes without one
+        self.assertTrue(r["late"])
+        self.assertEqual(r["misses"], 1)
+        s.sendall(b'{"action":[0.5,0,0,0]}\n')
+        while True:
+            r = json.loads(f.readline())
+            if not r["late"]:
+                break
+        s.sendall(b'{"bye":true}\n')
+        self.assertGreater(hello["control_dt"], 0)
+
+
+class Roles(unittest.TestCase):
+    def _get(self, port, path, token, method="GET"):
+        req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method=method, data=b"{}" if method == "POST" else None, headers={"Authorization": f"Bearer {token}"})
+        try:
+            return urllib.request.urlopen(req, timeout=10).status
+        except urllib.error.HTTPError as e:
+            return e.code
+
+    def test_viewer_token_reads_but_does_not_run(self):
+        env = dict(os.environ, WORLDSIM_TOKEN="main-token", WORLDSIM_VIEWER_TOKEN="view-token")
+        with tempfile.TemporaryDirectory() as d:
+            p = subprocess.Popen([str(BIN), "serve", "--port", "18733", "--no-open", "--data-dir", d], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.addCleanup(p.kill)
+            for _ in range(50):
+                try:
+                    urllib.request.urlopen("http://127.0.0.1:18733/healthz", timeout=1)
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            self.assertEqual(self._get(18733, "/api/runs", "view-token"), 200)
+            self.assertEqual(self._get(18733, "/api/env/schema", "view-token"), 200)
+            self.assertEqual(self._get(18733, "/api/mission/run", "view-token", "POST"), 403)
+            self.assertEqual(self._get(18733, "/api/jobs/mission", "view-token", "POST"), 403)
+            self.assertEqual(self._get(18733, "/api/env/make", "view-token"), 403)
+            self.assertEqual(self._get(18733, "/api/runs", "wrong"), 401)
+            self.assertEqual(self._get(18733, "/api/env/make", "main-token"), 200)
+
+    def test_viewer_token_alone_is_refused(self):
+        env = {k: v for k, v in os.environ.items() if k != "WORLDSIM_TOKEN"}
+        env["WORLDSIM_VIEWER_TOKEN"] = "v"
+        p = subprocess.run([str(BIN), "serve", "--port", "18734", "--no-open"], env=env, capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("main token", p.stderr)
 
 
 if __name__ == "__main__":

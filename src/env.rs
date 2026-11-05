@@ -281,6 +281,32 @@ pub const PARAMS: &[ParamDef] = &[
     p("rolling_resistance", "Vehicle", "Rolling resistance", "", 0.0, 0.5, R, 0.05, ""),
     p("panel_area", "Vehicle", "Solar panel area", "m²", 0.0, 50.0, R, 1.5, ""),
     p("battery_kwh", "Vehicle", "Battery", "kWh", 0.01, 100.0, R, 0.6, ""),
+    // Thermal: one lumped node, off while the thermal mass is zero
+    p("thermal_mass", "Thermal", "Thermal mass", "J/K", 0.0, 1e9, ALL, 0.0, "0 — thermal model off. With it on, leaving the limits ends the episode."),
+    p("radiator_area", "Thermal", "Radiator area", "m²", 0.0, 1000.0, ALL, 1.0, "Rejects heat to space at 0 K sink; surroundings and convection are not modeled."),
+    p("emissivity", "Thermal", "Radiator emissivity", "", 0.01, 1.0, ALL, 0.85, ""),
+    p("sun_area", "Thermal", "Sunlit area", "m²", 0.0, 1000.0, ALL, 1.0, "Projected area normal to the Sun."),
+    p("absorptance", "Thermal", "Solar absorptance", "", 0.0, 1.0, ALL, 0.3, ""),
+    p("heat_load", "Thermal", "Internal heat", "W", 0.0, 1e6, ALL, 0.0, "On top of the bus power, which also ends up as heat."),
+    p("temp_start", "Thermal", "Start temperature", "K", 1.0, 2000.0, ALL, 293.0, ""),
+    p("temp_max", "Thermal", "Upper limit", "K", 1.0, 3000.0, ALL, 323.0, ""),
+    p("temp_min", "Thermal", "Lower limit", "K", 0.0, 2000.0, ALL, 253.0, ""),
+    // Link and compute: all off by default
+    p("cmd_delay", "Link and compute", "Command latency", "steps", 0.0, 1000.0, ALL, 0.0, "Control steps between issuing and executing a command."),
+    p("link_period", "Link and compute", "Link cycle", "s", 0.0, 1e6, ALL, 0.0, "0 — no outages."),
+    p("link_outage", "Link and compute", "Outage in each cycle", "s", 0.0, 1e6, ALL, 0.0, "At the end of a cycle no commands arrive and observations freeze. The last command stays active."),
+    p("compute_ms", "Link and compute", "Decision time", "ms", 0.0, 1e5, ALL, 0.0, "A decision longer than a control step acts late and counts as an overrun."),
+    p("compute_jitter_ms", "Link and compute", "Decision time spread", "ms", 0.0, 1e5, ALL, 0.0, "Half-normal, added to the decision time."),
+    // Soil: Bekker model on the rover, off by default; values are typical lunar regolith from the Lunar Sourcebook
+    p("terramechanics", "Soil", "Bekker soil model", "0/1", 0.0, 1.0, R, 0.0, "0 — Coulomb traction and rolling resistance. 1 — sinkage, compaction and slip."),
+    p("soil_kc", "Soil", "Cohesive modulus kc", "kN/m^(n+1)", 0.0, 1e5, R, 1.4, "Typical lunar value. Use your soil data for real studies."),
+    p("soil_kphi", "Soil", "Frictional modulus kφ", "kN/m^(n+2)", 0.1, 1e7, R, 820.0, "Typical lunar value."),
+    p("soil_n", "Soil", "Sinkage exponent n", "", 0.2, 2.0, R, 1.0, ""),
+    p("soil_cohesion", "Soil", "Cohesion", "kPa", 0.0, 1e3, R, 0.17, ""),
+    p("soil_phi", "Soil", "Friction angle", "°", 1.0, 60.0, R, 35.0, ""),
+    p("shear_k", "Soil", "Shear deformation modulus K", "m", 0.001, 1.0, R, 0.018, ""),
+    p("wheel_radius", "Soil", "Wheel radius", "m", 0.02, 3.0, R, 0.25, "Four wheels."),
+    p("wheel_width", "Soil", "Wheel width", "m", 0.01, 2.0, R, 0.2, ""),
     // Scenario
     p3("start_alt_min", "Scenario", "Start altitude, from", "m", 1.0, 20_000.0, L | D, [300.0, 8.0, 0.0], ""),
     p3("start_alt_max", "Scenario", "Start altitude, to", "m", 1.0, 20_000.0, L | D, [700.0, 30.0, 0.0], ""),
@@ -295,7 +321,7 @@ pub const PARAMS: &[ParamDef] = &[
     p("terrain_scale", "Scenario", "Terrain height", "×", 0.0, 5.0, ALL, 1.0, "0 — flat surface."),
     p("crater_scale", "Scenario", "Number of craters", "×", 0.0, 5.0, ALL, 1.0, ""),
     p("friction", "Scenario", "Soil friction", "μ", -1.0, 2.0, ALL, -1.0, "−1 — value from the surface type."),
-    p("sun_elev", "Scenario", "Sun elevation", "°", -1.0, 90.0, R, -1.0, "−1 — random in each episode."),
+    p("sun_elev", "Scenario", "Sun elevation", "°", -1.0, 90.0, ALL, -1.0, "−1 — random on the rover, 40° for thermal on other vehicles."),
     // Criteria
     p("touch_speed_limit", "Criteria", "Allowed touchdown speed", "m/s", 0.1, 50.0, L, 2.5, ""),
     p("touch_tilt_limit", "Criteria", "Allowed touchdown tilt", "°", 1.0, 60.0, L, 15.0, ""),
@@ -343,6 +369,8 @@ impl Task {
 #[derive(Clone, Debug)]
 struct Tune {
     throttle_min: f64, misalign: f64, cg_offset: f64, drone_mass: f64, t2w: f64, rover_vmax: f64, tip_lat: f64, tip_long: f64, battery_rover: f64, bus_power: f64, battery_lander: f64,
+    th_mass: f64, th_rad: f64, th_eps: f64, th_sun: f64, th_abs: f64, th_load: f64, th_start: f64, th_max: f64, th_min: f64,
+    cmd_delay: usize, link_period: f64, link_outage: f64, compute_ms: f64, compute_jitter_ms: f64, soil: Option<crate::terramech::Soil>,
     alt: (f64, f64), offset: f64, vh: f64, vz: (f64, f64), tilt: f64, goal: (f64, f64), pad: f64, terrain: f64, craters: f64, friction: f64, sun: f64,
     lim_v: f64, lim_tilt: f64, lim_slope: f64, impact: f64, rew_ok: f64, rew_bad: f64, air: f64, wind: Vec3, solar: f64,
     n_pos: f64, n_vel: f64, n_att: f64, n_gyro: f64, n_acc: f64, n_rng: f64, gyro_bias: f64, accel_bias: f64, dropout: f64, delay: usize, dt: f64, action_noise: f64,
@@ -351,6 +379,8 @@ struct Tune {
 impl Tune {
     fn zero() -> Tune {
         Tune { throttle_min: 0.0, misalign: 0.0, cg_offset: 0.0, drone_mass: 1.5, t2w: 2.5, rover_vmax: 2.5, tip_lat: 1.0, tip_long: 1.33, battery_rover: 2.16e6, bus_power: 0.0, battery_lander: 0.0,
+            th_mass: 0.0, th_rad: 0.0, th_eps: 1.0, th_sun: 0.0, th_abs: 0.0, th_load: 0.0, th_start: 293.0, th_max: 323.0, th_min: 253.0,
+            cmd_delay: 0, link_period: 0.0, link_outage: 0.0, compute_ms: 0.0, compute_jitter_ms: 0.0, soil: None,
             alt: (0.0, 0.0), offset: 0.0, vh: 0.0, vz: (0.0, 0.0), tilt: 0.0, goal: (0.0, 0.0), pad: 25.0, terrain: 1.0, craters: 1.0, friction: -1.0, sun: -1.0,
             lim_v: 2.5, lim_tilt: 15.0, lim_slope: 12.0, impact: 3.0, rew_ok: 100.0, rew_bad: 100.0, air: 1.0, wind: Vec3::ZERO, solar: 1.0,
             n_pos: 1.0, n_vel: 1.0, n_att: 1.0, n_gyro: 1.0, n_acc: 1.0, n_rng: 1.0, gyro_bias: 0.0, accel_bias: 0.0, dropout: 0.0, delay: 0, dt: 0.005, action_noise: 0.0 }
@@ -364,6 +394,9 @@ impl Tune {
         let ordered = |a: f64, b: f64| (a.min(b), a.max(b));
         Tune { throttle_min: v("throttle_min"), misalign: v("thrust_misalign").to_radians(), cg_offset: v("cg_offset"), drone_mass: v("drone_mass"), t2w: v("thrust_to_weight"),
             rover_vmax: v("rover_vmax"), tip_lat: 0.6 / h, tip_long: 0.8 / h, battery_rover: v("battery_kwh") * 3.6e6, bus_power: v("bus_power"), battery_lander: v("lander_battery_kwh") * 3.6e6,
+            th_mass: v("thermal_mass"), th_rad: v("radiator_area"), th_eps: v("emissivity"), th_sun: v("sun_area"), th_abs: v("absorptance"), th_load: v("heat_load"), th_start: v("temp_start"), th_max: v("temp_max"), th_min: v("temp_min"),
+            cmd_delay: v("cmd_delay") as usize, link_period: v("link_period"), link_outage: v("link_outage"), compute_ms: v("compute_ms"), compute_jitter_ms: v("compute_jitter_ms"),
+            soil: (v("terramechanics") > 0.5).then(|| crate::terramech::Soil { kc: v("soil_kc") * 1e3, kphi: v("soil_kphi") * 1e3, n: v("soil_n"), cohesion: v("soil_cohesion") * 1e3, phi: v("soil_phi").to_radians(), shear_k: v("shear_k"), radius: v("wheel_radius"), width: v("wheel_width") }),
             alt: ordered(v("start_alt_min"), v("start_alt_max")), offset: v("start_offset"), vh: v("start_vh"), vz: ordered(v("start_vz_min"), v("start_vz_max")), tilt: v("start_tilt").to_radians(),
             goal: ordered(v("goal_dist_min"), v("goal_dist_max")), pad: v("pad_radius"), terrain: v("terrain_scale"), craters: v("crater_scale"), friction: v("friction"), sun: v("sun_elev"),
             lim_v: v("touch_speed_limit"), lim_tilt: v("touch_tilt_limit"), lim_slope: v("touch_slope_limit"), impact: v("impact_limit"), rew_ok: v("reward_success"), rew_bad: v("reward_crash"),
@@ -435,6 +468,8 @@ pub fn param_default(task: Task, name: &str) -> Option<f64> { param_def(name).ma
 impl EnvConfig {
     /// A custom map must fit the scenario: otherwise a flight ends at the map edge and the report blames the vehicle.
     fn check_terrain(&self) -> Result<(), String> {
+        let (period, outage) = (self.get("link_period").unwrap_or(0.0), self.get("link_outage").unwrap_or(0.0));
+        if outage > 0.0 && outage >= period { return Err(format!("link_outage = {outage} s must be shorter than link_period = {period} s: otherwise the link never works")); }
         let Some(t) = &self.custom_terrain else { return Ok(()) };
         let half = t.size / 2.0;
         let need = match self.task {
@@ -486,6 +521,11 @@ pub struct StepInfo {
     pub touch_speed: f64,  // speed at first touch, m/s
     pub touch_tilt: f64,   // tilt at first touch, °
     pub touch_offset: f64, // miss distance from the pad or goal, m
+    pub overruns: usize,   // decisions that took longer than a control step
+    pub peak_temp: f64,    // K, with the thermal model on
+    pub min_temp: f64,
+    pub max_slip: f64,     // with the Bekker model on
+    pub sinkage: f64,      // m
 }
 
 #[derive(Clone)]
@@ -530,6 +570,10 @@ pub struct Env {
     touched: bool,
     tune: Tune,
     obs_queue: std::collections::VecDeque<Vec<f64>>,
+    cmd_queue: Vec<(usize, Vec<f64>)>, // (step when it acts, command)
+    active_cmd: Vec<f64>,
+    temp: f64,
+    stuck_t: f64,
     held: Vec<f64>,
     gyro_b: Vec3,
     accel_b: Vec3,
@@ -554,7 +598,7 @@ impl Env {
             rng: Rng::new(0), battery: 0.0, heading: 0.0, speed: 0.0, yaw_rate: 0.0, sun_elev: 0.5, prev_shaping: 0.0, hover_time: 0.0, cfg,
             world_index: 0, act_state: [0.0; 4], act_gain: [1.0; 4], fault: None, gust_v: Vec3::ZERO, dyn_rng: Rng::new(0),
             in_contact: false, settle_t: 0.0, ground_t: 0.0, touch_msg: String::new(), touch_bonus: 0.0, touched: false,
-            tune: Tune::zero(), obs_queue: Default::default(), held: vec![], gyro_b: Vec3::ZERO, accel_b: Vec3::ZERO,
+            tune: Tune::zero(), obs_queue: Default::default(), cmd_queue: vec![], active_cmd: vec![], temp: 0.0, stuck_t: 0.0, held: vec![], gyro_b: Vec3::ZERO, accel_b: Vec3::ZERO,
         };
         for spec in &e.cfg.worlds { World::build(spec)?; }
         e.reset(1);
@@ -716,6 +760,11 @@ impl Env {
         self.prev_shaping = self.shaping();
         self.last_action = vec![0.0; n_act];
         self.held.clear();
+        self.cmd_queue.clear();
+        self.active_cmd = vec![0.0; n_act];
+        self.stuck_t = 0.0;
+        self.temp = self.tune.th_start;
+        if self.tune.th_mass > 0.0 { self.info.peak_temp = self.temp; self.info.min_temp = self.temp; }
         self.obs_queue.clear();
         self.last_obs = self.observe();
         self.last_obs.clone()
@@ -1037,15 +1086,23 @@ impl Env {
                 let n_force = m * g * cos_t;
                 let powered = self.battery > 0.0;
                 let mut side = [0.0; 2];
+                let wheel = self.tune.soil.as_ref().map(|s| s.wheel(n_force / 4.0));
+                let mut slip: f64 = 0.0;
                 for k in 0..2 {
                     let cmd = if powered { a.get(k).copied().unwrap_or(0.0).clamp(-1.0, 1.0) } else { 0.0 };
                     // motor characteristic: force falls with speed to zero at v_max (back EMF)
                     let along = if cmd * self.speed > 0.0 { (1.0 - self.speed.abs() / self.tune.rover_vmax).max(0.0) } else { 1.0 };
                     // traction: |F| ≤ μ·N/2 (Coulomb law), otherwise the wheels slip
-                    side[k] = (cmd * along * self.p.motor_force / 2.0).clamp(-self.terrain.friction * n_force / 2.0, self.terrain.friction * n_force / 2.0);
+                    let demand = cmd * along * self.p.motor_force / 2.0;
+                    side[k] = match &wheel {
+                        // two wheels on a side
+                        Some(w) => { let (h, s) = w.traction(demand.abs() / 2.0); slip = slip.max(s); 2.0 * h * demand.signum() }
+                        None => demand.clamp(-self.terrain.friction * n_force / 2.0, self.terrain.friction * n_force / 2.0),
+                    };
                 }
                 let f_grav = -m * g * slope_along * cos_t; // gravity component along the slope
-                let f_rr = -self.p.crr * n_force * self.speed.signum() * (self.speed.abs() / 0.05).min(1.0);
+                let rolling = wheel.as_ref().map(|w| 4.0 * w.compaction).unwrap_or(self.p.crr * n_force);
+                let f_rr = -rolling * self.speed.signum() * (self.speed.abs() / 0.05).min(1.0);
                 let f_drag = -0.5 * rho * 1.0 * 1.2 * self.speed * self.speed.abs();
                 // on a slope steeper than the friction angle the rover slides even with locked wheels
                 let f_total = side[0] + side[1] + f_grav + f_rr + f_drag;
@@ -1059,14 +1116,58 @@ impl Env {
                 self.body.pos.y += ground_v * s * dt;
                 self.body.pos.z = self.terrain.height(self.body.pos.x, self.body.pos.y);
                 self.body.vel = Vec3::new(ground_v * c, ground_v * s, 0.0);
-                let p_mech: f64 = side.iter().map(|f| (f * self.speed).abs()).sum::<f64>() / 0.75 + 15.0;
+                // with slip the wheels turn faster than the rover moves, and that costs power
+                let p_mech: f64 = side.iter().map(|f| (f * self.speed).abs()).sum::<f64>() / (1.0 - slip.min(0.95)) / 0.75 + 15.0;
+                if let Some(w) = &wheel {
+                    self.info.max_slip = self.info.max_slip.max(slip);
+                    self.info.sinkage = w.sinkage;
+                    self.stuck_t = if slip > 0.9 && self.speed.abs() < 0.05 { self.stuck_t + dt } else { 0.0 };
+                }
                 let bus = if self.battery > 0.0 { self.tune.bus_power } else { 0.0 };
                 let p_solar = self.solar_power();
                 self.battery = (self.battery + (p_solar - p_mech - bus) * dt).clamp(0.0, self.tune.battery_rover);
                 self.info.energy_used += (p_mech + bus) * dt;
             }
         }
+        if self.tune.th_mass > 0.0 { self.thermal_step(dt); }
         self.t += dt;
+    }
+
+    /// One lumped node: internal heat and sunlight in, radiation out. Linearized implicit step, so a small node stays stable.
+    fn thermal_step(&mut self, dt: f64) {
+        let t = &self.tune;
+        let elev = if self.cfg.task == Task::Rover { self.sun_elev } else if t.sun >= 0.0 { t.sun.to_radians() } else { 40f64.to_radians() };
+        let bus = if self.battery > 0.0 { t.bus_power } else { 0.0 };
+        let q_in = t.th_load + bus + t.th_abs * t.th_sun * t.solar * self.world.insolation() * elev.sin().max(0.0);
+        let k = t.th_eps * crate::constants::SIGMA_SB * t.th_rad;
+        let net = q_in - k * self.temp.powi(4);
+        self.temp += dt * net / (t.th_mass + dt * 4.0 * k * self.temp.powi(3));
+        self.info.peak_temp = self.info.peak_temp.max(self.temp);
+        self.info.min_temp = self.info.min_temp.min(self.temp);
+    }
+
+    /// Node temperature, K.
+    pub fn temperature(&self) -> f64 { self.temp }
+
+    fn in_outage(&self) -> bool {
+        let t = &self.tune;
+        t.link_period > 0.0 && t.link_outage > 0.0 && self.t.rem_euclid(t.link_period) >= t.link_period - t.link_outage
+    }
+
+    /// Commands on their way: latency, decision time and outages. Returns the command that acts now.
+    fn route_command(&mut self, a: Vec<f64>) -> Vec<f64> {
+        let (delay, ms, jitter) = (self.tune.cmd_delay, self.tune.compute_ms, self.tune.compute_jitter_ms);
+        if delay == 0 && ms == 0.0 && jitter == 0.0 && self.tune.link_outage == 0.0 { return a; }
+        let spent = ms + if jitter > 0.0 { jitter * self.dyn_rng.normal().abs() } else { 0.0 };
+        let late = (spent / (self.control_dt() * 1e3)).floor() as usize;
+        if late > 0 { self.info.overruns += 1; }
+        if !self.in_outage() { self.cmd_queue.push((self.steps + delay + late, a)); }
+        // the latest issued command that has already arrived wins
+        if let Some(i) = self.cmd_queue.iter().rposition(|c| c.0 <= self.steps) {
+            self.active_cmd = self.cmd_queue[i].1.clone();
+            self.cmd_queue.drain(..=i);
+        }
+        self.active_cmd.clone()
     }
 
     /// Takes energy from the battery; an empty battery gives nothing, so used + left stays equal to the initial charge.
@@ -1103,6 +1204,7 @@ impl Env {
         if self.tune.action_noise > 0.0 {
             for i in 0..a.len() { a[i] = (a[i] + self.tune.action_noise * (hi[i] - lo[i]) * self.dyn_rng.normal()).clamp(lo[i], hi[i]); }
         }
+        let a = self.route_command(a);
         self.last_action = a.clone();
         let fuel0 = self.info.fuel_used;
         let en0 = self.info.energy_used;
@@ -1163,8 +1265,14 @@ impl Env {
                 if !terminated && (lateral.abs() > self.tune.tip_lat || longitudinal.abs() > self.tune.tip_long) {
                     reward -= self.tune.rew_bad; terminated = true; self.info.crashed = true; self.info.reason = "tipped over on a slope".into();
                 }
+                if self.stuck_t > 3.0 && !terminated { terminated = true; self.info.reason = "stuck in soft soil".into(); }
                 if self.battery <= 0.0 && (self.sun_elev < 0.05 || self.tune.bus_power > self.solar_power()) { terminated = true; self.info.reason = "battery depleted".into(); }
             }
+        }
+        if !terminated && self.tune.th_mass > 0.0 && (self.temp > self.tune.th_max || self.temp < self.tune.th_min) {
+            terminated = true;
+            reward -= self.tune.rew_bad;
+            self.info.reason = if self.temp > self.tune.th_max { "overheated".into() } else { "too cold".into() };
         }
         let half = self.terrain.size / 2.0;
         if !terminated && (self.body.pos.x.abs() > half || self.body.pos.y.abs() > half || self.body.pos.z > self.terrain.height(0.0, 0.0) + 50_000.0) {
@@ -1182,6 +1290,8 @@ impl Env {
 
     /// Reading dropouts and delay: the agent may see stale data.
     fn delayed(&mut self, mut raw: Vec<f64>) -> Vec<f64> {
+        // during an outage nothing arrives: the agent keeps seeing the last message
+        if self.in_outage() && !self.held.is_empty() { return self.last_obs.clone(); }
         if self.tune.dropout > 0.0 && self.held.len() == raw.len() {
             for i in 0..raw.len() { if self.dyn_rng.f64() < self.tune.dropout { raw[i] = self.held[i]; } }
         }

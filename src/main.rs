@@ -30,8 +30,11 @@ COMMANDS
   system    --bodies sun,earth,moon,mars --years 1 --dt-hours 1 [--gr] [--leapfrog] [--out sys.csv]
   dataset   --task projectile|orbit|thermal|particle|system --n 1000
             --worlds earth,moon,mars --out data/ --seed 42 [--points 100] [--noise 0.01] [--strict]
-  serve     [--host 127.0.0.1] [--port 8080] [--no-open] [--token T] [--data-dir runs] [--cors] [--log] [--insecure]
+  serve     [--host 127.0.0.1] [--port 8080] [--no-open] [--token T] [--viewer-token V] [--data-dir runs] [--cors] [--log] [--insecure]
             interface and API. An external address needs a token (--token or WORLDSIM_TOKEN)
+            --viewer-token V gives read-only access: results, no calculations (or WORLDSIM_VIEWER_TOKEN)
+  loop      [world] --task lander --port 9000 [--realtime] [--seed 1] [--noise 1] [--set k=v,...] [--once]
+            external software in the loop over TCP on 127.0.0.1, one JSON object per line (see README)
   health    [--port 8080]               server liveness check, exit code 0 or 1
   version                               version
   validate                      run all law checks
@@ -104,7 +107,8 @@ fn allowed_flags(cmd: &str) -> Option<&'static [&'static str]> {
         "particle" => &["species", "mev", "L", "pitch", "time", "out", "lon"],
         "system" => &["bodies", "years", "dt-hours", "gr", "leapfrog", "out"],
         "dataset" => &["task", "n", "worlds", "out", "seed", "points", "noise", "strict"],
-        "serve" => &["host", "port", "no-open", "token", "data-dir", "cors", "log", "insecure"],
+        "loop" => &["task", "port", "realtime", "seed", "noise", "set", "once", "max-steps"],
+        "serve" => &["host", "port", "no-open", "token", "viewer-token", "data-dir", "cors", "log", "insecure"],
         "health" => &["port"],
         "version" => &[],
         "mission" => &["out", "threads"],
@@ -116,7 +120,7 @@ fn allowed_flags(cmd: &str) -> Option<&'static [&'static str]> {
 
 fn check_flags(cmd: &str, kv: &HashMap<String, String>) -> Result<(), String> {
     let Some(allowed) = allowed_flags(cmd) else { return Ok(()) };
-    let takes_world = matches!(cmd, "info" | "throw" | "thermal" | "particle");
+    let takes_world = matches!(cmd, "info" | "throw" | "thermal" | "particle" | "loop");
     const WORLD: &[&str] = &["world", "physics", "atmosphere", "surface", "gravity-scale", "distance-au"];
     let mut bad: Vec<&str> = kv.keys().map(|k| k.as_str()).filter(|k| !allowed.contains(k) && !(takes_world && WORLD.contains(k))).collect();
     bad.sort();
@@ -251,11 +255,22 @@ fn run(cmd: &str, pos: &[String], kv: &HashMap<String, String>) -> Result<(), St
                 open: !flag(kv, "no-open"),
                 // a token on the command line is visible in the process list, so the environment variable is preferred
                 token: kv.get("token").cloned().or(std::env::var("WORLDSIM_TOKEN").ok()).filter(|t| !t.is_empty()),
+                viewer_token: kv.get("viewer-token").cloned().or(std::env::var("WORLDSIM_VIEWER_TOKEN").ok()).filter(|t| !t.is_empty()),
                 data_dir: kv.get("data-dir").cloned().or(std::env::var("WORLDSIM_DATA").ok()).unwrap_or("runs".into()).into(),
                 cors: flag(kv, "cors"),
                 log: flag(kv, "log"),
                 insecure: flag(kv, "insecure"),
             })?
+        }
+        "loop" => {
+            let port = num(kv, "port", 9000.0)?;
+            if port.fract() != 0.0 || !(1.0..=65535.0).contains(&port) { return Err(format!("--port: need a port from 1 to 65535, got {port}")); }
+            let mut cfg = EnvConfig::new(kv.get("task").map(|s| s.as_str()).unwrap_or("lander"), "earth")?;
+            cfg.world = world_spec(pos, kv)?;
+            cfg.noise = num(kv, "noise", 1.0)?;
+            if let Some(n) = kv.get("max-steps") { cfg.max_steps = n.parse().map_err(|_| "--max-steps: an integer is required")?; }
+            if let Some(s) = kv.get("set") { cfg.set_list(s)?; }
+            worldsim::loopback::serve(cfg, worldsim::loopback::LoopOpts { port: port as u16, realtime: flag(kv, "realtime"), seed: num(kv, "seed", 1.0)? as u64, once: flag(kv, "once") })?
         }
         "health" => {
             use std::io::{Read, Write as _};

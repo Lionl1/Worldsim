@@ -4,11 +4,13 @@
     python -m worldsim.baseline qualify --model runs/baseline.pt --world moon=runs/moon --world mix=runs/mix --out runs/report
 """
 import argparse
+import json
 
 import numpy as np
 
 from .data import Dataset
 from .model import WorldModel
+from .planning import planning_check, planning_markdown
 from .qualify import qualify, save, to_markdown
 
 
@@ -109,6 +111,7 @@ def main():
     q.add_argument("--model", required=True)
     q.add_argument("--world", action="append", required=True, help="name=data folder")
     q.add_argument("--out", required=True)
+    q.add_argument("--plan", help="mission file: also run L6, planning in imagination")
     a = ap.parse_args()
     if a.cmd == "train":
         print(train(a.data, a.out, epochs=a.epochs))
@@ -116,7 +119,14 @@ def main():
         ds = {w.split("=", 1)[0]: Dataset(w.split("=", 1)[1]) for w in a.world}
         r = qualify(Baseline(a.model), ds)
         save(r, a.out)
-        print(to_markdown(r))
+        text = to_markdown(r)
+        if a.plan:
+            with open(a.plan, encoding="utf8") as f:
+                mission = json.load(f)
+            text += "\n" + planning_markdown(planning_check(Baseline(a.model), mission))
+            with open(f"{a.out}/qualification.md", "a", encoding="utf8") as f:
+                f.write(text[len(to_markdown(r)):])
+        print(text)
 
 
 if __name__ == "__main__":

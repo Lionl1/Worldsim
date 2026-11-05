@@ -307,6 +307,8 @@ pub fn climate_checks() -> Vec<Check> {
     ]
 }
 
+fn e_steps_for_seconds(e: &crate::env::Env, s: f64) -> usize { (s / e.control_dt()) as usize }
+
 pub fn env_checks() -> Vec<Check> {
     use crate::env::{Env, EnvConfig, Terrain, G0};
     let mut out = Vec::new();
@@ -450,6 +452,110 @@ pub fn env_checks() -> Vec<Check> {
         loop { let a = e.autopilot(); let (_, _, t, tr) = e.step(&a); if t || tr { break; } }
         if e.info.success { ok += 1; }
     }
+    // Latency: a delayed command must give exactly the flight of the same commands shifted in time
+    let flown = |set: &[(&str, f64)], shift: usize| {
+        let mut c = EnvConfig::new("lander", "moon").unwrap();
+        c.noise = 0.0;
+        for (k, v) in set { c.set(k, *v).unwrap(); }
+        let mut e = Env::new(c).unwrap();
+        e.reset(2);
+        for k in 0..200usize {
+            let i = k.saturating_sub(shift);
+            let a = if k < shift { [0.0; 4] } else { [0.4 + 0.3 * (i as f64 * 0.05).sin(), 0.1 * (i as f64 * 0.03).cos(), 0.0, 0.0] };
+            e.step(&a);
+        }
+        e.state()
+    };
+    let gap = |a: Vec<f64>, b: Vec<f64>| a.iter().zip(&b).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max);
+    let d = gap(flown(&[("cmd_delay", 5.0)], 0), flown(&[], 5));
+    out.push(Check { law: "Command latency", test: "5 steps of latency = same commands shifted by 5 steps".into(), value: format!("{d:.2e}"), expected: "< 1e-12".into(), pass: d < 1e-12 });
+    let mut c = EnvConfig::new("lander", "moon").unwrap();
+    c.noise = 0.0;
+    let dt_ms = Env::new(c.clone()).unwrap().control_dt() * 1e3;
+    let d = gap(flown(&[("compute_ms", 3.5 * dt_ms)], 0), flown(&[], 3));
+    out.push(Check { law: "Decision time", test: "3.5 control steps of computing = 3 steps of latency".into(), value: format!("{d:.2e}"), expected: "< 1e-12".into(), pass: d < 1e-12 });
+    // Outage: the observation freezes and the last command stays active
+    let mut c = EnvConfig::new("lander", "moon").unwrap();
+    c.noise = 0.0;
+    for (k, v) in [("link_period", 1.0), ("link_outage", 0.5), ("start_alt_min", 3000.0), ("start_alt_max", 3000.0)] { c.set(k, v).unwrap(); }
+    let mut e = Env::new(c).unwrap();
+    e.reset(1);
+    let (mut frozen, mut total, mut prev) = (0usize, 0usize, e.last_obs.clone());
+    for k in 0..e_steps_for_seconds(&e, 10.0) {
+        let (o, _, _, _) = e.step(&[0.2 + 0.001 * k as f64 % 0.5, 0.0, 0.0, 0.0]);
+        total += 1;
+        if o == prev { frozen += 1; }
+        prev = o;
+    }
+    let share = frozen as f64 / total as f64;
+    out.push(chk("Link outage", "0.5 s outage in a 1 s cycle: share of frozen observations", share, 0.5, 0.05, ""));
+    // Thermal: radiative equilibrium and adiabatic heating against closed forms
+    let thermal = |set: &[(&str, f64)], seconds: f64| {
+        let mut c = EnvConfig::new("rover", "moon").unwrap();
+        for (k, v) in [("terrain_scale", 0.0), ("crater_scale", 0.0), ("temp_min", 1.0), ("temp_max", 3000.0), ("absorptance", 0.0)] { c.set(k, v).unwrap(); }
+        for (k, v) in set { c.set(k, *v).unwrap(); }
+        c.max_steps = usize::MAX;
+        let mut e = Env::new(c).unwrap();
+        e.reset(1);
+        while e.t < seconds && !e.done { e.step(&[0.0, 0.0]); }
+        (e.temperature(), e.t)
+    };
+    let (q, area, eps) = (200.0, 1.0, 0.85);
+    let (t_eq, _) = thermal(&[("thermal_mass", 200.0), ("heat_load", q), ("radiator_area", area), ("emissivity", eps)], 3000.0);
+    out.push(chk("Stefan–Boltzmann (radiator)", "200 W, 1 m², ε = 0.85: T_eq = (Q/εσA)^¼", t_eq, (q / (eps * crate::constants::SIGMA_SB * area)).powf(0.25), 1e-6, "K"));
+    let (t_ad, t) = thermal(&[("thermal_mass", 5000.0), ("heat_load", 100.0), ("radiator_area", 0.0)], 100.0);
+    out.push(chk("First law (heating)", "no radiator, 100 W, 5000 J/K: T = T₀ + Qt/C", t_ad, 293.0 + 100.0 * t / 5000.0, 1e-9, "K"));
+    let mut c = EnvConfig::new("rover", "moon").unwrap();
+    for (k, v) in [("thermal_mass", 100.0), ("heat_load", 1000.0), ("radiator_area", 0.0), ("absorptance", 0.0), ("terrain_scale", 0.0), ("crater_scale", 0.0)] { c.set(k, v).unwrap(); }
+    let mut e = Env::new(c).unwrap();
+    e.reset(1);
+    while !e.step(&[0.0, 0.0]).2 && e.t < 60.0 {}
+    out.push(Check { law: "Thermal limits", test: "100 J/K at 1 kW: reaches 323 K in 3 s and the mission ends".into(), value: format!("{:.2} s, {}", e.t, e.info.reason), expected: "3 s, overheated".into(), pass: (e.t - 3.0).abs() < 0.1 && e.info.reason == "overheated" });
+    // Soil: closed forms of the Bekker model against numerical integration
+    let soil = crate::terramech::Soil { kc: 1400.0, kphi: 820_000.0, n: 1.0, cohesion: 170.0, phi: 35f64.to_radians(), shear_k: 0.018, radius: 0.25, width: 0.2 };
+    let w = soil.wheel(73.0);
+    let k = soil.kc + soil.width * soil.kphi;
+    let parts = 20_000;
+    let (mut load, mut work) = (0.0, 0.0);
+    for i in 0..parts {
+        // parabolic rim: the depth falls from z at the bottom to 0 at the front of the contact
+        let x = (i as f64 + 0.5) / parts as f64 * w.contact;
+        load += k * w.sinkage * (1.0 - (x / w.contact).powi(2)) * w.contact / parts as f64;
+        let z = (i as f64 + 0.5) / parts as f64 * w.sinkage;
+        work += k * z * w.sinkage / parts as f64;
+    }
+    out.push(chk("Bekker pressure-sinkage", "vertical force over the contact = wheel load", load, 73.0, 1e-3, "N"));
+    out.push(chk("Bekker compaction", "R_c = ∫ b·p dz over the sinkage", w.compaction, work, 1e-3, "N"));
+    let mut mean = 0.0;
+    for i in 0..parts {
+        let x = (i as f64 + 0.5) / parts as f64 * w.contact;
+        mean += (1.0 - (-0.2 * x / w.shear_k).exp()) / parts as f64;
+    }
+    out.push(chk("Janosi–Hanamoto shear", "slip 0.2: closed form = mean over the contact", w.shear_factor(0.2), mean, 1e-3, ""));
+    let (h, s) = w.traction(0.5 * w.h_max * w.shear_factor(1.0));
+    out.push(chk("Janosi–Hanamoto shear", "inverse: the slip found gives the demanded force", w.h_max * w.shear_factor(s), h, 1e-6, "N"));
+    // Rover on soft soil: the limit slope follows from drawbar pull
+    let m_rover: f64 = 180.0;
+    let g_moon = World::preset("moon").unwrap().g_surface();
+    let climbs = |deg: f64| {
+        let mut c = EnvConfig::new("rover", "moon").unwrap();
+        for (k, v) in [("terramechanics", 1.0), ("motor_force", 5000.0)] { c.set(k, v).unwrap(); }
+        c.noise = 0.0;
+        let mut e = Env::new(c).unwrap();
+        e.reset(1);
+        e.set_terrain(Terrain::plane(deg.to_radians().tan(), 0.6));
+        e.set_state(Vec3::new(0.0, 0.0, 0.0), Vec3::ZERO);
+        for _ in 0..200 { e.step(&[1.0, 1.0]); }
+        e.pose().0.x
+    };
+    // limit angle: tanθ·W·cosθ = 4·(H(1) − R_c), the load itself falls with cosθ
+    let limit = (0..9000).map(|i| i as f64 * 0.01).find(|deg: &f64| {
+        let t = deg.to_radians();
+        let w = soil.wheel(m_rover * g_moon * t.cos() / 4.0);
+        m_rover * g_moon * t.sin() >= 4.0 * (w.h_max * w.shear_factor(1.0) - w.compaction)
+    }).unwrap_or(90.0);
+    let (below, above) = (climbs(limit - 2.0), climbs(limit + 2.0));
+    out.push(Check { law: "Drawbar pull", test: format!("limit slope {limit:.1}°: climbs 2° below, stalls 2° above (4 s)"), value: format!("{below:.1} m / {above:.2} m"), expected: "> 2 m / < 0.2 m".into(), pass: below > 2.0 && above < 0.2 });
     // Power budget: a constant bus load draws exactly P·t, and used + left equals the initial charge
     let mut c = EnvConfig::new("lander", "moon").unwrap();
     c.set("bus_power", 500.0).unwrap();

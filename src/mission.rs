@@ -17,7 +17,7 @@ use crate::world::{World, WorldSpec};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-const METRICS: &[&str] = &["success", "crashed", "touch_speed", "touch_tilt", "touch_offset", "fuel_used", "energy_used_kj", "duration_s"];
+const METRICS: &[&str] = &["success", "crashed", "touch_speed", "touch_tilt", "touch_offset", "fuel_used", "energy_used_kj", "duration_s", "peak_temp_k", "min_temp_k", "max_slip", "overruns"];
 /// Dispersions with a special meaning; any other registry parameter can be dispersed relatively.
 const SPECIAL_DISPERSIONS: &[&str] = &["gravity", "nav_noise", "gust", "actuator_lag", "fault"];
 const RELATIVE_FIRST: &[&str] = &["dry_mass", "isp", "t_max", "torque_max", "rover_mass", "motor_force"];
@@ -115,6 +115,10 @@ impl MissionSpec {
             let value = r.get("value").and_then(|x| x.as_f64()).ok_or(format!("requirements[{i}].value: a number is required"))?;
             let percentile = r.get("percentile").and_then(|x| x.as_f64());
             if let Some(p) = percentile { if !(0.0..=100.0).contains(&p) { return Err(format!("requirements[{i}].percentile: from 0 to 100")); } }
+            // a requirement on a model that is off would pass silently
+            let on = |k: &str| vehicle.iter().find(|(n, _)| n == k).map(|x| x.1).unwrap_or(0.0) > 0.0;
+            if (metric == "peak_temp_k" || metric == "min_temp_k") && !on("thermal_mass") { return Err(format!("requirements[{i}].metric = {metric}: set thermal_mass, the thermal model is off")); }
+            if metric == "max_slip" && !on("terramechanics") { return Err(format!("requirements[{i}].metric = max_slip: set terramechanics = 1, the soil model is off")); }
             let binary = metric == "success" || metric == "crashed";
             if !binary && percentile.is_none() { return Err(format!("requirements[{i}]: for {metric} specify percentile")); }
             requirements.push(Requirement { id: r.get("id").and_then(|x| x.as_str()).map(|s| s.to_string()).unwrap_or(format!("REQ-{:02}", i + 1)),
@@ -172,7 +176,7 @@ fn nominal(task: Task, k: &str, spec: &[(String, f64)]) -> f64 {
 }
 
 #[derive(Clone, Debug, Default)]
-struct RunResult { success: f64, crashed: f64, touch_speed: f64, touch_tilt: f64, touch_offset: f64, fuel_used: f64, energy_kj: f64, duration: f64, reason: String }
+struct RunResult { success: f64, crashed: f64, touch_speed: f64, touch_tilt: f64, touch_offset: f64, fuel_used: f64, energy_kj: f64, duration: f64, peak_temp: f64, min_temp: f64, max_slip: f64, overruns: f64, reason: String }
 
 /// Reason without numbers, so similar failures are counted together.
 fn failure_mode(reason: &str) -> String {
@@ -198,7 +202,7 @@ fn failure_modes(rs: &[RunResult]) -> J {
 impl RunResult {
     fn metric(&self, m: &str) -> f64 {
         match m { "success" => self.success, "crashed" => self.crashed, "touch_speed" => self.touch_speed, "touch_tilt" => self.touch_tilt, "touch_offset" => self.touch_offset,
-            "fuel_used" => self.fuel_used, "energy_used_kj" => self.energy_kj, _ => self.duration }
+            "fuel_used" => self.fuel_used, "energy_used_kj" => self.energy_kj, "peak_temp_k" => self.peak_temp, "min_temp_k" => self.min_temp, "max_slip" => self.max_slip, "overruns" => self.overruns, _ => self.duration }
     }
 }
 
@@ -238,7 +242,7 @@ fn flight_env(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)]
 fn result_of(env: &Env) -> RunResult {
     let i = &env.info;
     RunResult { success: i.success as u8 as f64, crashed: i.crashed as u8 as f64, touch_speed: i.touch_speed, touch_tilt: i.touch_tilt, touch_offset: i.touch_offset,
-        fuel_used: i.fuel_used, energy_kj: i.energy_used / 1e3, duration: env.t, reason: i.reason.clone() }
+        fuel_used: i.fuel_used, energy_kj: i.energy_used / 1e3, duration: env.t, peak_temp: i.peak_temp, min_temp: i.min_temp, max_slip: i.max_slip, overruns: i.overruns as f64, reason: i.reason.clone() }
 }
 
 /// One flight with the built-in autopilot.

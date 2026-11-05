@@ -5,6 +5,7 @@ L2 Physical laws violations in imagination relative to the level of the simulato
 L3 Action effect different actions from one point against the true physical response (branching).
 L4 Optimism      does the model predict well-being where there is really a crash.
 L5 Boundaries    the same checks in worlds absent from training: where the model can be trusted.
+L6 Planning      fly real missions by planning in imagination, see planning.py.
 
 Builds on the ideas of MiraBench and CrashTwin, but unlike them works with exact physics and mission tolerances.
 The report is engineering evidence for a review, not certification.
