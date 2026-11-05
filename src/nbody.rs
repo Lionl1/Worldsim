@@ -33,6 +33,7 @@ pub struct NBody {
     pub relativity_center: Option<usize>,
     pub integrator: Integrator,
     ias_dt: f64,
+    ias_carry: Vec<(Vec3, Vec3)>, // compensated summation: rounding left over from position and velocity updates
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -45,7 +46,7 @@ pub struct Invariants {
 
 impl NBody {
     pub fn new(bodies: Vec<Body>) -> Self {
-        NBody { bodies, t: 0.0, relativity_center: None, integrator: Integrator::Yoshida4, ias_dt: 0.0 }
+        NBody { bodies, t: 0.0, relativity_center: None, integrator: Integrator::Yoshida4, ias_dt: 0.0, ias_carry: vec![] }
     }
 
     /// Solar system (or part of it) from presets using elements J2000.
@@ -167,7 +168,7 @@ impl NBody {
     }
 
     /// Forgets the adaptive step, for example after the set of bodies changed.
-    pub fn reset_step(&mut self) { self.ias_dt = 0.0; }
+    pub fn reset_step(&mut self) { self.ias_dt = 0.0; self.ias_carry.clear(); }
 
     fn ias15_advance(&mut self, dt: f64) {
         let end = self.t + dt;
@@ -190,6 +191,7 @@ impl NBody {
         let mut a = vec![Vec3::ZERO; n];
         self.accelerations(&mut a0);
         let c = ias15_coefficients();
+        self.ias_carry.resize(n, (Vec3::ZERO, Vec3::ZERO));
         loop {
             let mut g = [vec![Vec3::ZERO; n], vec![Vec3::ZERO; n], vec![Vec3::ZERO; n], vec![Vec3::ZERO; n], vec![Vec3::ZERO; n], vec![Vec3::ZERO; n], vec![Vec3::ZERO; n]];
             let mut b = g.clone();
@@ -236,8 +238,13 @@ impl NBody {
                     px += bk[i] * (1.0 / ((k + 2) * (k + 3)) as f64);
                     pv += bk[i] * (1.0 / (k + 2) as f64);
                 }
-                self.bodies[i].r = x0[i] + v0[i] * h + px * (h * h);
-                self.bodies[i].v = v0[i] + pv * h;
+                // Kahan summation: a small update must not lose its low bits against a large position
+                let (cx, cv) = self.ias_carry[i];
+                let (dx, dv) = (v0[i] * h + px * (h * h) - cx, pv * h - cv);
+                let (r, v) = (x0[i] + dx, v0[i] + dv);
+                self.ias_carry[i] = ((r - x0[i]) - dx, (v - v0[i]) - dv);
+                self.bodies[i].r = r;
+                self.bodies[i].v = v;
             }
             let limit = 4.0 * h.abs();
             return (h, wish.clamp(-limit, limit));

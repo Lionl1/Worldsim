@@ -38,7 +38,7 @@ worldsim does not replace these tools and should not try to. In orbit accuracy, 
 | Qualification of trained models | yes | no | no | no | — | no |
 | True counterfactual branches | yes | no | — | no | — | no |
 | Mixed worlds | yes | no | — | no | — | no |
-| Automatic checks of physical laws | yes, 157 | code tests | code tests | — | — | — |
+| Automatic checks of physical laws | yes, 158 | code tests | code tests | — | — | — |
 | Running without installing dependencies | yes | installer | Python and a build | limited, NASA | cloud | GPU and Isaac Sim |
 
 ## Gaps and what we do about them

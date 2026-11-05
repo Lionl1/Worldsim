@@ -2,6 +2,18 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/). The API may change before 1.0.
 
+## 0.3.1 — unreleased
+
+### Added
+- Release archives include `tools/`, so catalogs and photo maps can be downloaded after unpacking.
+- Compensated summation in IAS15, with a check over 1000 orbits.
+
+### Fixed
+- The server finds `data/` next to the binary as well as in the current folder.
+- Live collisions keep equal axis scales, so bodies are drawn as circles.
+- The live collision animation no longer stops on its first frame.
+- The README described a release page that had no releases.
+
 ## 0.3.0 — 2026-11-05
 
 ### Added
@@ -9,7 +21,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 - World model qualification: accuracy, physical laws, action effect, optimism, applicability boundaries.
 - Transition collection `collect`, counterfactual branching, vector environment for Python.
 - Parameter registry: 89 parameters available in the API, CLI, missions and Python.
-- Physics: quantum mechanics, black holes, fluid dynamics, chemistry, collisions, tectonics; 157 checks.
+- Physics: quantum mechanics, black holes, fluid dynamics, chemistry, collisions, tectonics; 157 checks at that version.
 - Custom controller in Mission Lab with the full analysis (`MissionRunner.analyze`: main drivers and value of technologies), telemetry calibration, terrain of a real site, export to LeRobot.
 - Budgets, all off by default: power (`bus_power`, `lander_battery_kwh`), thermal node, command latency and link outages, decision time, Bekker soil for the rover.
 - L6 Planning: `planning_check` flies missions by planning in the model's imagination.

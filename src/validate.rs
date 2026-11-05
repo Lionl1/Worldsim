@@ -380,6 +380,14 @@ fn integrator_checks() -> Vec<Check> {
     let de = ((specific(s.bodies[1].r, s.bodies[1].v) - specific(r0, v0)) / specific(r0, v0)).abs();
     out.push(Check { law: "IAS15 (Gauss–Radau 15th order)", test: "e = 0.9, 10 orbits: return to the start, relative to a".into(), value: format!("{miss:.2e}"), expected: "< 1e-9".into(), pass: miss < 1e-9 });
     out.push(Check { law: "IAS15 (Gauss–Radau 15th order)", test: "e = 0.9, 10 orbits: energy error".into(), value: format!("{de:.2e}"), expected: "< 1e-12".into(), pass: de < 1e-12 });
+    // long run: rounding must stay small, this is what compensated summation is for
+    let e = 0.1;
+    let (r1, v1) = (Vec3::new(a * (1.0 - e), 0.0, 0.0), Vec3::new(0.0, (mu / a * (1.0 + e) / (1.0 - e)).sqrt(), 0.0));
+    let mut long = NBody::new(vec![Body { name: "star".into(), gm: mu, r: Vec3::ZERO, v: Vec3::ZERO }, Body { name: "test".into(), gm: 0.0, r: r1, v: v1 }]);
+    long.integrator = Integrator::Ias15;
+    for _ in 0..1000 { long.step(period); }
+    let de = ((specific(long.bodies[1].r, long.bodies[1].v) - specific(r1, v1)) / specific(r1, v1)).abs();
+    out.push(Check { law: "IAS15 (Gauss–Radau 15th order)", test: "e = 0.1, 1000 orbits: energy error".into(), value: format!("{de:.2e}"), expected: "< 1e-13".into(), pass: de < 1e-13 });
     let (k, kv) = kepler_step(mu, r0, v0, period);
     let miss = (k - r0).norm().max((kv - v0).norm() * period) / a;
     out.push(Check { law: "Kepler solver (universal variables)", test: "e = 0.9, one period: exact return".into(), value: format!("{miss:.2e}"), expected: "< 1e-9".into(), pass: miss < 1e-9 });

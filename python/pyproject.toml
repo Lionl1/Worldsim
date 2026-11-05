@@ -1,6 +1,6 @@
 [project]
 name = "worldsim"
-version = "0.3.0"
+version = "0.3.1"
 description = "worldsim Python tools: environments, data and world model qualification against physical laws"
 requires-python = ">=3.9"
 dependencies = ["numpy>=1.24"]

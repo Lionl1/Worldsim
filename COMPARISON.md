@@ -8,7 +8,7 @@ Large projects usually do **one** of three things: show things beautifully (Spac
 compute **one** class of problems accurately (REBOUND for orbits, GADGET/SWIFT for cosmology, ExoPlaSim for climate),
 or provide a game-like sandbox (Universe Sandbox). worldsim bridges the gap between them: **one open
 program** in which scales from a stone throw to the cosmic web are computed from physical
-laws, each law is **checked automatically** (157 tests against analytic solutions and observations),
+laws, each law is **checked automatically** (158 tests against analytic solutions and observations),
 and any simulation turns into a **dataset** for machine learning.
 
 ## Table
@@ -18,7 +18,7 @@ and any simulation turns into a **dataset** for machine learning.
 | License | **MIT, open source** | closed, $29.99 | closed, paid | MIT | GPL-3 | GPL-3 / LGPL-3 | GPL-3 |
 | What it does | simulation + visuals + data | sandbox simulator | visualization, procedural universe | scientific data visualization | N bodies | cosmological simulations | exoplanet climate |
 | Scales | throw → climate → systems → galaxies → cosmology | planets → galaxies | planets → universe | spacecraft → universe | planetary systems | clusters → cosmology | planetary atmosphere |
-| Automatic law checks | **157 tests in one command** | no | no | n/a | code tests | code tests | no |
+| Automatic law checks | **158 tests in one command** | no | no | n/a | code tests | code tests | no |
 | Dataset generation | **built in, with a validity flag** | no | no | no | through Python | manual | manual |
 | Preset mixing (physics ≠ atmosphere ≠ crust) | **yes, recomputed from the laws** | partial (materials) | no | no | no | no | parameters |
 | Real catalogs | HYG (11 thousand stars), 5.3 thousand exoplanets | own | HIPPARCOS, NGC, NASA Exoplanet Archive | Gaia and others | no | no | no |
@@ -34,7 +34,7 @@ and any simulation turns into a **dataset** for machine learning.
 ## Where worldsim is better
 
 1. **Verifiability.** None of the visual simulators listed shows the user
-   whether the laws hold. In worldsim the “Laws” tab recomputes 157 tests in about 6 seconds.
+   whether the laws hold. In worldsim the “Laws” tab recomputes 158 tests in about 6 seconds.
 2. **End-to-end chain.** A real exoplanet from a catalog → a star with color from the Planck spectrum →
    a world with an atmosphere from hydrostatics → seasonal climate → a throw with Coriolis. In other packages this means
    several programs and manual transfer of parameters.
@@ -53,7 +53,7 @@ This is a different group of tools, so it is kept out of the table above. Detail
 
 ## Where worldsim falls behind
 
-- **Scale and maturity of “narrow” codes.** worldsim now has IAS15 and a Wisdom–Holman map, checked on eccentric orbits and against each other, but no compensated summation, close-encounter handling or high-order correctors, so REBOUND stays the choice for long or chaotic orbital work.
+- **Scale and maturity of “narrow” codes.** worldsim now has IAS15 and a Wisdom–Holman map, checked on eccentric orbits and against each other, but no close-encounter handling or high-order correctors, so REBOUND stays the choice for long or chaotic orbital work.
   GADGET-4 and SWIFT compute billions of particles with hydrodynamics on clusters. worldsim runs up to 128³ (2.1 million) mesh particles at about 0.5 s per step on 8 cores, P3M at 64³ at about 6 s per step, and its SPH gas handles thousands of particles and is not coupled to cosmology.
 - **Climate.** ExoPlaSim is a full general circulation model. worldsim has a latitudinal energy balance model plus one-layer winds on a sphere and a rule-of-thumb cloud cover. The winds pass exact tests of the solver, but the jets of Earth come out too weak and too far from the equator, and clouds do not feed back on temperature. Venus and giant planets are refused, because it cannot represent them. Do not use it for climate prediction.
 - **Graphics.** SpaceEngine and OpenSpace are visually richer: photorealistic surfaces, flight
@@ -63,7 +63,7 @@ This is a different group of tools, so it is kept out of the table above. Detail
 
 ## What is planned to close the gaps
 
-- Compensated summation in IAS15 and a hybrid integrator for close encounters.
+- A hybrid integrator for close encounters.
 - A tree for the long range and gas coupled to cosmology.
 - More layers and moisture in the atmosphere, with clouds feeding back on temperature.
 - Photo maps for more bodies, from sources with stable addresses.

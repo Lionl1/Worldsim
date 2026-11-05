@@ -2,7 +2,7 @@
 
 **Open physics in Rust: from space mission analysis to checking trained world models. Each law is checked automatically.**
 
-*Open, dependency-free physics in Rust: Mission Lab turns mission requirements into a scorecard and technology trade study, and a qualification ladder tells you when a learned world model can be trusted. Includes robot environments, counterfactual data, a 3D viewer from planets to cosmology, and 157 automated physics checks.*
+*Open, dependency-free physics in Rust: Mission Lab turns mission requirements into a scorecard and technology trade study, and a qualification ladder tells you when a learned world model can be trusted. Includes robot environments, counterfactual data, a 3D viewer from planets to cosmology, and 158 automated physics checks.*
 
 **For mission engineers:** [Mission Lab](#mission-lab) answers whether the requirements are met, what breaks the mission and which technology pays off. **For model developers:** [data collection and qualification](#world-models-data-and-qualification) show how many seconds a model can be trusted and whether it sees crashes in advance. What it can do, what it cannot and which research it builds on is described in [docs/PRODUCT.md](docs/PRODUCT.md).
 
@@ -50,7 +50,7 @@ In a mission description, `vehicle` holds registry parameters (see `worldsim par
 | 🤖 **Robots** | lander, drone, rover in real time | Tsiolkovsky, rotor momentum theory, Coulomb friction, leg contact, stability |
 | ⚫ **Black holes** | ray rendering along geodesics, Schwarzschild and Kerr | ISCO, shadow, Hawking, Peters waves |
 | 🔬 **Laboratory** | tunneling, shock wave, SPH gas, dam, ozone, nozzle, craters, live collisions, winds, tectonics | exact reference solutions where they exist |
-| ✅ **Laws** | 157 tests | see below |
+| ✅ **Laws** | 158 tests | see below |
 
 ## Law checks
 
@@ -86,7 +86,7 @@ Examples of what is checked and what comes out:
 | Gravitational waves | PSR B1913+16 | dP/dt agrees with GR (−2.40·10⁻¹²) |
 | Sod problem | shock wave against the exact solution | L1 error < 1% |
 | Chapman cycle | steady ozone | matches the analytic value, ±2% |
-| IAS15 | orbit with e = 0.9, 10 revolutions | returns within 2·10⁻¹² of a, energy 2·10⁻¹⁵ |
+| IAS15 | e = 0.9, 10 revolutions; e = 0.1, 1000 revolutions | returns within 2·10⁻¹² of a; energy error 1.6·10⁻¹⁵ |
 | Wisdom–Holman | Sun, Jupiter, Mercury, 5-day step, 300 yr | energy error 3.5·10⁻⁸, leapfrog 3.0·10⁻⁵ |
 | Shallow water on a sphere | Williamson test 2, tilted 45° | depth error 9·10⁻¹⁵; wave period within 10⁻⁵ of theory |
 | SPH | Sod tube | density error 0.65% |
@@ -315,7 +315,7 @@ src/
   env                                         — environment for training robots: lander, drone, rover
   quantum  blackhole  fluid  chemistry         — quantum, black holes, fluid dynamics, chemistry
   collisions  tectonics  lab                  — impacts, tectonics, experiments for the interface
-  validate                                    — 157 law checks
+  validate                                    — 158 law checks
   terramech                                   — Bekker soil model for the rover
   impacts                                     — live collisions in N-body
   sph  shallow                                — SPH gas, winds on a sphere
@@ -338,9 +338,7 @@ docker build -t worldsim .
 docker run -p 8080:8080 -e WORLDSIM_TOKEN=choose-a-long-token -v worldsim-data:/data worldsim
 ```
 
-The star and exoplanet catalogs are not in the image. For the “Map” tab, run `./tools/fetch_data.sh` and add `-v "$PWD/data:/opt/worldsim/data:ro"`. No release has been published yet, so until then use the image or build from source.
-
-Or a prebuilt binary from the releases page:
+The star and exoplanet catalogs are not in the image. For the “Map” tab, run `./tools/fetch_data.sh` and add `-v "$PWD/data:/opt/worldsim/data:ro"`. Or a prebuilt binary from the [releases page](https://github.com/Lionl1/Worldsim/releases). The archive has the binary, example missions and `tools/`. It has no catalogs or photo maps: run `./tools/fetch_data.sh` (needs git and python3) and `./tools/fetch_textures.sh` in the unpacked folder. The Python package needs the library built from source with `cargo build --release`.
 
 ```bash
 WORLDSIM_TOKEN=choose-a-long-token worldsim serve --host 0.0.0.0 --data-dir /var/lib/worldsim --log
@@ -375,7 +373,7 @@ Classical mechanics, thermodynamics, electromagnetism, SR, GR (1PN, plus Schwarz
 | Atmosphere | one-layer winds on a sphere from the temperature contrast, cloud cover as a rule of thumb | a general circulation model: vertical structure, moisture, cloud physics. Earth’s strongest wind comes out at 13 m/s near 64°, while the real jets are stronger and closer to 30–40°. Mars gives 24 m/s near 69°, not compared with data. Slow rotators and giant planets are refused. Clouds do not change the temperature |
 | Chemistry | kinetics, Chapman cycle, ideal nozzle | chemical equilibria of real propellants, combustion |
 | Collisions | scaling laws of disruption and craters; live merging and breakup in N-body with exact mass and momentum | hydrodynamic impact: fragments are six schematic bodies, no melting |
-| N bodies | IAS15, Wisdom–Holman, Yoshida, 1PN; P3M and 128³ particles in cosmology | close encounters in Wisdom–Holman, compensated summation in IAS15, gas in cosmology, clusters |
+| N bodies | IAS15, Wisdom–Holman, Yoshida, 1PN; P3M and 128³ particles in cosmology | close encounters in Wisdom–Holman, gas in cosmology, clusters |
 | Thermal | one lumped node with radiation | surroundings, convection, conduction between parts |
 | Soil | rigid wheel, Bekker and Janosi–Hanamoto, steady state | grousers, slip sinkage, dynamic effects; the model is not fitted to a specific wheel |
 | Tectonics | plate cooling, seafloor depth, order of convection speed | plate motion, volcanism |

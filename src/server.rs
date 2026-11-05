@@ -22,10 +22,11 @@ use std::sync::{Arc, Mutex};
 const INDEX: &str = include_str!("../web/index.html");
 const MISSION_EXAMPLE: &str = include_str!("../missions/lunar_lander.json");
 
-/// Catalogs are read from disk: ./data or the project folder. Build: tools/fetch_data.sh
+/// Catalogs are read from disk: ./data, next to the binary or the project folder. Build: tools/fetch_data.sh
 fn data_file(name: &str) -> Option<Vec<u8>> {
-    let candidates = [std::path::PathBuf::from("data").join(name), std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data").join(name)];
-    candidates.iter().find_map(|p| std::fs::read(p).ok())
+    let beside = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("data").join(name)));
+    let candidates = [Some(std::path::PathBuf::from("data").join(name)), beside, Some(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data").join(name))];
+    candidates.iter().flatten().find_map(|p| std::fs::read(p).ok())
 }
 
 fn data_resp(name: &str) -> Resp {

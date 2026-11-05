@@ -187,6 +187,8 @@ function chart(series, o={}){
   let [x0,x1] = o.xr ? o.xr.map(tx) : [Math.min(...xs), Math.max(...xs)], [y0,y1] = o.yr ? o.yr.map(ty) : [Math.min(...ys), Math.max(...ys)];
   if (y1===y0){ y1+=1; y0-=1; } if (x1===x0){ x1+=1; x0-=1; }
   const pad=(y1-y0)*0.06; if (!o.yr){ y0-=pad; y1+=pad; }
+  // equal scale on both axes: a circle stays a circle on any panel size
+  if (o.equal){ const w=W-L-R, h=H-T-B, u=Math.max((x1-x0)/w,(y1-y0)/h), cx=(x0+x1)/2, cy=(y0+y1)/2; x0=cx-u*w/2; x1=cx+u*w/2; y0=cy-u*h/2; y1=cy+u*h/2; }
   const X = v => L+(tx(v)-x0)/(x1-x0)*(W-L-R), Y = v => H-B-(ty(v)-y0)/(y1-y0)*(H-T-B);
   c.strokeStyle=col('--line'); c.fillStyle=col('--muted'); c.font='12px -apple-system,Segoe UI,sans-serif'; c.lineWidth=1;
   for (let k=0;k<=4;k++){ const yy=T+k*(H-T-B)/4; c.beginPath(); c.moveTo(L,yy); c.lineTo(W-R,yy); c.stroke();
@@ -1424,8 +1426,8 @@ const labTab = {
         res(e ? P('Outcome', esc(e.outcome))+P('Impact speed', fmt(e.speed/1e3,1)+' km/s')+P('Largest remnant', fmt(e.remnant_share*100,1)+'% of the mass')+P('Energy into heat', e.heat.toExponential(2)+' J')+P('Bodies at the end', r.bodies) : P('Outcome','the bodies did not touch'));
         note('The outcome follows the Leinhardt–Stewart scaling law. Fragments are six schematic bodies, not a hydrodynamic result.');
         const circle = (b,i) => { const a=[...Array(33).keys()].map(k=>k/32*2*Math.PI); return {x:a.map(t=>b.x+b.r*Math.cos(t)),y:a.map(t=>b.y+b.r*Math.sin(t)),color:i?'#fbbf4b':'#5aa2ff'}; };
-        const box = Math.max(...r.frames[0].flatMap(b=>[Math.abs(b.x)+b.r,Math.abs(b.y)+b.r]))*1.1, wide = Math.max(1, $('main').clientWidth/Math.max(1,$('main').clientHeight));
-        let f=0, last=0; const loop=(ts)=>{ if (my!==this.req) return; if (ts-last>50){ last=ts; chart(r.frames[f].map(circle),{title:`Collision, frame ${f+1} of ${r.frames.length}`,xlabel:'x, Earth radii',xr:[-box*wide,box*wide],yr:[-box,box]}); f=(f+1)%r.frames.length; } this.raf=requestAnimationFrame(loop); }; loop(1e9);
+        const box = Math.max(...r.frames[0].flatMap(b=>[Math.abs(b.x)+b.r,Math.abs(b.y)+b.r]))*1.1;
+        let f=0, last=0; const loop=(ts)=>{ if (my!==this.req) return; if (ts-last>50){ last=ts; chart(r.frames[f].map(circle),{title:`Collision, frame ${f+1} of ${r.frames.length}`,xlabel:'x, Earth radii',xr:[-box,box],yr:[-box,box],equal:true}); f=(f+1)%r.frames.length; } this.raf=requestAnimationFrame(loop); }; loop(performance.now()+60);
       } else if (id==='sph'){
         res(P('Density error, L1', fmt(r.l1,4))+P('Energy error', r.energy_error.toExponential(1))+P('Particles', r.particles));
         chart([{x:r.x,y:r.exact,color:'#fbbf4b',label:'exact'},{x:r.x,y:r.rho,dots:true,dot:3,color:'#5aa2ff',label:'SPH'}],{title:'Gas density',xlabel:'x'});
