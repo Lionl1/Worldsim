@@ -221,6 +221,34 @@ pub unsafe extern "C" fn ws_mission_report(p: *mut MissionHandle, buf: *mut u8, 
     write_str(&text, buf, cap)
 }
 
+/// The flight series of a full analysis, JSON.
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_plan(p: *mut MissionHandle, buf: *mut u8, cap: usize) -> usize {
+    write_str(&unsafe { &*p }.runner.analysis_plan().render(), buf, cap)
+}
+
+/// Rebuilds the flights for series `i`. Returns the number of flights, or 0 on error.
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_select(p: *mut MissionHandle, i: usize) -> usize {
+    let h = unsafe { &mut *p };
+    match h.runner.select(i) { Ok(()) => h.runner.envs.len(), Err(e) => { set_error(e); 0 } }
+}
+
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_record(p: *mut MissionHandle) { unsafe { &mut *p }.runner.record(); }
+
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ws_mission_analysis(p: *mut MissionHandle, buf: *mut u8, cap: usize, name: *const c_char) -> usize {
+    let h = unsafe { &mut *p };
+    let name = unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned();
+    let text = match h.runner.analysis_report(&name) { Ok(r) => r.render(), Err(e) => J::obj().set("error", e).render() };
+    write_str(&text, buf, cap)
+}
+
 // ---------------------------------------------------------------- replaying recorded commands (calibration)
 
 #[no_mangle]

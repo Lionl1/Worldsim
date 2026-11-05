@@ -88,17 +88,16 @@ These are worth telling a customer directly.
 
 - **This is not a flight qualification tool.** The physics is simplified: no deformable soil, no propellant slosh, the contact is a model, the rover moves on a simplified model. The results are suitable for early design decisions and comparing options.
 - **Not verified on real data.** The calibration tool has been checked only on synthetic recordings. There is no comparison with telemetry of real vehicles. Absolute numbers cannot be trusted, relative comparisons only with care.
-- **The autopilot affects the result.** Technology analysis evaluates the vehicle together with the built-in autopilot. A custom controller can be connected through `MissionRunner`, it gets a requirements scorecard and a comparison with the autopilot, but driver and technology analysis still runs only on the autopilot.
+- **The controller affects the result.** Technology analysis evaluates the vehicle together with a controller. The default is the built-in autopilot; `MissionRunner.analyze` runs the same analysis on a custom Python controller. Real flight software is not connected.
 - **No compliance with standards is claimed.** The report is not evidence of ECSS compliance. We know the content of the handbook from reviews and have not yet matched it line by line.
 - **Demand is not verified.** There have been no conversations with space companies. The described value is a hypothesis.
 
 ## Parameters to add next
 
-The registry has 64 parameters today. These are not in it yet, and each needs a physics model, not only a new number:
+The registry has 66 parameters today. These are not in it yet, and each needs a physics model, not only a new number:
 
 | Parameter group | What it would add | Why it matters |
 |---|---|---|
-| Power budget for the lander and drone | Bus load, battery state, power margin | Only the rover and drone track energy now, and neither has a bus load |
 | Thermal limits | Component temperature range, engine duty limits, survival heating | A mission can pass today while overheating |
 | Communications | Link windows, data rate, signal blackout, command latency | Only a fixed observation delay exists |
 | Compute budget | Control loop overrun, inference time for a learned model | Decides whether a trained model fits flight hardware |
@@ -115,7 +114,6 @@ The registry has 64 parameters today. These are not in it yet, and each needs a 
 | 1 | Talk to 5–10 GNC and autonomy engineers | Check that this is the right pain before investing further |
 | 2 | Run calibration on real telemetry | Customer trust cannot be earned without it; the tool exists, the data does not |
 | 3 | L6: planning in imagination and checking in the simulator | Closest to real use |
-| 4 | Driver and technology analysis for a customer controller | Currently it runs only on the autopilot |
-| 5 | Power, communications and computing budgets | The simulator survey points to this gap |
-| 6 | Mapping to ECSS-E-HB-40-02A | Entry into company processes |
-| 7 | Deformable soil ([example approach](https://arxiv.org/html/2601.04547)) | The main physical simplification for rovers |
+| 4 | Communications and computing budgets, thermal limits | The simulator survey points to this gap |
+| 5 | Mapping to ECSS-E-HB-40-02A | Entry into company processes |
+| 6 | Deformable soil ([example approach](https://arxiv.org/html/2601.04547)) | The main physical simplification for rovers |

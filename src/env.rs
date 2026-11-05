@@ -268,6 +268,8 @@ pub const PARAMS: &[ParamDef] = &[
     p("torque_max", "Vehicle", "Attitude torque", "N·m", 10.0, 1e5, L, 3000.0, "Maximum attitude thruster torque."),
     p("drag_cd", "Vehicle", "Drag coefficient", "", 0.1, 3.0, L, 1.0, ""),
     p("drag_area", "Vehicle", "Drag area", "m²", 0.1, 100.0, L, 4.0, ""),
+    p("bus_power", "Vehicle", "Bus power", "W", 0.0, 100_000.0, ALL, 0.0, "Constant load: avionics, communications, heaters. 0 means no bus load."),
+    p("lander_battery_kwh", "Vehicle", "Lander battery", "kWh", 0.01, 1000.0, L, 5.0, "Used only with a bus load. When it is empty, the engine and thrusters stop responding."),
     p("drone_mass", "Vehicle", "Drone mass", "kg", 0.1, 50.0, D, 1.5, ""),
     p("thrust_to_weight", "Vehicle", "Thrust-to-weight on Earth", "", 1.1, 10.0, D, 2.5, "Rotor thrust margin at sea level with standard area."),
     p("battery_kj", "Vehicle", "Battery", "kJ", 1.0, 1e5, D, 150.0, ""),
@@ -340,7 +342,7 @@ impl Task {
 /// Parameters already resolved at episode start: the physics loop must not search strings.
 #[derive(Clone, Debug)]
 struct Tune {
-    throttle_min: f64, misalign: f64, cg_offset: f64, drone_mass: f64, t2w: f64, rover_vmax: f64, tip_lat: f64, tip_long: f64, battery_rover: f64,
+    throttle_min: f64, misalign: f64, cg_offset: f64, drone_mass: f64, t2w: f64, rover_vmax: f64, tip_lat: f64, tip_long: f64, battery_rover: f64, bus_power: f64, battery_lander: f64,
     alt: (f64, f64), offset: f64, vh: f64, vz: (f64, f64), tilt: f64, goal: (f64, f64), pad: f64, terrain: f64, craters: f64, friction: f64, sun: f64,
     lim_v: f64, lim_tilt: f64, lim_slope: f64, impact: f64, rew_ok: f64, rew_bad: f64, air: f64, wind: Vec3, solar: f64,
     n_pos: f64, n_vel: f64, n_att: f64, n_gyro: f64, n_acc: f64, n_rng: f64, gyro_bias: f64, accel_bias: f64, dropout: f64, delay: usize, dt: f64, action_noise: f64,
@@ -348,7 +350,7 @@ struct Tune {
 
 impl Tune {
     fn zero() -> Tune {
-        Tune { throttle_min: 0.0, misalign: 0.0, cg_offset: 0.0, drone_mass: 1.5, t2w: 2.5, rover_vmax: 2.5, tip_lat: 1.0, tip_long: 1.33, battery_rover: 2.16e6,
+        Tune { throttle_min: 0.0, misalign: 0.0, cg_offset: 0.0, drone_mass: 1.5, t2w: 2.5, rover_vmax: 2.5, tip_lat: 1.0, tip_long: 1.33, battery_rover: 2.16e6, bus_power: 0.0, battery_lander: 0.0,
             alt: (0.0, 0.0), offset: 0.0, vh: 0.0, vz: (0.0, 0.0), tilt: 0.0, goal: (0.0, 0.0), pad: 25.0, terrain: 1.0, craters: 1.0, friction: -1.0, sun: -1.0,
             lim_v: 2.5, lim_tilt: 15.0, lim_slope: 12.0, impact: 3.0, rew_ok: 100.0, rew_bad: 100.0, air: 1.0, wind: Vec3::ZERO, solar: 1.0,
             n_pos: 1.0, n_vel: 1.0, n_att: 1.0, n_gyro: 1.0, n_acc: 1.0, n_rng: 1.0, gyro_bias: 0.0, accel_bias: 0.0, dropout: 0.0, delay: 0, dt: 0.005, action_noise: 0.0 }
@@ -361,7 +363,7 @@ impl Tune {
         let h = v("cg_height");
         let ordered = |a: f64, b: f64| (a.min(b), a.max(b));
         Tune { throttle_min: v("throttle_min"), misalign: v("thrust_misalign").to_radians(), cg_offset: v("cg_offset"), drone_mass: v("drone_mass"), t2w: v("thrust_to_weight"),
-            rover_vmax: v("rover_vmax"), tip_lat: 0.6 / h, tip_long: 0.8 / h, battery_rover: v("battery_kwh") * 3.6e6,
+            rover_vmax: v("rover_vmax"), tip_lat: 0.6 / h, tip_long: 0.8 / h, battery_rover: v("battery_kwh") * 3.6e6, bus_power: v("bus_power"), battery_lander: v("lander_battery_kwh") * 3.6e6,
             alt: ordered(v("start_alt_min"), v("start_alt_max")), offset: v("start_offset"), vh: v("start_vh"), vz: ordered(v("start_vz_min"), v("start_vz_max")), tilt: v("start_tilt").to_radians(),
             goal: ordered(v("goal_dist_min"), v("goal_dist_max")), pad: v("pad_radius"), terrain: v("terrain_scale"), craters: v("crater_scale"), friction: v("friction"), sun: v("sun_elev"),
             lim_v: v("touch_speed_limit"), lim_tilt: v("touch_tilt_limit"), lim_slope: v("touch_slope_limit"), impact: v("impact_limit"), rew_ok: v("reward_success"), rew_bad: v("reward_crash"),
@@ -665,6 +667,7 @@ impl Env {
             Task::Lander => {
                 let mut rng = Rng::new(seed ^ 77);
                 let t = self.tune.clone();
+                self.battery = if t.bus_power > 0.0 { t.battery_lander } else { 0.0 };
                 let alt = rng.uniform(t.alt.0, t.alt.1);
                 let off = Vec3::new(rng.uniform(-t.offset, t.offset), rng.uniform(-t.offset, t.offset), 0.0);
                 let tilt = Quat::from_axis_angle(Vec3::new(rng.normal(), rng.normal(), 0.0), rng.uniform(0.0, t.tilt));
@@ -997,7 +1000,9 @@ impl Env {
 
     fn physics_step(&mut self, cmd: &[f64]) {
         self.update_actuators(cmd);
-        let eff = self.effective_action();
+        let mut eff = self.effective_action();
+        // an empty lander battery leaves the engine and thrusters without control
+        if self.cfg.task == Task::Lander && self.tune.bus_power > 0.0 && self.battery <= 0.0 { for x in eff.iter_mut() { *x = 0.0; } }
         let a: &[f64] = &eff[..cmd.len().min(4)];
         let dt = self.dt;
         match self.cfg.task {
@@ -1016,9 +1021,9 @@ impl Env {
                     let dm = (mdot * dt).min(b.mass - self.p.dry_mass);
                     b.mass -= dm;
                     self.info.fuel_used += dm;
+                    self.draw_energy(self.tune.bus_power * dt);
                 } else {
-                    self.battery = (self.battery - power * dt).max(0.0);
-                    self.info.energy_used += power * dt;
+                    self.draw_energy((power + self.tune.bus_power) * dt);
                 }
             }
             Task::Rover => {
@@ -1055,13 +1060,26 @@ impl Env {
                 self.body.pos.z = self.terrain.height(self.body.pos.x, self.body.pos.y);
                 self.body.vel = Vec3::new(ground_v * c, ground_v * s, 0.0);
                 let p_mech: f64 = side.iter().map(|f| (f * self.speed).abs()).sum::<f64>() / 0.75 + 15.0;
-                let insol = self.tune.solar * self.world.insolation() * self.sun_elev.sin() * if rho > 0.0 { 0.75 } else { 1.0 };
-                let p_solar = self.p.panel_area * 0.25 * insol;
-                self.battery = (self.battery + (p_solar - p_mech) * dt).clamp(0.0, self.tune.battery_rover);
-                self.info.energy_used += p_mech * dt;
+                let bus = if self.battery > 0.0 { self.tune.bus_power } else { 0.0 };
+                let p_solar = self.solar_power();
+                self.battery = (self.battery + (p_solar - p_mech - bus) * dt).clamp(0.0, self.tune.battery_rover);
+                self.info.energy_used += (p_mech + bus) * dt;
             }
         }
         self.t += dt;
+    }
+
+    /// Takes energy from the battery; an empty battery gives nothing, so used + left stays equal to the initial charge.
+    fn draw_energy(&mut self, e: f64) {
+        let used = e.min(self.battery);
+        self.battery -= used;
+        self.info.energy_used += used;
+    }
+
+    /// Solar panel power on the rover, W.
+    fn solar_power(&self) -> f64 {
+        let (rho, _, _) = self.air(self.body.pos.z);
+        self.p.panel_area * 0.25 * self.tune.solar * self.world.insolation() * self.sun_elev.sin() * if rho > 0.0 { 0.75 } else { 1.0 }
     }
 
     fn shaping(&self) -> f64 {
@@ -1108,7 +1126,10 @@ impl Env {
         reward += sh - self.prev_shaping;
         self.prev_shaping = sh;
         match self.cfg.task {
-            Task::Lander => reward -= 0.02 * (self.info.fuel_used - fuel0),
+            Task::Lander => {
+                reward -= 0.02 * (self.info.fuel_used - fuel0);
+                if self.info.crashed && self.tune.bus_power > 0.0 && self.battery <= 0.0 { self.info.reason = "battery depleted, then crash".into(); }
+            }
             Task::Drone => {
                 reward -= 1e-4 * (self.info.energy_used - en0);
                 self.info.touch_offset = (self.goal - self.body.pos).norm();
@@ -1142,7 +1163,7 @@ impl Env {
                 if !terminated && (lateral.abs() > self.tune.tip_lat || longitudinal.abs() > self.tune.tip_long) {
                     reward -= self.tune.rew_bad; terminated = true; self.info.crashed = true; self.info.reason = "tipped over on a slope".into();
                 }
-                if self.battery <= 0.0 && self.sun_elev < 0.05 { terminated = true; self.info.reason = "battery depleted".into(); }
+                if self.battery <= 0.0 && (self.sun_elev < 0.05 || self.tune.bus_power > self.solar_power()) { terminated = true; self.info.reason = "battery depleted".into(); }
             }
         }
         let half = self.terrain.size / 2.0;

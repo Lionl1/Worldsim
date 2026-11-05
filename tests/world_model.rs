@@ -284,3 +284,39 @@ fn openapi_lists_every_route() {
     }
     assert!(seen > 20);
 }
+
+/// A controller that repeats the autopilot must get the same analysis as `mission::run`.
+#[test]
+fn controller_analysis_matches_the_autopilot_run() {
+    let spec = MissionSpec::parse(r#"{"name":"t","task":"lander","world":"moon","runs":12,"seed":3,"vehicle":{"t_max":8000,"fuel":120,"start_offset":5,"start_vh":1},
+      "dispersions":{"t_max":0.05,"dry_mass":0.03},"requirements":[{"metric":"success","op":">=","value":0.5},{"metric":"touch_speed","percentile":95,"op":"<=","value":2.5}],
+      "technologies":[{"name":"Stronger","set":{"t_max":12000},"dry_mass_delta":10},{"name":"Weak","set":{"t_max":3000}}]}"#).unwrap();
+    let auto = mission::run(&spec, 2).unwrap();
+    let mut r = mission::Runner::new(spec, 2).unwrap();
+    let series = r.analysis_plan().as_arr().unwrap().len();
+    assert_eq!(series, 2 + 2 + 2);
+    for i in 0..series {
+        r.select(i).unwrap();
+        loop {
+            let a: Vec<Vec<f64>> = r.envs.iter().map(|e| e.autopilot()).collect();
+            if r.step(&a) == 0 { break; }
+        }
+        r.record();
+    }
+    let own = r.analysis_report("autopilot-copy").unwrap();
+    let f = |j: &J, k: &str| j.get(k).unwrap().as_f64().unwrap();
+    assert_eq!(f(&own, "success"), f(&auto, "success"));
+    assert_eq!(f(&own, "baseline_no_dispersions"), f(&auto, "baseline_no_dispersions"));
+    assert_eq!(f(&own, "delta_vs_autopilot"), 0.0);
+    for key in ["drivers", "technologies"] {
+        let (a, b) = (own.get(key).unwrap().as_arr().unwrap(), auto.get(key).unwrap().as_arr().unwrap());
+        assert_eq!(a.len(), b.len());
+        for (x, y) in a.iter().zip(b) {
+            assert_eq!(x.get("name").unwrap().as_str(), y.get("name").unwrap().as_str());
+            assert_eq!(f(x, "success"), f(y, "success"), "{key}");
+        }
+    }
+    assert!(own.get("markdown").unwrap().as_str().unwrap().contains("Value of technologies"));
+    // after the analysis a plain report still describes the mission itself
+    assert!(r.report("again").is_ok());
+}

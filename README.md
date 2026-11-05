@@ -2,7 +2,7 @@
 
 **Open physics in Rust: from space mission analysis to checking trained world models. Each law is checked automatically.**
 
-*Open, dependency-free physics in Rust: Mission Lab turns mission requirements into a scorecard and technology trade study, and a qualification ladder tells you when a learned world model can be trusted. Includes robot environments, counterfactual data, a 3D viewer from planets to cosmology, and 129 automated physics checks.*
+*Open, dependency-free physics in Rust: Mission Lab turns mission requirements into a scorecard and technology trade study, and a qualification ladder tells you when a learned world model can be trusted. Includes robot environments, counterfactual data, a 3D viewer from planets to cosmology, and 133 automated physics checks.*
 
 **For mission engineers:** [Mission Lab](#mission-lab) answers whether the requirements are met, what breaks the mission and which technology pays off. **For model developers:** [data collection and qualification](#world-models-data-and-qualification) show how many seconds a model can be trusted and whether it sees crashes in advance. What it can do, what it cannot and which research it builds on is described in [docs/PRODUCT.md](docs/PRODUCT.md).
 
@@ -50,7 +50,7 @@ In a mission description, `vehicle` holds registry parameters (see `worldsim par
 | 🤖 **Robots** | lander, drone, rover in real time | Tsiolkovsky, rotor momentum theory, Coulomb friction, leg contact, stability |
 | ⚫ **Black holes** | ray rendering along geodesics, Schwarzschild and Kerr | ISCO, shadow, Hawking, Peters waves |
 | 🔬 **Laboratory** | tunneling, shock wave, dam, ozone, nozzle, craters, tectonics | exact reference solutions |
-| ✅ **Laws** | 129 tests | see below |
+| ✅ **Laws** | 133 tests | see below |
 
 ## Law checks
 
@@ -236,7 +236,12 @@ from worldsim import MissionRunner
 runner = MissionRunner(json.load(open("missions/lunar_lander.json")))
 report = runner.evaluate(lambda obs: my_policy(obs), name="my-gnc")   # obs: N×O, response: N×A
 print(report["success"], report["delta_vs_autopilot"], report["scorecard"])
+
+full = runner.analyze(lambda obs: my_policy(obs), name="my-gnc")     # same flights as `worldsim mission`
+print(full["markdown"])                                               # adds main drivers and value of technologies
 ```
+
+`analyze` flies every series that the autopilot analysis flies, with the same seeds. The number of flights differs between series, so take N from `obs`.
 
 **Telemetry calibration.** Parameters are fitted so the model reproduces a recorded flight. The result contains uncertainties and a flag for whether the data determines the parameters:
 
@@ -263,7 +268,7 @@ cd python && python -m worldsim.export --data ../runs/moon --out ../runs/moon_le
 
 **Interface settings.** Parameters, requirements and technology options are edited in the forms of the “Robots” and “Mission Lab” tabs. Presets can be saved and imported there too, and the “Settings” tab has theme, text size, panel width and graphics quality. All of this is stored in the browser.
 
-**Parameters.** A list of all configurable quantities with units and ranges: `worldsim params --task lander`. They work in `collect --set`, in a mission description, in API (`params=isp=320,gust=2`) and in `VectorEnv(params={...})`.
+**Parameters.** A list of all configurable quantities with units and ranges: `worldsim params --task lander`. `bus_power` adds a constant load on any vehicle; on the lander it drains `lander_battery_kwh`, and an empty battery stops the engine and thrusters. The `energy_used_kj` requirement then applies to the lander too. They work in `collect --set`, in a mission description, in API (`params=isp=320,gust=2`) and in `VectorEnv(params={...})`.
 
 ## As a library
 
@@ -287,7 +292,7 @@ src/
   env                                         — environment for training robots: lander, drone, rover
   quantum  blackhole  fluid  chemistry         — quantum, black holes, fluid dynamics, chemistry
   collisions  tectonics  lab                  — impacts, tectonics, experiments for the interface
-  validate                                    — 129 law checks
+  validate                                    — 133 law checks
   mission  collect  ffi                       — Mission Lab, transition collection, vector environment for Python
   datagen  server  json  main                 — datasets, HTTP server, CLI
 web/index.html                                — 3D interface (three.js), built into the binary

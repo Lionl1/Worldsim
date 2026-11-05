@@ -450,6 +450,41 @@ pub fn env_checks() -> Vec<Check> {
         loop { let a = e.autopilot(); let (_, _, t, tr) = e.step(&a); if t || tr { break; } }
         if e.info.success { ok += 1; }
     }
+    // Power budget: a constant bus load draws exactly P·t, and used + left equals the initial charge
+    let mut c = EnvConfig::new("lander", "moon").unwrap();
+    c.set("bus_power", 500.0).unwrap();
+    let mut e = Env::new(c).unwrap();
+    e.reset(1);
+    for _ in 0..100 { let a = e.autopilot(); e.step(&a); }
+    out.push(chk("Energy balance (bus load)", "lander, 500 W: energy used = P·t", e.info.energy_used, 500.0 * e.t, 1e-9, "J"));
+    let mut c = EnvConfig::new("rover", "moon").unwrap();
+    for (k, v) in [("bus_power", 100.0), ("panel_area", 0.0), ("terrain_scale", 0.0), ("crater_scale", 0.0)] { c.set(k, v).unwrap(); }
+    let mut e = Env::new(c).unwrap();
+    e.reset(1);
+    let full = e.battery_frac();
+    for _ in 0..100 { e.step(&[0.0, 0.0]); }
+    out.push(chk("Energy balance (bus load)", "rover at rest, no panel: 15 W electronics + 100 W bus", (full - e.battery_frac()) * 0.6 * 3.6e6, 115.0 * e.t, 1e-9, "J"));
+    let mut c = EnvConfig::new("drone", "earth").unwrap();
+    c.set("bus_power", 50.0).unwrap();
+    c.set("battery_kj", 1.0).unwrap();
+    let mut e = Env::new(c).unwrap();
+    e.reset(1);
+    while !e.step(&[0.6; 4]).2 && e.t < 60.0 {}
+    out.push(chk("Energy balance (bus load)", "drone, battery runs out: energy used = initial charge", e.info.energy_used, 1000.0, 1e-9, "J"));
+    let mut c = EnvConfig::new("lander", "moon").unwrap();
+    for (k, v) in [("bus_power", 2000.0), ("lander_battery_kwh", 0.01), ("start_alt_min", 3000.0), ("start_alt_max", 3000.0), ("terrain_scale", 0.0), ("crater_scale", 0.0)] { c.set(k, v).unwrap(); }
+    c.max_steps = 100_000;
+    let mut e = Env::new(c).unwrap();
+    e.reset(1);
+    let mut empty_t = 0.0;
+    loop {
+        let a = e.autopilot();
+        let (_, _, t, tr) = e.step(&a);
+        if empty_t == 0.0 && e.info.energy_used >= 36_000.0 { empty_t = e.t; }
+        if t || tr { break; }
+    }
+    out.push(Check { law: "Power budget", test: "lander, 36 kJ at 2 kW: battery lasts 18 s, then the vehicle crashes".into(), value: format!("{empty_t:.2} s, {}", e.info.reason), expected: "18 s, battery depleted, then crash".into(),
+        pass: (empty_t - 18.0).abs() < 0.2 && e.info.reason == "battery depleted, then crash" });
     out.push(Check { law: "Task solvability", test: "PD autopilot: Moon landing, 10 episodes".into(), value: format!("{ok}/10"), expected: "≥ 7/10".into(), pass: ok >= 7 });
     out
 }

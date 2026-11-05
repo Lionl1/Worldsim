@@ -266,7 +266,72 @@ fn fly(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor
 }
 
 /// Same flights and requirements, but controlled from outside: Python calls `step` and passes actions of all flights at once.
-pub struct Runner { pub spec: MissionSpec, pub envs: Vec<Env>, pub done: Vec<bool>, threads: usize, baseline: Option<Vec<RunResult>> }
+pub struct Runner { pub spec: MissionSpec, pub envs: Vec<Env>, pub done: Vec<bool>, threads: usize, baseline: Option<Vec<RunResult>>,
+    plan: Vec<Variant>, current: usize, outcomes: Vec<Option<Vec<RunResult>>>, unfinished: usize }
+
+/// One flight series of the analysis: the mission itself, no dispersions, one driver or one technology.
+#[derive(Clone)]
+struct Variant { kind: &'static str, name: String, sigma: f64, dry_mass_delta: f64, vehicle: Vec<(String, f64)>, dispersions: Vec<(String, f64)>, rotor: f64, runs: usize }
+
+/// Same order and same flight counts as in `run_with`, so the answers can be compared directly.
+fn analysis_plan(spec: &MissionSpec) -> Result<Vec<Variant>, String> {
+    let driver_runs = spec.runs.min(300);
+    let v = |kind, name: &str, sigma, d: Vec<(String, f64)>, runs| Variant { kind, name: name.to_string(), sigma, dry_mass_delta: 0.0, vehicle: spec.vehicle.clone(), dispersions: d, rotor: spec.rotor_scale, runs };
+    let mut plan = vec![v("base", "mission", 0.0, spec.dispersions.clone(), spec.runs), v("clean", "no dispersions", 0.0, vec![], driver_runs)];
+    for (k, s) in spec.dispersions.iter().filter(|d| d.1 != 0.0) { plan.push(v("driver", k, *s, vec![(k.clone(), *s)], driver_runs)); }
+    for t in &spec.technologies {
+        let (vehicle, dispersions, rotor) = tech_setup(spec, t)?;
+        plan.push(Variant { kind: "technology", name: t.name.clone(), sigma: 0.0, dry_mass_delta: t.dry_mass_delta, vehicle, dispersions, rotor, runs: spec.runs });
+    }
+    Ok(plan)
+}
+
+/// What a technology changes: vehicle parameters, dispersions and rotor size.
+fn tech_setup(spec: &MissionSpec, t: &Technology) -> Result<(Vec<(String, f64)>, Vec<(String, f64)>, f64), String> {
+    let mut veh = spec.vehicle.clone();
+    for (k, v) in &t.set { veh.retain(|(n, _)| n != k); veh.push((k.clone(), *v)); }
+    if t.dry_mass_delta != 0.0 {
+        let dm = t.set.iter().find(|(n, _)| n == "dry_mass").map(|x| x.1).unwrap_or(nominal(EnvConfig::new(&spec.task, "earth")?.task, "dry_mass", &veh)) + t.dry_mass_delta;
+        veh.retain(|(n, _)| n != "dry_mass");
+        veh.push(("dry_mass".into(), dm));
+    }
+    let mut d = spec.dispersions.clone();
+    for (k, v) in &t.set_dispersion { d.retain(|(n, _)| n != k); d.push((k.clone(), *v)); }
+    Ok((veh, d, t.set_top.iter().find(|(n, _)| n == "rotor_scale").map(|x| x.1).unwrap_or(spec.rotor_scale)))
+}
+
+/// Everything after the report head: scorecard, failure modes, drivers and technologies. Shared by the autopilot and a custom controller.
+fn analysis(head: J, spec: &MissionSpec, base: &[RunResult], clean: &[RunResult], drivers: &[(&Variant, &[RunResult])], techs: &[(&Variant, &[RunResult])]) -> J {
+    let base_s = success_rate(base);
+    let clean_s = success_rate(clean);
+    let mut dr: Vec<(String, f64, f64, f64)> = drivers.iter().map(|(v, rs)| { let s = success_rate(rs); (v.name.clone(), v.sigma, s, s - clean_s) }).collect();
+    dr.sort_by(|a, b| a.3.total_cmp(&b.3));
+    let mut tr = vec![];
+    for (v, rs) in techs {
+        let s = success_rate(rs);
+        // paired comparison: under the same conditions, what was saved and what was lost
+        let saved = rs.iter().zip(base).filter(|(a, b)| a.success > 0.5 && b.success < 0.5).count();
+        let lost = rs.iter().zip(base).filter(|(a, b)| a.success < 0.5 && b.success > 0.5).count();
+        let se = ((saved + lost) as f64).sqrt() / spec.runs as f64;
+        tr.push((v.name.clone(), s, s - base_s, saved, lost, 1.96 * se, v.dry_mass_delta, margin_score(spec, rs), scorecard(spec, rs)));
+    }
+    tr.sort_by(|a, b| b.2.total_cmp(&a.2));
+    let k = base.iter().map(|r| r.success).sum::<f64>();
+    let (sl, sh) = wilson(k, spec.runs as f64);
+    head.set("success", base_s).set("success_ci", vec![sl, sh]).set("requirements_met", margin_score(spec, base)).set("requirements_total", spec.requirements.len())
+        .set("scorecard", scorecard(spec, base))
+        .set("failure_modes", failure_modes(base))
+        .set("baseline_no_dispersions", clean_s).set("driver_runs", clean.len())
+        .set("drivers", J::Arr(dr.into_iter().map(|(k, v, s, ds)| J::obj().set("name", k).set("sigma", v).set("success", s).set("delta", ds)).collect()))
+        .set("technologies", J::Arr(tr.into_iter().map(|(n, s, ds, sv, ls, ci, dm, met, sc)| J::obj().set("name", n).set("success", s).set("delta", ds)
+            .set("delta_ci", ci).set("saved", sv).set("lost", ls).set("dry_mass_delta", dm).set("requirements_met", met).set("scorecard", sc)
+            .set("delta_per_kg", if dm > 0.0 { ds / dm } else { f64::NAN })).collect()))
+        .set("histograms", J::obj()
+            .set("touch_speed", base.iter().filter(|r| r.touch_speed > 0.0).map(|r| r.touch_speed).collect::<Vec<_>>())
+            .set("touch_offset", base.iter().filter(|r| r.touch_offset > 0.0).map(|r| r.touch_offset).collect::<Vec<_>>())
+            .set("fuel_used", base.iter().map(|r| r.fuel_used).collect::<Vec<_>>()))
+        .set("limits", "Simplified physics for early design decisions: does not replace high-fidelity tools, testing and qualification.")
+}
 
 /// Each flight has its own terrain map; keeping more than this in memory makes no sense.
 pub const MAX_RUNNER_FLIGHTS: usize = 5000;
@@ -275,7 +340,8 @@ impl Runner {
     pub fn new(spec: MissionSpec, threads: usize) -> Result<Runner, String> {
         if spec.runs > MAX_RUNNER_FLIGHTS { return Err(format!("runs = {}: for a custom controller at most {MAX_RUNNER_FLIGHTS} flights", spec.runs)); }
         let envs = (0..spec.runs).map(|i| flight_env(&spec, &spec.vehicle, &spec.dispersions, spec.rotor_scale, episode_seed(spec.seed, i as u64))).collect::<Result<Vec<_>, _>>()?;
-        Ok(Runner { done: vec![false; envs.len()], envs, spec, threads: threads.max(1), baseline: None })
+        let plan = analysis_plan(&spec)?;
+        Ok(Runner { done: vec![false; envs.len()], envs, outcomes: vec![None; plan.len()], plan, current: 0, unfinished: 0, spec, threads: threads.max(1), baseline: None })
     }
     pub fn reset(&mut self) -> Vec<Vec<f64>> {
         for (i, e) in self.envs.iter_mut().enumerate() { e.reset(episode_seed(self.spec.seed, i as u64)); self.done[i] = false; }
@@ -300,13 +366,51 @@ impl Runner {
         });
         left.into_inner()
     }
-    /// Report and paired comparison with the autopilot under the same conditions.
-    pub fn report(&mut self, name: &str) -> Result<J, String> {
-        let rs: Vec<RunResult> = self.envs.iter().map(result_of).collect();
-        // the autopilot under the same conditions is computed once: any number of controllers can be compared
+    /// The flight series of an analysis, in the order they must be flown.
+    pub fn analysis_plan(&self) -> J {
+        J::Arr(self.plan.iter().map(|v| J::obj().set("kind", v.kind).set("name", v.name.clone()).set("runs", v.runs)).collect())
+    }
+    /// Rebuilds the flights for one series; 0 is the mission itself.
+    pub fn select(&mut self, i: usize) -> Result<(), String> {
+        let v = self.plan.get(i).ok_or(format!("no analysis series {i}"))?.clone();
+        self.envs = (0..v.runs).map(|k| flight_env(&self.spec, &v.vehicle, &v.dispersions, v.rotor, episode_seed(self.spec.seed, k as u64))).collect::<Result<Vec<_>, _>>()?;
+        self.done = vec![false; v.runs];
+        self.current = i;
+        Ok(())
+    }
+    /// Remembers the outcome of the flown series.
+    pub fn record(&mut self) {
+        self.outcomes[self.current] = Some(self.envs.iter().map(result_of).collect());
+        self.unfinished += self.done.iter().filter(|d| !**d).count();
+    }
+    /// Same answer as `run`, but for the controller that flew every series.
+    pub fn analysis_report(&mut self, name: &str) -> Result<J, String> {
+        if self.outcomes.iter().any(|o| o.is_none()) { return Err("not all analysis series were flown".into()); }
+        self.autopilot_baseline()?;
+        let (base, auto) = (self.outcomes[0].as_ref().unwrap(), self.baseline.as_ref().unwrap());
+        let of = |kind: &str| self.plan.iter().zip(&self.outcomes).filter(|(v, _)| v.kind == kind).map(|(v, o)| (v, o.as_ref().unwrap().as_slice())).collect::<Vec<_>>();
+        let saved = base.iter().zip(auto).filter(|(a, b)| a.success > 0.5 && b.success < 0.5).count();
+        let lost = base.iter().zip(auto).filter(|(a, b)| a.success < 0.5 && b.success > 0.5).count();
+        let head = J::obj().set("controller", name).set("name", self.spec.name.clone()).set("task", self.spec.task.clone()).set("world", World::build(&self.spec.world)?.name()).set("runs", self.spec.runs).set("seed", self.spec.seed)
+            .set("terrain_sha256", self.spec.terrain_sha.clone().map(J::from).unwrap_or(J::Null)).set("generator", format!("worldsim {}", env!("CARGO_PKG_VERSION")))
+            .set("unfinished", self.unfinished).set("autopilot_success", success_rate(auto)).set("delta_vs_autopilot", success_rate(base) - success_rate(auto))
+            .set("delta_ci", 1.96 * ((saved + lost) as f64).sqrt() / self.spec.runs as f64).set("saved", saved).set("lost", lost);
+        let r = analysis(head, &self.spec, base, of("clean")[0].1, &of("driver"), &of("technology"));
+        let md = markdown(&r);
+        Ok(r.set("markdown", md))
+    }
+    /// The autopilot under the same conditions is computed once: any number of controllers can be compared.
+    fn autopilot_baseline(&mut self) -> Result<(), String> {
         if self.baseline.is_none() {
             self.baseline = Some(campaign(&self.spec, &self.spec.vehicle, &self.spec.dispersions, self.spec.rotor_scale, self.spec.runs, self.threads, &Progress::default())?);
         }
+        Ok(())
+    }
+    /// Report and paired comparison with the autopilot under the same conditions.
+    pub fn report(&mut self, name: &str) -> Result<J, String> {
+        if self.current != 0 { self.select(0)?; }
+        let rs: Vec<RunResult> = self.envs.iter().map(result_of).collect();
+        self.autopilot_baseline()?;
         let base = self.baseline.as_ref().unwrap();
         let s = success_rate(&rs);
         let k: f64 = rs.iter().map(|r| r.success).sum();
@@ -410,67 +514,16 @@ pub fn run_with(spec: &MissionSpec, threads: usize, progress: &Progress) -> Resu
     let active = spec.dispersions.iter().filter(|d| d.1 != 0.0).count();
     progress.total.store(spec.runs + spec.runs.min(300) * (1 + active) + spec.runs * spec.technologies.len(), Ordering::Relaxed);
     let base = campaign(spec, &spec.vehicle, &spec.dispersions, spec.rotor_scale, spec.runs, threads, progress)?;
-    let base_s = success_rate(&base);
-
-    // Main drivers: each dispersion alone, the rest off; plus no dispersions at all
-    let drivers_runs = spec.runs.min(300);
-    let clean = campaign(spec, &spec.vehicle, &[], spec.rotor_scale, drivers_runs, threads, progress)?;
-    let clean_s = success_rate(&clean);
-    let mut drivers = vec![];
-    for (k, v) in &spec.dispersions {
-        if *v == 0.0 { continue; }
-        let only = [(k.clone(), *v)];
-        let rs = campaign(spec, &spec.vehicle, &only, spec.rotor_scale, drivers_runs, threads, progress)?;
-        let s = success_rate(&rs);
-        drivers.push((k.clone(), *v, s, s - clean_s));
-    }
-    drivers.sort_by(|a, b| a.3.total_cmp(&b.3));
-
-    // Value of technologies: same conditions and seeds, only one thing changed
-    let mut techs = vec![];
-    for t in &spec.technologies {
-        let mut veh = spec.vehicle.clone();
-        for (k, v) in &t.set { veh.retain(|(n, _)| n != k); veh.push((k.clone(), *v)); }
-        if t.dry_mass_delta != 0.0 {
-            let dm = t.set.iter().find(|(n, _)| n == "dry_mass").map(|x| x.1).unwrap_or(nominal(EnvConfig::new(&spec.task, "earth")?.task, "dry_mass", &veh)) + t.dry_mass_delta;
-            veh.retain(|(n, _)| n != "dry_mass");
-            veh.push(("dry_mass".into(), dm));
-        }
-        let mut d = spec.dispersions.clone();
-        for (k, v) in &t.set_dispersion { d.retain(|(n, _)| n != k); d.push((k.clone(), *v)); }
-        let rotor = t.set_top.iter().find(|(n, _)| n == "rotor_scale").map(|x| x.1).unwrap_or(spec.rotor_scale);
-        let rs = campaign(spec, &veh, &d, rotor, spec.runs, threads, progress)?;
-        let s = success_rate(&rs);
-        // paired comparison: under the same conditions, what was saved and what was lost
-        let saved = rs.iter().zip(&base).filter(|(a, b)| a.success > 0.5 && b.success < 0.5).count();
-        let lost = rs.iter().zip(&base).filter(|(a, b)| a.success < 0.5 && b.success > 0.5).count();
-        let se = ((saved + lost) as f64).sqrt() / spec.runs as f64;
-        techs.push((t.name.clone(), s, s - base_s, saved, lost, 1.96 * se, t.dry_mass_delta, margin_score(spec, &rs), scorecard(spec, &rs)));
-    }
-    techs.sort_by(|a, b| b.2.total_cmp(&a.2));
-
-    let world = World::build(&spec.world)?;
-    let (k, _) = (base.iter().map(|r| r.success).sum::<f64>(), 0);
-    let (sl, sh) = wilson(k, spec.runs as f64);
-    Ok(J::obj()
-        .set("name", spec.name.clone()).set("task", spec.task.clone()).set("world", world.name()).set("runs", spec.runs).set("seed", spec.seed)
+    // Main drivers: each dispersion alone, the rest off; plus no dispersions at all.
+    // Value of technologies: same conditions and seeds, only one thing changed.
+    let plan = analysis_plan(spec)?;
+    let mut flown = vec![];
+    for v in plan.iter().skip(1) { flown.push((v, campaign(spec, &v.vehicle, &v.dispersions, v.rotor, v.runs, threads, progress)?)); }
+    let of = |kind: &str| flown.iter().filter(|(v, _)| v.kind == kind).map(|(v, rs)| (*v, rs.as_slice())).collect::<Vec<_>>();
+    let head = J::obj().set("name", spec.name.clone()).set("task", spec.task.clone()).set("world", World::build(&spec.world)?.name()).set("runs", spec.runs).set("seed", spec.seed)
         .set("terrain_sha256", spec.terrain_sha.clone().map(J::from).unwrap_or(J::Null))
-        .set("generator", format!("worldsim {}", env!("CARGO_PKG_VERSION")))
-        .set("success", base_s).set("success_ci", vec![sl, sh]).set("requirements_met", margin_score(spec, &base)).set("requirements_total", spec.requirements.len())
-        .set("scorecard", scorecard(spec, &base))
-        .set("failure_modes", failure_modes(&base))
-        .set("baseline_no_dispersions", clean_s).set("driver_runs", drivers_runs)
-        .set("drivers", J::Arr(drivers.into_iter().map(|(k, v, s, ds)| J::obj().set("name", k).set("sigma", v).set("success", s).set("delta", ds)).collect()))
-        .set("technologies", J::Arr(techs.into_iter().map(|(n, s, ds, sv, ls, ci, dm, met, sc)| J::obj().set("name", n).set("success", s).set("delta", ds)
-            .set("delta_ci", ci).set("saved", sv).set("lost", ls).set("dry_mass_delta", dm).set("requirements_met", met).set("scorecard", sc)
-            .set("delta_per_kg", if dm > 0.0 { ds / dm } else { f64::NAN })).collect()))
-        .set("histograms", J::obj()
-            .set("touch_speed", base.iter().filter(|r| r.touch_speed > 0.0).map(|r| r.touch_speed).collect::<Vec<_>>())
-            .set("touch_offset", base.iter().filter(|r| r.touch_offset > 0.0).map(|r| r.touch_offset).collect::<Vec<_>>())
-            .set("fuel_used", base.iter().map(|r| r.fuel_used).collect::<Vec<_>>()))
-        .set("seconds", t0.elapsed().as_secs_f64())
-        .set("limits", "Simplified physics for early design decisions: does not replace high-fidelity tools, testing and qualification.")
-    )
+        .set("generator", format!("worldsim {}", env!("CARGO_PKG_VERSION")));
+    Ok(analysis(head, spec, &base, of("clean")[0].1, &of("driver"), &of("technology")).set("seconds", t0.elapsed().as_secs_f64()))
 }
 
 fn pct(x: f64) -> String { if x.is_finite() { format!("{:.1}%", 100.0 * x) } else { "—".into() } }
@@ -481,6 +534,9 @@ pub fn markdown(r: &J) -> String {
     let st = |j: &J, k: &str| j.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
     let n = |j: &J, k: &str| j.get(k).and_then(|x| x.as_f64()).unwrap_or(f64::NAN);
     let mut s = format!("# {}\n\n{} · {} · runs: {} · seed {}\n\n", st(r, "name"), st(r, "task"), st(r, "world"), n(r, "runs"), n(r, "seed"));
+    if r.get("controller").is_some() {
+        s += &format!("Controller: {}. Built-in autopilot under the same conditions: {} ({:+.1} pp. for the controller).\n\n", st(r, "controller"), pct(n(r, "autopilot_success")), 100.0 * n(r, "delta_vs_autopilot"));
+    }
     let ci = r.get("success_ci").and_then(|x| x.as_arr()).unwrap_or(&[]);
     s += &format!("**Successful flights: {}** (95%: {}–{}). Requirements met: {} of {}.\n\n## Requirements\n\n| ID | Requirement | Target | Result | 95% | Verdict |\n|---|---|---|---|---|---|\n",
         pct(n(r, "success")), pct(ci.first().and_then(|x| x.as_f64()).unwrap_or(f64::NAN)), pct(ci.get(1).and_then(|x| x.as_f64()).unwrap_or(f64::NAN)), n(r, "requirements_met"), n(r, "requirements_total"));

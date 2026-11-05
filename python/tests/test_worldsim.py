@@ -335,6 +335,47 @@ class ProductGaps(Base):
     SPEC = {"name": "test", "task": "lander", "world": "moon", "runs": 24, "seed": 2, "vehicle": {"t_max": 8000, "fuel": 120, "start_offset": 5, "start_vh": 1},
             "dispersions": {"t_max": 0.03}, "requirements": [{"metric": "success", "op": ">=", "value": 0.5}]}
 
+    def test_full_analysis_for_own_controller(self):
+        spec = dict(self.SPEC, technologies=[{"name": "Weak", "set": {"t_max": 2500}}, {"name": "Strong", "set": {"t_max": 12000}, "dry_mass_delta": 5}])
+        r = worldsim.MissionRunner(spec)
+        names = r.spec["obs_names"]
+        vz, gz = names.index("vel_z"), names.index("gps_dz")
+
+        def pd(obs):
+            a = np.zeros((len(obs), r.act_dim), np.float32)
+            target = -np.minimum(1.0 + 0.12 * obs[:, gz], 40.0)
+            a[:, 0] = np.clip(0.2 + 0.5 * (target - obs[:, vz]), 0, 1)
+            return a
+
+        seen = []
+        rep = r.analyze(pd, "my-pd", on_progress=lambda done, total, s: seen.append((done, total, s["kind"])))
+        self.assertEqual(seen[0], (1, 5, "base"))
+        self.assertEqual([x[2] for x in seen], ["base", "clean", "driver", "technology", "technology"])
+        self.assertEqual({d["name"] for d in rep["drivers"]}, {"t_max"})
+        self.assertEqual({t["name"] for t in rep["technologies"]}, {"Weak", "Strong"})
+        self.assertEqual(rep["controller"], "my-pd")
+        self.assertIn("Controller: my-pd", rep["markdown"])
+        by = {t["name"]: t for t in rep["technologies"]}
+        self.assertLess(by["Weak"]["success"], rep["success"] + 1e-9)
+        # the same seeds give the same answer
+        again = r.analyze(pd, "my-pd")
+        self.assertEqual(again["success"], rep["success"])
+        self.assertEqual(again["technologies"][0]["success"], rep["technologies"][0]["success"])
+        # a plain evaluate after the analysis still flies the mission itself
+        self.assertEqual(r.evaluate(pd, "my-pd")["success"], rep["success"])
+        off = r.analyze(lambda obs: np.zeros((len(obs), r.act_dim), np.float32), "off")
+        self.assertEqual(off["success"], 0.0)
+        self.assertEqual(off["baseline_no_dispersions"], 0.0)
+
+    def test_bus_power_drains_the_lander_battery(self):
+        env = worldsim.VectorEnv("lander", "moon", n=2, params={"bus_power": 1000, "lander_battery_kwh": 0.01, "start_alt_min": 3000, "start_alt_max": 3000})
+        env.reset()
+        charge = env.spec["state_names"].index("battery_j")
+        self.assertEqual(env.state()[0, charge], 36000.0)
+        for _ in range(100):
+            env.step(env.autopilot())
+        self.assertAlmostEqual(env.state()[0, charge], 36000.0 - 1000.0 * 100 * env.spec["control_dt"], delta=1.0)
+
     def test_own_controller_in_mission(self):
         r = worldsim.MissionRunner(self.SPEC)
         names = r.spec["obs_names"]

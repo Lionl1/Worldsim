@@ -8,7 +8,7 @@ Large projects usually do **one** of three things: show things beautifully (Spac
 compute **one** class of problems accurately (REBOUND for orbits, GADGET/SWIFT for cosmology, ExoPlaSim for climate),
 or provide a game-like sandbox (Universe Sandbox). worldsim bridges the gap between them: **one open
 program** in which scales from a stone throw to the cosmic web are computed from physical
-laws, each law is **checked automatically** (129 tests against analytic solutions and observations),
+laws, each law is **checked automatically** (133 tests against analytic solutions and observations),
 and any simulation turns into a **dataset** for machine learning.
 
 ## Table
@@ -18,7 +18,7 @@ and any simulation turns into a **dataset** for machine learning.
 | License | **MIT, open source** | closed, $29.99 | closed, paid | MIT | GPL-3 | GPL-3 / LGPL-3 | GPL-3 |
 | What it does | simulation + visuals + data | sandbox simulator | visualization, procedural universe | scientific data visualization | N bodies | cosmological simulations | exoplanet climate |
 | Scales | throw → climate → systems → galaxies → cosmology | planets → galaxies | planets → universe | spacecraft → universe | planetary systems | clusters → cosmology | planetary atmosphere |
-| Automatic law checks | **129 tests in one command** | no | no | n/a | code tests | code tests | no |
+| Automatic law checks | **133 tests in one command** | no | no | n/a | code tests | code tests | no |
 | Dataset generation | **built in, with a validity flag** | no | no | no | through Python | manual | manual |
 | Preset mixing (physics ≠ atmosphere ≠ crust) | **yes, recomputed from the laws** | partial (materials) | no | no | no | no | parameters |
 | Real catalogs | HYG (11 thousand stars), 5.3 thousand exoplanets | own | HIPPARCOS, NGC, NASA Exoplanet Archive | Gaia and others | no | no | no |
@@ -32,7 +32,7 @@ and any simulation turns into a **dataset** for machine learning.
 ## Where worldsim is better
 
 1. **Verifiability.** None of the visual simulators listed shows the user
-   whether the laws hold. In worldsim the “Laws” tab recomputes 129 tests in ~2 seconds.
+   whether the laws hold. In worldsim the “Laws” tab recomputes 133 tests in ~2 seconds.
 2. **End-to-end chain.** A real exoplanet from a catalog → a star with color from the Planck spectrum →
    a world with an atmosphere from hydrostatics → seasonal climate → a throw with Coriolis. In other packages this means
    several programs and manual transfer of parameters.
