@@ -2,7 +2,7 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/). The API may change before 1.0.
 
-## 0.3.1 — unreleased
+## 0.3.1 — 2026-11-06
 
 ### Added
 - Release archives include `tools/`, so catalogs and photo maps can be downloaded after unpacking.
