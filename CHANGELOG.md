@@ -2,6 +2,18 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/). The API may change before 1.0.
 
+## 0.3.3 — unreleased
+
+Reports, law checks and collected data are bit-for-bit the same as in 0.3.2, except P3M.
+
+### Changed
+- Mission Lab is about five times faster: autopilot flights skip the radar and lidar rays they never read, rays skip height lookups high above the ground, and flight series of one analysis share terrain maps.
+- Transition collection for the lander is about 1.8 times faster, SPH about 3 times, the winds experiment about 10 times, cosmology about 2.3 times, P3M about 3 times.
+- The winds experiment solves only the zonal mode, because its flow does not depend on longitude. Earth and Mars gave the same numbers as the full solve to the printed digits.
+
+### Fixed
+- P3M missed pairs in neighboring cells on small grids.
+
 ## 0.3.2 — 2026-11-07
 
 ### Fixed

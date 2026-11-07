@@ -75,9 +75,10 @@ Measured on a MacBook (8 cores), one seed. The numbers show the order of magnitu
 
 | What | Result |
 |---|---|
-| Transition collection, `collect`, 8 threads | lander 271 thousand steps/s (218–252 thousand with branches), rover 295 thousand, drone 848 thousand |
-| Vector environment from Python, 64 environments | 78 thousand steps/s (1 thread), 183 thousand (8 threads) |
-| HTTP API, Python client | about 17 thousand steps/s per connection |
+| Transition collection, `collect`, 8 threads | lander 492 thousand steps/s (371–405 thousand with branches), rover 326 thousand, drone 836 thousand |
+| Vector environment from Python, 64 environments | 100 thousand steps/s (1 thread), 230 thousand (8 threads) |
+| HTTP API, Python client | about 18 thousand steps/s per connection |
+| Mission Lab, full analysis with the autopilot, 8 threads | `lunar_lander` 3.9 s, `lunar_rover` 3.3 s, `mars_helicopter` 0.8 s |
 | Baseline MLP, Moon landing | trust horizon 0.46 s, 94% of crashes missed, 14% false alarms |
 | L6 with the baseline MLP, `lunar_lander`, 32 flights | 0% success, autopilot 87.5% |
 | L6 with an exact rigid-body model, short test mission, 6 flights | at least 80% success, a model that predicts nothing 0% (from the test suite) |

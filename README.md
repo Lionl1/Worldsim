@@ -55,7 +55,7 @@ In a mission description, `vehicle` holds registry parameters (see `worldsim par
 ## Law checks
 
 ```bash
-cargo run --release -- validate     # table, about 6 s
+cargo run --release -- validate     # table, about 5 s
 cargo test --release                # same, as tests
 ```
 

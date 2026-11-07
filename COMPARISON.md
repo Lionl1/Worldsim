@@ -34,7 +34,7 @@ and any simulation turns into a **dataset** for machine learning.
 ## Where worldsim is better
 
 1. **Verifiability.** None of the visual simulators listed shows the user
-   whether the laws hold. In worldsim the “Laws” tab recomputes 158 tests in about 6 seconds.
+   whether the laws hold. In worldsim the “Laws” tab recomputes 158 tests in about 5 seconds.
 2. **End-to-end chain.** A real exoplanet from a catalog → a star with color from the Planck spectrum →
    a world with an atmosphere from hydrostatics → seasonal climate → a throw with Coriolis. In other packages this means
    several programs and manual transfer of parameters.
@@ -54,7 +54,7 @@ This is a different group of tools, so it is kept out of the table above. Detail
 ## Where worldsim falls behind
 
 - **Scale and maturity of “narrow” codes.** worldsim now has IAS15 and a Wisdom–Holman map, checked on eccentric orbits and against each other, but no close-encounter handling or high-order correctors, so REBOUND stays the choice for long or chaotic orbital work.
-  GADGET-4 and SWIFT compute billions of particles with hydrodynamics on clusters. worldsim runs up to 128³ (2.1 million) mesh particles at about 0.5 s per step on 8 cores, P3M at 64³ at about 6 s per step, and its SPH gas handles thousands of particles and is not coupled to cosmology.
+  GADGET-4 and SWIFT compute billions of particles with hydrodynamics on clusters. worldsim runs up to 128³ (2.1 million) mesh particles at about 0.25 s per step on 8 cores, P3M at 64³ at about 2 s per step, and its SPH gas handles thousands of particles and is not coupled to cosmology.
 - **Climate.** ExoPlaSim is a full general circulation model. worldsim has a latitudinal energy balance model plus one-layer winds on a sphere and a rule-of-thumb cloud cover. The winds pass exact tests of the solver, but the jets of Earth come out too weak and too far from the equator, and clouds do not feed back on temperature. Venus and giant planets are refused, because it cannot represent them. Do not use it for climate prediction.
 - **Graphics.** SpaceEngine and OpenSpace are visually richer: photorealistic surfaces, flight
   to any star. worldsim draws surfaces procedurally, with color computed from crust chemistry and climate.
