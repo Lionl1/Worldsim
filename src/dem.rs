@@ -34,7 +34,7 @@ pub fn terrain_from_grid(mut h: Vec<f64>, n: usize, size: f64, friction: f64) ->
         }
         for x in &mut h { if !x.is_finite() { *x = good; } }
     }
-    Ok(Terrain { n, size, h, friction })
+    Ok(Terrain::new(n, size, h, friction))
 }
 
 /// Rectangular grid → central square with an odd side (the center falls on a node).

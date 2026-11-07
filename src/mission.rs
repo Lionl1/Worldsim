@@ -39,6 +39,7 @@ pub struct MissionSpec {
     pub vehicle: Vec<(String, f64)>, pub dispersions: Vec<(String, f64)>, pub requirements: Vec<Requirement>, pub technologies: Vec<Technology>,
     pub terrain: Option<std::sync::Arc<crate::env::Terrain>>,
     pub terrain_sha: Option<String>, // terrain file fingerprint: the mission description stores only the path
+    pub terrain_cache: crate::env::TerrainCache,
 }
 
 fn pairs(j: Option<&J>, ctx: &str) -> Result<Vec<(String, f64)>, String> {
@@ -155,7 +156,7 @@ impl MissionSpec {
             technologies.push(tech);
         }
         Ok(MissionSpec { name: st("name", "mission"), task, world, runs: runs as usize, seed: j.get("seed").and_then(|x| x.as_f64()).unwrap_or(1.0) as u64,
-            rotor_scale, vehicle, dispersions, requirements, technologies, terrain: parse_inline_terrain(&j)?, terrain_sha: None })
+            rotor_scale, vehicle, dispersions, requirements, technologies, terrain: parse_inline_terrain(&j)?, terrain_sha: None, terrain_cache: Default::default() })
     }
 }
 
@@ -234,6 +235,7 @@ fn flight_env(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)]
     }
     for (k, v) in &veh { cfg.set(k, *v)?; }
     cfg.custom_terrain = spec.terrain.clone();
+    cfg.terrain_cache = Some(spec.terrain_cache.clone());
     let mut env = Env::new(cfg)?;
     env.reset(seed);
     Ok(env)
@@ -248,6 +250,7 @@ fn result_of(env: &Env) -> RunResult {
 /// One flight with the built-in autopilot.
 fn fly(spec: &MissionSpec, vehicle: &[(String, f64)], d: &[(String, f64)], rotor_scale: f64, seed: u64) -> Result<RunResult, String> {
     let mut env = flight_env(spec, vehicle, d, rotor_scale, seed)?;
+    env.cfg.skip_rays = true;
     // navigation estimate: noisy GPS and velocity smoothed by a filter; ideal sensors give zero error
     let (mut pe, mut ve) = (Vec3::ZERO, Vec3::ZERO);
     let flying = env.cfg.task != Task::Rover;

@@ -357,3 +357,67 @@ fn p3m_keeps_linear_growth() {
     let got = growth(true);
     assert!((got / expected - 1.0).abs() < 0.2, "P(k) grew ×{got:.2}, linear theory ×{expected:.2}");
 }
+
+/// The fast ray test must give exactly the distance of a plain march over the same steps.
+#[test]
+fn fast_raycast_matches_a_plain_march() {
+    use worldsim::env::Terrain;
+    use worldsim::rng::Rng;
+    use worldsim::vec3::Vec3;
+    use worldsim::world::World;
+    let plain = |t: &Terrain, o: Vec3, d: Vec3, max: f64| -> f64 {
+        let d = d.unit();
+        let (mut s, mut prev) = (0.0, 0.0);
+        let step = (t.size / (t.n - 1) as f64 * 0.5).max(0.25);
+        while s < max {
+            let p = o + d * s;
+            if p.z <= t.height(p.x, p.y) {
+                let (mut lo, mut hi) = (prev, s);
+                for _ in 0..30 {
+                    let m = 0.5 * (lo + hi);
+                    let q = o + d * m;
+                    if q.z <= t.height(q.x, q.y) { hi = m } else { lo = m }
+                }
+                return hi;
+            }
+            prev = s;
+            s += step;
+        }
+        max
+    };
+    let moon = World::preset("moon").unwrap();
+    let flat = Terrain::new(33, 800.0, vec![5.0; 33 * 33], 0.6);
+    let maps = [Terrain::generate(&moon, 7, 1200.0, 161, 25.0), Terrain::plane(0.3, 0.6), flat];
+    let mut r = Rng::new(11);
+    for t in &maps {
+        for _ in 0..3000 {
+            // from outside the map as well: the height is clamped at the edge there
+            let o = Vec3::new(r.uniform(-900.0, 900.0), r.uniform(-900.0, 900.0), r.uniform(-50.0, 900.0));
+            let d = Vec3::new(r.uniform(-1.0, 1.0), r.uniform(-1.0, 1.0), r.uniform(-1.0, 0.2));
+            let (a, b) = (t.raycast(o, d, 1000.0), plain(t, o, d, 1000.0));
+            assert_eq!(a.to_bits(), b.to_bits(), "{o:?} {d:?}: {a} against {b}");
+        }
+    }
+}
+
+/// Skipping the ray sensors must not change the flight: the noise stream stays the same and only those channels differ.
+#[test]
+fn skipping_rays_keeps_the_flight() {
+    for task in ["lander", "drone", "rover"] {
+        let fly = |skip: bool| {
+            let mut c = EnvConfig::new(task, "moon").unwrap();
+            c.skip_rays = skip;
+            let mut e = Env::new(c).unwrap();
+            e.reset(5);
+            let mut first = vec![];
+            for _ in 0..400 {
+                let a = e.autopilot();
+                let (o, _, t, tr) = e.step(&a);
+                first = o[..6].to_vec();
+                if t || tr { break; }
+            }
+            (e.state(), first, e.steps)
+        };
+        assert_eq!(fly(true), fly(false), "{task}");
+    }
+}

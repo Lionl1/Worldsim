@@ -30,6 +30,11 @@ pub struct Terrain {
     pub n: usize,     // nodes per side
     pub size: f64,    // m
     pub h: Vec<f64>,  // n×n, row = y
+    cell: f64,
+    half: f64,
+    last: f64,        // the largest grid coordinate
+    blocks: Vec<f64>, // highest point of each block of cells, so a ray high above the ground does not read heights
+    top: f64,
     pub friction: f64,
 }
 
@@ -53,6 +58,14 @@ fn value_noise(x: f64, y: f64, seed: u64) -> f64 {
     let d = hash2(xi + 1, yi + 1, seed);
     a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy
 }
+
+/// Cells on a side of a block for the fast ray test.
+const RAY_BLOCK: usize = 8;
+
+/// Terrain maps of one analysis, by everything that shapes them: the same seed comes back in every flight series.
+pub type TerrainCache = Arc<std::sync::Mutex<std::collections::HashMap<(String, bool, u64, [u64; 5]), Arc<Terrain>>>>;
+/// About 200 MB of maps at most; further flights generate their own.
+const MAX_CACHED_TERRAINS: usize = 1024;
 
 impl Terrain {
     /// Procedural terrain for the world surface type: craters on airless bodies, hills on Earth.
@@ -106,7 +119,7 @@ impl Terrain {
         }
         // landing pad / start: a flat circle in the center
         if pad_radius > 0.0 {
-            let mut t = Terrain { n, size, h, friction };
+            let mut t = Terrain { n, size, h, friction, cell, half: size / 2.0, last: (n - 1) as f64 - 1e-9, blocks: vec![], top: f64::INFINITY };
             let h0 = t.height(0.0, 0.0);
             for j in 0..n {
                 for i in 0..n {
@@ -117,9 +130,25 @@ impl Terrain {
                     t.h[j * n + i] = h0 * (1.0 - w8) + t.h[j * n + i] * w8;
                 }
             }
-            return t;
+            return Terrain::new(n, size, t.h, friction);
         }
-        Terrain { n, size, h, friction }
+        Terrain::new(n, size, h, friction)
+    }
+
+    /// Terrain from a square height grid.
+    pub fn new(n: usize, size: f64, h: Vec<f64>, friction: f64) -> Terrain {
+        let side = (n - 1).div_ceil(RAY_BLOCK);
+        let mut blocks = vec![f64::NEG_INFINITY; side * side];
+        for j in 0..n { for i in 0..n {
+            // a node belongs to every block it touches, because the surface between nodes is interpolated
+            let (b0, b1) = ((i.saturating_sub(1) / RAY_BLOCK).min(side - 1), (i / RAY_BLOCK).min(side - 1));
+            let (c0, c1) = ((j.saturating_sub(1) / RAY_BLOCK).min(side - 1), (j / RAY_BLOCK).min(side - 1));
+            for c in c0..=c1 { for b in b0..=b1 { let x = &mut blocks[c * side + b]; *x = x.max(h[j * n + i]); } }
+        }}
+        // rounding of the interpolation may slightly exceed the corners, so the bound carries a margin
+        for x in &mut blocks { *x += 1e-9 * (1.0 + x.abs()); }
+        let top = blocks.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        Terrain { n, size, h, friction, cell: size / (n - 1) as f64, half: size / 2.0, last: (n - 1) as f64 - 1e-9, blocks, top }
     }
 
     /// Inclined plane (for checks): height = grade · x.
@@ -128,13 +157,13 @@ impl Terrain {
         let size = 2000.0;
         let cell = size / (n - 1) as f64;
         let h = (0..n * n).map(|k| grade * ((k % n) as f64 * cell - size / 2.0)).collect();
-        Terrain { n, size, h, friction }
+        Terrain::new(n, size, h, friction)
     }
 
+    #[inline]
     pub fn height(&self, x: f64, y: f64) -> f64 {
-        let cell = self.size / (self.n - 1) as f64;
-        let fx = ((x + self.size / 2.0) / cell).clamp(0.0, (self.n - 1) as f64 - 1e-9);
-        let fy = ((y + self.size / 2.0) / cell).clamp(0.0, (self.n - 1) as f64 - 1e-9);
+        let fx = ((x + self.half) / self.cell).clamp(0.0, self.last);
+        let fy = ((y + self.half) / self.cell).clamp(0.0, self.last);
         let (i, j) = (fx.floor() as usize, fy.floor() as usize);
         let (u, v) = (fx - i as f64, fy - j as f64);
         let at = |i: usize, j: usize| self.h[j * self.n + i];
@@ -152,9 +181,16 @@ impl Terrain {
         let mut t = 0.0;
         let mut prev = 0.0;
         let step = (self.size / (self.n - 1) as f64 * 0.5).max(0.25);
+        let side = (self.n - 1).div_ceil(RAY_BLOCK);
         while t < max_range {
             let p = o + d * t;
-            if p.z <= self.height(p.x, p.y) {
+            // the steps themselves stay the same: only reading heights is skipped where the point is surely above the ground
+            let above = p.z > self.top || {
+                let b = (((p.x + self.half) / self.cell).clamp(0.0, self.last) as usize / RAY_BLOCK).min(side - 1);
+                let c = (((p.y + self.half) / self.cell).clamp(0.0, self.last) as usize / RAY_BLOCK).min(side - 1);
+                p.z > self.blocks[c * side + b]
+            };
+            if !above && p.z <= self.height(p.x, p.y) {
                 let (mut lo, mut hi) = (prev, t);
                 for _ in 0..30 {
                     let m = 0.5 * (lo + hi);
@@ -235,6 +271,8 @@ pub struct EnvConfig {
     pub fault_prob: f64,   // probability that one actuator is weakened in an episode (hidden parameter)
     pub vehicle: Vec<(String, f64)>, // registry parameters, see PARAMS
     pub custom_terrain: Option<Arc<Terrain>>, // terrain of a real site instead of the procedural one
+    pub terrain_cache: Option<TerrainCache>,  // shared by the flights of one analysis
+    pub skip_rays: bool, // the built-in autopilot does not read the radar and lidar channels, so they stay at their range limit
 }
 
 const L: u8 = 1;
@@ -416,7 +454,7 @@ impl EnvConfig {
         };
         Ok(EnvConfig { task, world: WorldSpec::preset(physics), randomize: false, noise: 1.0, frame_skip: 4,
             max_steps: match task { Task::Lander => 5000, Task::Drone => 2500, Task::Rover => 4000 }, rotor_scale: 1.0,
-            worlds: vec![], gust: 0.0, actuator_lag: 0.0, fault_prob: 0.0, vehicle: vec![], custom_terrain: None })
+            worlds: vec![], gust: 0.0, actuator_lag: 0.0, fault_prob: 0.0, vehicle: vec![], custom_terrain: None, terrain_cache: None, skip_rays: false })
     }
 
     /// Set a registry parameter, checking its range and applicability to the task.
@@ -692,7 +730,22 @@ impl Env {
         let size = match self.cfg.task { Task::Rover => 600.0, _ => 1200.0 };
         self.terrain = match &self.cfg.custom_terrain {
             Some(t) => t.clone(),
-            None => Arc::new(Terrain::generate_tuned(&self.world, seed, size, 161, pad, self.tune.terrain, self.tune.craters, self.tune.friction)),
+            None => {
+                let make = |e: &Env| Arc::new(Terrain::generate_tuned(&e.world, seed, size, 161, pad, e.tune.terrain, e.tune.craters, e.tune.friction));
+                match &self.cfg.terrain_cache {
+                    None => make(self),
+                    Some(cache) => {
+                        let key = (self.world.surface.name.clone(), self.world.atmosphere.is_none(), seed, [size.to_bits(), pad.to_bits(), self.tune.terrain.to_bits(), self.tune.craters.to_bits(), self.tune.friction.to_bits()]);
+                        let hit = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key).cloned();
+                        hit.unwrap_or_else(|| {
+                            let t = make(self);
+                            let mut c = cache.lock().unwrap_or_else(|e| e.into_inner());
+                            if c.len() < MAX_CACHED_TERRAINS { c.insert(key, t.clone()); }
+                            t
+                        })
+                    }
+                }
+            }
         };
         let r = |rng: &mut Rng, s: f64| if s > 0.0 { rng.uniform(1.0 - s, 1.0 + s) } else { 1.0 };
         let rs = if self.cfg.randomize { 1.0 } else { 0.0 };
@@ -783,7 +836,7 @@ impl Env {
             Task::Lander | Task::Drone => {
                 let up_b = b.q.inv_rotate(Vec3::new(0.0, 0.0, 1.0));
                 let down_w = b.q.rotate(Vec3::new(0.0, 0.0, -1.0));
-                let radar = self.terrain.raycast(b.pos, down_w, 2000.0);
+                let radar = if self.cfg.skip_rays { 2000.0 } else { self.terrain.raycast(b.pos, down_w, 2000.0) };
                 self.last_lidar.push((b.pos, b.pos + down_w * radar));
                 let acc = self.specific_force();
                 let rel = if self.cfg.task == Task::Lander { b.pos - self.goal } else { self.goal - b.pos };
@@ -804,7 +857,7 @@ impl Env {
                         let a = 2.0 * PI * k as f64 / 8.0;
                         let dir_b = Vec3::new(0.5 * a.cos(), 0.5 * a.sin(), -0.866);
                         let d = b.q.rotate(dir_b);
-                        let r = self.terrain.raycast(b.pos, d, 1000.0);
+                        let r = if self.cfg.skip_rays { 1000.0 } else { self.terrain.raycast(b.pos, d, 1000.0) };
                         self.last_lidar.push((b.pos, b.pos + d.unit() * r));
                         o.push(r + self.n(0.2 * t.n_rng));
                         hits.push(if r < 1000.0 { 1.0 } else { 0.0 });
@@ -833,7 +886,7 @@ impl Env {
                 for k in 0..16 {
                     let a = self.heading + 2.0 * PI * k as f64 / 16.0;
                     let d = Vec3::new(a.cos(), a.sin(), -0.06);
-                    let r = self.terrain.raycast(eye, d, 40.0);
+                    let r = if self.cfg.skip_rays { 40.0 } else { self.terrain.raycast(eye, d, 40.0) };
                     self.last_lidar.push((eye, eye + d.unit() * r));
                     o.push(r + self.n(0.05 * t.n_rng));
                     hits.push(if r < 40.0 { 1.0 } else { 0.0 });
