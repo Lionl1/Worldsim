@@ -153,24 +153,69 @@ fn fft1(buf: &mut [Cx], inverse: bool) {
     if inverse { for x in buf.iter_mut() { x.re /= n as f64; x.im /= n as f64; } }
 }
 
-/// 3D FFT on an n³ grid (n is a power of two), index (i·n + j)·n + k.
-pub fn fft3(data: &mut [Cx], n: usize, inverse: bool) {
-    let mut line = vec![Cx::default(); n];
-    for axis in 0..3 {
-        for a in 0..n {
-            for b in 0..n {
-                let idx = |c: usize| match axis { 0 => (c * n + a) * n + b, 1 => (a * n + c) * n + b, _ => (a * n + b) * n + c };
-                for c in 0..n { line[c] = data[idx(c)]; }
-                fft1(&mut line, inverse);
-                for c in 0..n { data[idx(c)] = line[c]; }
-            }
+/// Runs `f(chunk number, chunk)` in threads. Chunks are independent, so the result does not depend on their number.
+fn par_chunks<T: Send>(data: &mut [T], size: usize, f: impl Fn(usize, &mut [T]) + Sync) {
+    let threads = std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1);
+    // small grids are not worth starting threads for
+    if threads == 1 || data.len() < 1 << 15 { for (i, c) in data.chunks_mut(size).enumerate() { f(i, c); } return; }
+    let count = data.len().div_ceil(size);
+    let per = count.div_ceil(threads).max(1);
+    let f = &f;
+    std::thread::scope(|sc| {
+        for (t, block) in data.chunks_mut(per * size).enumerate() {
+            sc.spawn(move || { for (i, c) in block.chunks_mut(size).enumerate() { f(t * per + i, c); } });
         }
-    }
+    });
+}
+
+/// 3D FFT on an n³ grid (n is a power of two), index (i·n + j)·n + k. Lines are independent, so threads do not change the bits.
+pub fn fft3(data: &mut [Cx], n: usize, inverse: bool) {
+    // first axis: its lines cross the slabs, so they are computed into a copy
+    let mut copy = vec![Cx::default(); data.len()];
+    let source = &*data;
+    par_chunks(&mut copy, n * n, |a, slab| {
+        let mut line = vec![Cx::default(); n];
+        for b in 0..n {
+            for c in 0..n { line[c] = source[(c * n + a) * n + b]; }
+            fft1(&mut line, inverse);
+            slab[b * n..(b + 1) * n].copy_from_slice(&line);
+        }
+    });
+    for a in 0..n { for b in 0..n { for c in 0..n { data[(c * n + a) * n + b] = copy[(a * n + b) * n + c]; } } }
+    drop(copy);
+    // the other two axes stay within a slab
+    par_chunks(data, n * n, |_, slab| {
+        let mut line = vec![Cx::default(); n];
+        for b in 0..n {
+            for c in 0..n { line[c] = slab[c * n + b]; }
+            fft1(&mut line, inverse);
+            for c in 0..n { slab[c * n + b] = line[c]; }
+        }
+        for row in slab.chunks_mut(n) { fft1(row, inverse); }
+    });
 }
 
 fn kfreq(i: usize, n: usize, box_size: f64) -> f64 {
     let ii = if i <= n / 2 { i as f64 } else { i as f64 - n as f64 };
     2.0 * PI * ii / box_size
+}
+
+/// Cloud-in-cell interpolation of the mesh acceleration at a particle.
+#[inline]
+fn interpolate(p: [f64; 3], cell: f64, n: usize, acc: &[Vec<f64>; 3]) -> [f64; 3] {
+    let (x, y, z) = (p[0] / cell, p[1] / cell, p[2] / cell);
+    let (i, j, k) = (x.floor(), y.floor(), z.floor());
+    let (dx, dy, dz) = (x - i, y - j, z - k);
+    let (i, j, k) = (i as isize, j as isize, k as isize);
+    let mut g = [0.0; 3];
+    for (oi, wx) in [(0, 1.0 - dx), (1, dx)] { for (oj, wy) in [(0, 1.0 - dy), (1, dy)] { for (ok, wz) in [(0, 1.0 - dz), (1, dz)] {
+        let ii = (i + oi).rem_euclid(n as isize) as usize;
+        let jj = (j + oj).rem_euclid(n as isize) as usize;
+        let kk = (k + ok).rem_euclid(n as isize) as usize;
+        let idx = (ii * n + jj) * n + kk;
+        for c in 0..3 { g[c] += wx * wy * wz * acc[c][idx]; }
+    }}}
+    g
 }
 
 // ------------------------------------------------------------------ PM
@@ -264,31 +309,42 @@ impl PmSim {
         fft3(&mut d, n, false);
         let pref = 1.5 * self.cosmo.omega_m / self.a;
         let cell = self.box_size / n as f64;
-        for i in 0..n { for j in 0..n { for k in 0..n {
-            let idx = (i * n + j) * n + k;
-            // discrete Laplacian (consistent with the finite-difference gradient)
-            let s = |m: usize| { let x = PI * m as f64 / n as f64; (2.0 * x.sin() / cell).powi(2) };
-            let k2 = s(i) + s(j) + s(k);
-            if k2 == 0.0 { d[idx] = Cx::default(); continue; }
-            // the force split: the mesh keeps only what the pair sum leaves out
-            // with P3M the mesh must be accurate at short range, so the assignment window is taken out as well
-            let split = if self.p3m {
-                let sinc = |m: usize| { let m = if m > n / 2 { n - m } else { m }; let x = PI * m as f64 / n as f64; if x == 0.0 { 1.0 } else { x.sin() / x } };
-                (-k2 * (P3M_RS * cell).powi(2)).exp() / (sinc(i) * sinc(j) * sinc(k)).powi(4)
-            } else { 1.0 };
-            let g = -pref * split / k2;
-            d[idx] = Cx { re: d[idx].re * g, im: d[idx].im * g };
-        }}}
+        let p3m = self.p3m;
+        par_chunks(&mut d, n * n, |i, slab| {
+            for j in 0..n { for k in 0..n {
+                let idx = j * n + k;
+                // discrete Laplacian (consistent with the finite-difference gradient)
+                let s = |m: usize| { let x = PI * m as f64 / n as f64; (2.0 * x.sin() / cell).powi(2) };
+                let k2 = s(i) + s(j) + s(k);
+                if k2 == 0.0 { slab[idx] = Cx::default(); continue; }
+                // the force split: the mesh keeps only what the pair sum leaves out
+                // with P3M the mesh must be accurate at short range, so the assignment window is taken out as well
+                let split = if p3m {
+                    let sinc = |m: usize| { let m = if m > n / 2 { n - m } else { m }; let x = PI * m as f64 / n as f64; if x == 0.0 { 1.0 } else { x.sin() / x } };
+                    (-k2 * (P3M_RS * cell).powi(2)).exp() / (sinc(i) * sinc(j) * sinc(k)).powi(4)
+                } else { 1.0 };
+                let g = -pref * split / k2;
+                slab[idx] = Cx { re: slab[idx].re * g, im: slab[idx].im * g };
+            }}
+        });
         fft3(&mut d, n, true);
         let phi: Vec<f64> = d.iter().map(|c| c.re).collect();
         let mut acc = [vec![0.0; n3], vec![0.0; n3], vec![0.0; n3]];
         let w = |i: isize| (i.rem_euclid(n as isize)) as usize;
-        for i in 0..n as isize { for j in 0..n as isize { for k in 0..n as isize {
-            let idx = (w(i) * n + w(j)) * n + w(k);
-            acc[0][idx] = -(phi[(w(i + 1) * n + w(j)) * n + w(k)] - phi[(w(i - 1) * n + w(j)) * n + w(k)]) / (2.0 * cell);
-            acc[1][idx] = -(phi[(w(i) * n + w(j + 1)) * n + w(k)] - phi[(w(i) * n + w(j - 1)) * n + w(k)]) / (2.0 * cell);
-            acc[2][idx] = -(phi[(w(i) * n + w(j)) * n + w(k + 1)] - phi[(w(i) * n + w(j)) * n + w(k - 1)]) / (2.0 * cell);
-        }}}
+        let phi = &phi;
+        for (axis, out) in acc.iter_mut().enumerate() {
+            par_chunks(out, n * n, |i, slab| {
+                let i = i as isize;
+                for j in 0..n as isize { for k in 0..n as isize {
+                    let (lo, hi) = match axis {
+                        0 => ((w(i - 1) * n + w(j)) * n + w(k), (w(i + 1) * n + w(j)) * n + w(k)),
+                        1 => ((w(i) * n + w(j - 1)) * n + w(k), (w(i) * n + w(j + 1)) * n + w(k)),
+                        _ => ((w(i) * n + w(j)) * n + w(k - 1), (w(i) * n + w(j)) * n + w(k + 1)),
+                    };
+                    slab[w(j) * n + w(k)] = -(phi[hi] - phi[lo]) / (2.0 * cell);
+                }}
+            });
+        }
         acc
     }
 
@@ -299,21 +355,14 @@ impl PmSim {
         let acc = self.forces();
         let n = self.n;
         let cell = self.box_size / n as f64;
-        let mut out: Vec<[f64; 3]> = self.pos.iter().map(|p| {
-            let (x, y, z) = (p[0] / cell, p[1] / cell, p[2] / cell);
-            let (i, j, k) = (x.floor(), y.floor(), z.floor());
-            let (dx, dy, dz) = (x - i, y - j, z - k);
-            let (i, j, k) = (i as isize, j as isize, k as isize);
-            let mut g = [0.0; 3];
-            for (oi, wx) in [(0, 1.0 - dx), (1, dx)] { for (oj, wy) in [(0, 1.0 - dy), (1, dy)] { for (ok, wz) in [(0, 1.0 - dz), (1, dz)] {
-                let ii = (i + oi).rem_euclid(n as isize) as usize;
-                let jj = (j + oj).rem_euclid(n as isize) as usize;
-                let kk = (k + ok).rem_euclid(n as isize) as usize;
-                let idx = (ii * n + jj) * n + kk;
-                for c in 0..3 { g[c] += wx * wy * wz * acc[c][idx]; }
-            }}}
-            g
-        }).collect();
+        let mut out = vec![[0.0; 3]; self.pos.len()];
+        let pos = &self.pos;
+        let acc = &acc;
+        par_chunks(&mut out, 1024, |c, block| {
+            for (b, o) in block.iter_mut().enumerate() {
+                *o = interpolate(pos[c * 1024 + b], cell, n, acc);
+            }
+        });
         if self.p3m { self.add_pairs(&mut out, 1.5 * self.cosmo.omega_m / a_force); }
         self.a = saved;
         out
@@ -324,26 +373,34 @@ impl PmSim {
         let cell = self.box_size / self.n as f64;
         let (rs, l) = (P3M_RS * cell, self.box_size);
         let cut = 5.0 * rs;
-        let side = ((l / cut).floor() as usize).max(1);
+        // cells of half the cutoff hold fewer candidates; below five of them on a side a pair could be seen twice, so all go in one
+        let wanted = (l / (cut / 2.0)).floor() as usize;
+        let (side, reach) = if wanted >= 5 { (wanted, 2isize) } else { (1, 0) };
         let size = l / side as f64;
-        let key = |p: &[f64; 3]| { let f = |x: f64| ((x / size) as usize).min(side - 1); (f(p[0]) * side + f(p[1])) * side + f(p[2]) };
+        let key = |x: f64| ((x / size) as usize).min(side - 1);
         let mut lists = vec![vec![]; side * side * side];
-        for (i, p) in self.pos.iter().enumerate() { lists[key(p)].push(i as u32); }
+        for (i, p) in self.pos.iter().enumerate() { lists[(key(p[0]) * side + key(p[1])) * side + key(p[2])].push(i as u32); }
         // the source mass is one cell volume at the mean density
         let strength = pref * cell.powi(3) / (4.0 * PI);
         let eps2 = (0.05 * cell).powi(2);
+        // what the mesh filter leaves to the pair sum, tabulated in r²: erf is the costly part of a pair
+        let steps = 1 << 14;
+        let per_r2 = steps as f64 / (cut * cut);
+        let table: Vec<f64> = (0..=steps + 1).map(|i| {
+            let r = (i as f64 / per_r2).sqrt();
+            let u = r / (2.0 * rs);
+            (1.0 - crate::tectonics::erf(u)) + r / (rs * PI.sqrt()) * (-u * u).exp()
+        }).collect();
         let threads = std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1);
         let per = out.len().div_ceil(threads).max(1);
-        let (pos, lists) = (&self.pos, &lists);
+        let (pos, lists, table) = (&self.pos, &lists, &table);
         std::thread::scope(|sc| {
             for (chunk, block) in out.chunks_mut(per).enumerate() {
                 sc.spawn(move || {
                     for (b, o) in block.iter_mut().enumerate() {
                         let i = chunk * per + b;
                         let p = pos[i];
-                        let c = |x: f64| ((x / size) as usize).min(side - 1) as isize;
-                        let (ci, cj, ck) = (c(p[0]), c(p[1]), c(p[2]));
-                        let reach = if side >= 3 { 1isize } else { 0 };
+                        let (ci, cj, ck) = (key(p[0]) as isize, key(p[1]) as isize, key(p[2]) as isize);
                         let w = |x: isize| x.rem_euclid(side as isize) as usize;
                         for di in -reach..=reach { for dj in -reach..=reach { for dk in -reach..=reach {
                             for &j in &lists[(w(ci + di) * side + w(cj + dj)) * side + w(ck + dk)] {
@@ -353,11 +410,12 @@ impl PmSim {
                                 for x in &mut d { if *x > l / 2.0 { *x -= l; } else if *x < -l / 2.0 { *x += l; } }
                                 let r2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
                                 if r2 >= cut * cut { continue; }
-                                let r = r2.sqrt();
-                                let u = r / (2.0 * rs);
-                                let keep = (1.0 - crate::tectonics::erf(u)) + r / (rs * PI.sqrt()) * (-u * u).exp();
-                                let f = strength * keep / (r2 + eps2).powf(1.5);
-                                for k in 0..3 { o[k] += d[k] * f; }
+                                let at = r2 * per_r2;
+                                let k = at as usize;
+                                let keep = table[k] + (table[k + 1] - table[k]) * (at - k as f64);
+                                let e2 = r2 + eps2;
+                                let f = strength * keep / (e2 * e2.sqrt());
+                                for c in 0..3 { o[c] += d[c] * f; }
                             }
                         }}}
                     }
@@ -378,30 +436,27 @@ impl PmSim {
         let n = self.n;
         let cell = self.box_size / n as f64;
         let fac = da / (a_force * self.cosmo.e(a_force)); // du/da = −∇φ / (a E)
-        for (p, u) in self.pos.iter().zip(self.mom.iter_mut()) {
-            let (x, y, z) = (p[0] / cell, p[1] / cell, p[2] / cell);
-            let (i, j, k) = (x.floor(), y.floor(), z.floor());
-            let (dx, dy, dz) = (x - i, y - j, z - k);
-            let (i, j, k) = (i as isize, j as isize, k as isize);
-            let mut g = [0.0; 3];
-            for (oi, wx) in [(0, 1.0 - dx), (1, dx)] { for (oj, wy) in [(0, 1.0 - dy), (1, dy)] { for (ok, wz) in [(0, 1.0 - dz), (1, dz)] {
-                let ii = (i + oi).rem_euclid(n as isize) as usize;
-                let jj = (j + oj).rem_euclid(n as isize) as usize;
-                let kk = (k + ok).rem_euclid(n as isize) as usize;
-                let idx = (ii * n + jj) * n + kk;
-                for c in 0..3 { g[c] += wx * wy * wz * acc[c][idx]; }
-            }}}
-            for c in 0..3 { u[c] += g[c] * fac; }
-        }
+        let pos = &self.pos;
+        let acc = &acc;
+        par_chunks(&mut self.mom, 1024, |c, block| {
+            for (b, u) in block.iter_mut().enumerate() {
+                let g = interpolate(pos[c * 1024 + b], cell, n, acc);
+                for k in 0..3 { u[k] += g[k] * fac; }
+            }
+        });
     }
 
     fn drift(&mut self, a0: f64, a1: f64) {
         // dx/da = u / (a³ E): integral over a at constant u
         let ds = Cosmology::simpson(|a| 1.0 / (a.powi(3) * self.cosmo.e(a)), a0, a1, 16);
         let l = self.box_size;
-        for (p, u) in self.pos.iter_mut().zip(self.mom.iter()) {
-            for c in 0..3 { p[c] = (p[c] + u[c] * ds).rem_euclid(l); }
-        }
+        let mom = &self.mom;
+        par_chunks(&mut self.pos, 1024, |c, block| {
+            for (b, p) in block.iter_mut().enumerate() {
+                let u = mom[c * 1024 + b];
+                for k in 0..3 { p[k] = (p[k] + u[k] * ds).rem_euclid(l); }
+            }
+        });
     }
 
     /// KDK step in scale factor.
