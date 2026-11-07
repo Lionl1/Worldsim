@@ -12,7 +12,7 @@ git clone https://github.com/Lionl1/worldsim && cd worldsim
 cargo run --release          # builds and opens the 3D interface in the browser (http://localhost:8080)
 ```
 
-Only Rust ≥ 1.75 is required, there are no external crates. `./tools/fetch_textures.sh` adds optional NASA photo maps of Earth and the Moon (about 0.7 MB); other bodies stay procedural. The catalogs (the “Map” tab) are downloaded by a script from open repositories. The browser needs internet only to load three.js from CDN.
+Only Rust ≥ 1.75 is required, there are no external crates. `./tools/fetch_textures.sh` adds optional NASA photo maps of Earth and the Moon (about 0.7 MB); other bodies stay procedural. The sources sometimes refuse downloads: the script then names the file, gives the page to get it from by hand, and worldsim keeps working with the procedural surface. The catalogs (the “Map” tab) are downloaded by a script from open repositories. The browser needs internet only to load three.js from CDN.
 
 ## Mission Lab
 

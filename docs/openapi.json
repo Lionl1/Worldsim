@@ -1,6 +1,6 @@
 {
   "openapi": "3.0.3",
-  "info": { "title": "worldsim API", "version": "0.3.1", "description": "Simulations, training environments and Mission Lab. If the server runs with a token, pass Authorization: Bearer <token>; a read-only token gets 403 on calculations. Open without a token: only / and /healthz." },
+  "info": { "title": "worldsim API", "version": "0.3.2", "description": "Simulations, training environments and Mission Lab. If the server runs with a token, pass Authorization: Bearer <token>; a read-only token gets 403 on calculations. Open without a token: only / and /healthz." },
   "components": { "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } } },
   "security": [{ "bearer": [] }],
   "paths": {
