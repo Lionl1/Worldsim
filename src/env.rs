@@ -105,8 +105,11 @@ impl Terrain {
             let (cx, cy) = (rng.uniform(-size / 2.0, size / 2.0), rng.uniform(-size / 2.0, size / 2.0));
             let r = rng.log_uniform(6.0, size / 8.0);
             let depth = 0.2 * r * amp_scale.min(1.0);
-            for j in 0..n {
-                for i in 0..n {
+            // a crater reaches two radii: nodes further away do not need checking
+            let span = |c: f64| (((c - 2.0 * r + size / 2.0) / cell).floor().max(0.0) as usize, (((c + 2.0 * r + size / 2.0) / cell).ceil() as usize + 1).min(n));
+            let ((i0, i1), (j0, j1)) = (span(cx), span(cy));
+            for j in j0..j1 {
+                for i in i0..i1 {
                     let (x, y) = (i as f64 * cell - size / 2.0, j as f64 * cell - size / 2.0);
                     let d = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt() / r;
                     if d < 2.0 {
