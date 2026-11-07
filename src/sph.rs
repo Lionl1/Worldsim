@@ -5,7 +5,6 @@
 //! so it suits thousands of particles on one machine, not cosmological runs.
 
 use crate::vec3::Vec3;
-use std::collections::HashMap;
 use std::f64::consts::PI;
 
 #[derive(Clone, Debug)]
@@ -29,38 +28,75 @@ fn dw(q: f64, h: f64, dim: usize) -> f64 {
     kernel_norm(dim) * s / h.powi(dim as i32 + 1)
 }
 
-type Cell = (i64, i64, i64);
+/// Particles by cell, in index order. Cells are visited in the same order on every run, so sums do not depend on threads.
+struct Grid { size: f64, origin: [i64; 3], dims: [usize; 3], start: Vec<u32>, items: Vec<u32> }
+
+impl Grid {
+    fn cell(p: Vec3, size: f64) -> [i64; 3] { [(p.x / size).floor() as i64, (p.y / size).floor() as i64, (p.z / size).floor() as i64] }
+    fn new(x: &[Vec3], size: f64) -> Grid {
+        let (mut lo, mut hi) = ([i64::MAX; 3], [i64::MIN; 3]);
+        for p in x { let c = Self::cell(*p, size); for k in 0..3 { lo[k] = lo[k].min(c[k]); hi[k] = hi[k].max(c[k]); } }
+        let dims = [(hi[0] - lo[0] + 1) as usize, (hi[1] - lo[1] + 1) as usize, (hi[2] - lo[2] + 1) as usize];
+        let index = |c: [i64; 3]| ((c[0] - lo[0]) as usize * dims[1] + (c[1] - lo[1]) as usize) * dims[2] + (c[2] - lo[2]) as usize;
+        let mut start = vec![0u32; dims[0] * dims[1] * dims[2] + 1];
+        for p in x { start[index(Self::cell(*p, size)) + 1] += 1; }
+        for k in 1..start.len() { start[k] += start[k - 1]; }
+        let mut fill = start.clone();
+        let mut items = vec![0u32; x.len()];
+        for (i, p) in x.iter().enumerate() { let c = index(Self::cell(*p, size)); items[fill[c] as usize] = i as u32; fill[c] += 1; }
+        Grid { size, origin: lo, dims, start, items }
+    }
+    /// Calls `f` with every particle in the cell of `p` and around it.
+    #[inline]
+    fn near(&self, p: Vec3, dim: usize, mut f: impl FnMut(usize)) {
+        let c = Self::cell(p, self.size);
+        let (ry, rz) = (if dim >= 2 { 1 } else { 0 }, if dim >= 3 { 1 } else { 0 });
+        for a in c[0] - 1..=c[0] + 1 {
+            let i = a - self.origin[0];
+            if i < 0 || i >= self.dims[0] as i64 { continue; }
+            for b in c[1] - ry..=c[1] + ry {
+                let j = b - self.origin[1];
+                if j < 0 || j >= self.dims[1] as i64 { continue; }
+                for d in c[2] - rz..=c[2] + rz {
+                    let k = d - self.origin[2];
+                    if k < 0 || k >= self.dims[2] as i64 { continue; }
+                    let at = (i as usize * self.dims[1] + j as usize) * self.dims[2] + k as usize;
+                    for n in &self.items[self.start[at] as usize..self.start[at + 1] as usize] { f(*n as usize); }
+                }
+            }
+        }
+    }
+}
+
+/// Fills `out` in parallel, one value per particle. Each value depends only on its index.
+fn par_fill<T: Send>(out: &mut [T], f: impl Fn(usize) -> T + Sync) {
+    let threads = std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1);
+    let per = out.len().div_ceil(threads).max(1);
+    let f = &f;
+    std::thread::scope(|sc| {
+        for (c, block) in out.chunks_mut(per).enumerate() {
+            sc.spawn(move || { for (k, o) in block.iter_mut().enumerate() { *o = f(c * per + k); } });
+        }
+    });
+}
 
 impl Sph {
-    fn grid(&self, size: f64) -> HashMap<Cell, Vec<u32>> {
-        let mut g: HashMap<Cell, Vec<u32>> = HashMap::new();
-        for (i, p) in self.x.iter().enumerate() { g.entry(Self::cell(*p, size)).or_default().push(i as u32); }
-        g
-    }
-    fn cell(p: Vec3, size: f64) -> Cell { ((p.x / size).floor() as i64, (p.y / size).floor() as i64, (p.z / size).floor() as i64) }
-    fn near(&self, g: &HashMap<Cell, Vec<u32>>, p: Vec3, size: f64, mut f: impl FnMut(usize)) {
-        let (cx, cy, cz) = Self::cell(p, size);
-        let (ry, rz) = (if self.dim >= 2 { 1 } else { 0 }, if self.dim >= 3 { 1 } else { 0 });
-        for a in cx - 1..=cx + 1 { for b in cy - ry..=cy + ry { for c in cz - rz..=cz + rz {
-            if let Some(list) = g.get(&(a, b, c)) { for j in list { f(*j as usize); } }
-        }}}
-    }
-
     /// Density by kernel summation, with the smoothing length following it: h = 1.2·(m/ρ)^(1/dim).
     pub fn density(&mut self) {
         let d = self.dim as f64;
         for _ in 0..3 {
             let size = 2.0 * self.h.iter().cloned().fold(0.0, f64::max);
-            let g = self.grid(size);
+            let g = Grid::new(&self.x, size);
             let mut rho = vec![0.0; self.x.len()];
-            for i in 0..self.x.len() {
-                let (mut sum, xi, hi) = (0.0, self.x[i], self.h[i]);
-                self.near(&g, xi, size, |j| {
-                    let q = (xi - self.x[j]).norm() / hi;
-                    if q < 2.0 { sum += self.m[j] * w(q, hi, self.dim); }
+            let me = &*self;
+            par_fill(&mut rho, |i| {
+                let (mut sum, xi, hi) = (0.0, me.x[i], me.h[i]);
+                g.near(xi, me.dim, |j| {
+                    let q = (xi - me.x[j]).norm() / hi;
+                    if q < 2.0 { sum += me.m[j] * w(q, hi, me.dim); }
                 });
-                rho[i] = sum;
-            }
+                sum
+            });
             for i in 0..self.x.len() { self.h[i] = 1.2 * (self.m[i] / rho[i]).powf(1.0 / d); }
             self.rho = rho;
         }
@@ -73,42 +109,51 @@ impl Sph {
     fn rates(&mut self) -> (Vec<Vec3>, Vec<f64>) {
         self.density();
         let n = self.x.len();
-        let (mut acc, mut heat) = (vec![Vec3::ZERO; n], vec![0.0; n]);
         let size = 2.0 * self.h.iter().cloned().fold(0.0, f64::max);
-        let g = self.grid(size);
-        for i in 0..n {
-            let (xi, vi, hi, pi, ci, ri) = (self.x[i], self.v[i], self.h[i], self.pressure(i), self.sound(i), self.rho[i]);
+        let g = Grid::new(&self.x, size);
+        let me = &*self;
+        let mut rates = vec![(Vec3::ZERO, 0.0); n];
+        par_fill(&mut rates, |i| {
+            let (xi, vi, hi, pi, ci, ri) = (me.x[i], me.v[i], me.h[i], me.pressure(i), me.sound(i), me.rho[i]);
             let (mut a, mut e) = (Vec3::ZERO, 0.0);
-            self.near(&g, xi, size, |j| {
+            g.near(xi, me.dim, |j| {
                 if j == i { return; }
-                let d = xi - self.x[j];
+                let d = xi - me.x[j];
                 let r = d.norm();
-                let hj = self.h[j];
+                let hj = me.h[j];
                 if r == 0.0 || (r >= 2.0 * hi && r >= 2.0 * hj) { return; }
-                let grad = 0.5 * (dw(r / hi, hi, self.dim) + dw(r / hj, hj, self.dim)) / r;
-                let dv = vi - self.v[j];
+                let grad = 0.5 * (dw(r / hi, hi, me.dim) + dw(r / hj, hj, me.dim)) / r;
+                let dv = vi - me.v[j];
                 let vr = dv.dot(d);
                 let visc = if vr < 0.0 {
                     let hb = 0.5 * (hi + hj);
                     let mu = hb * vr / (r * r + 0.01 * hb * hb);
-                    (-1.0 * 0.5 * (ci + self.sound(j)) * mu + 2.0 * mu * mu) / (0.5 * (ri + self.rho[j]))
+                    (-1.0 * 0.5 * (ci + me.sound(j)) * mu + 2.0 * mu * mu) / (0.5 * (ri + me.rho[j]))
                 } else { 0.0 };
-                let term = pi / (ri * ri) + self.pressure(j) / (self.rho[j] * self.rho[j]) + visc;
-                a -= d * (self.m[j] * term * grad);
-                e += 0.5 * self.m[j] * term * grad * vr;
+                let term = pi / (ri * ri) + me.pressure(j) / (me.rho[j] * me.rho[j]) + visc;
+                a -= d * (me.m[j] * term * grad);
+                e += 0.5 * me.m[j] * term * grad * vr;
             });
-            acc[i] = a;
-            heat[i] = e;
-        }
+            (a, e)
+        });
+        let (mut acc, heat): (Vec<Vec3>, Vec<f64>) = rates.into_iter().unzip();
         if let Some(eps) = self.gravity {
-            for i in 0..n {
-                for j in (i + 1)..n {
-                    let d = self.x[j] - self.x[i];
+            // each particle sums over the others in index order, the same order the pair loop would add them in
+            let mut pull = vec![Vec3::ZERO; n];
+            let me = &*self;
+            par_fill(&mut pull, |i| {
+                let mut a = acc[i];
+                for j in 0..n {
+                    if j == i { continue; }
+                    // d runs from the lower index to the higher one, as in the pair form
+                    let (lo, hi) = if i < j { (i, j) } else { (j, i) };
+                    let d = me.x[hi] - me.x[lo];
                     let s = (d.norm2() + eps * eps).powf(-1.5);
-                    acc[i] += d * (self.m[j] * s);
-                    acc[j] -= d * (self.m[i] * s);
+                    if i < j { a += d * (me.m[j] * s); } else { a -= d * (me.m[j] * s); }
                 }
-            }
+                a
+            });
+            acc = pull;
         }
         (acc, heat)
     }
