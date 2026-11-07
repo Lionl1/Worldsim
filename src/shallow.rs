@@ -35,7 +35,7 @@ fn gauss_legendre(n: usize) -> (Vec<f64>, Vec<f64>) {
 pub struct State { pub z: Vec<C>, pub d: Vec<C>, pub p: Vec<C> }
 
 pub struct Sphere {
-    pub trunc: usize, pub nlat: usize, pub nlon: usize, pub radius: f64, pub omega: f64,
+    pub trunc: usize, pub max_m: usize, pub nlat: usize, pub nlon: usize, pub radius: f64, pub omega: f64,
     pub mu: Vec<f64>, weight: Vec<f64>, plm: Vec<Vec<f64>>, hlm: Vec<Vec<f64>>, modes: Vec<(usize, usize)>, cos_t: Vec<Vec<f64>>, sin_t: Vec<Vec<f64>>,
     /// Coriolis parameter on the grid, can be tilted for tests. [lat][lon]
     pub coriolis: Vec<Vec<f64>>,
@@ -46,19 +46,22 @@ pub struct Sphere {
 }
 
 impl Sphere {
-    pub fn new(trunc: usize, radius: f64, omega: f64, tilt: f64) -> Sphere {
+    pub fn new(trunc: usize, radius: f64, omega: f64, tilt: f64) -> Sphere { Self::with_wavenumbers(trunc, trunc, radius, omega, tilt) }
+
+    /// `max_m` limits the zonal wavenumbers; 0 means a flow that does not depend on longitude.
+    pub fn with_wavenumbers(trunc: usize, max_m: usize, radius: f64, omega: f64, tilt: f64) -> Sphere {
         let nlon = (3 * trunc + 1).next_power_of_two().max(4);
         let nlat = nlon / 2;
         let (mu, weight) = gauss_legendre(nlat);
         let eps = |m: usize, n: usize| -> f64 { let (m, n) = (m as f64, n as f64); ((n * n - m * m) / (4.0 * n * n - 1.0)).sqrt() };
         let (mut modes, mut first) = (vec![], vec![]);
-        for m in 0..=trunc { first.push(modes.len()); for n in m..=trunc { modes.push((m, n)); } }
+        for m in 0..=max_m { first.push(modes.len()); for n in m..=trunc { modes.push((m, n)); } }
         let (mut plm, mut hlm) = (vec![], vec![]);
         for &x in &mu {
             let (mut pj, mut hj) = (vec![0.0; modes.len()], vec![0.0; modes.len()]);
             let s = (1.0 - x * x).sqrt();
             let mut pmm = 1.0 / 2f64.sqrt();
-            for m in 0..=trunc {
+            for m in 0..=max_m {
                 if m > 0 { pmm *= ((2 * m + 1) as f64 / (2 * m) as f64).sqrt() * s; }
                 // P up to trunc + 1: the derivative needs one more
                 let mut col = vec![0.0; trunc + 3];
@@ -76,7 +79,7 @@ impl Sphere {
             hlm.push(hj);
         }
         let (mut cos_t, mut sin_t) = (vec![], vec![]);
-        for m in 0..=trunc {
+        for m in 0..=max_m {
             cos_t.push((0..nlon).map(|i| (2.0 * PI * (m * i) as f64 / nlon as f64).cos()).collect());
             sin_t.push((0..nlon).map(|i| (2.0 * PI * (m * i) as f64 / nlon as f64).sin()).collect());
         }
@@ -84,7 +87,7 @@ impl Sphere {
             let l = 2.0 * PI * i as f64 / nlon as f64;
             2.0 * omega * (-l.cos() * (1.0 - x * x).sqrt() * tilt.sin() + x * tilt.cos())
         }).collect()).collect();
-        Sphere { trunc, nlat, nlon, radius, omega, mu, weight, plm, hlm, modes, cos_t, sin_t, coriolis, forcing: None, hyper: 0.0 }
+        Sphere { trunc, max_m, nlat, nlon, radius, omega, mu, weight, plm, hlm, modes, cos_t, sin_t, coriolis, forcing: None, hyper: 0.0 }
     }
 
     /// Longitude of grid column i, radians.
@@ -92,7 +95,7 @@ impl Sphere {
 
     /// Fourier coefficients of a grid field by latitude, m = 0..=trunc.
     fn fourier(&self, f: &[Vec<f64>]) -> Vec<Vec<C>> {
-        f.iter().map(|row| (0..=self.trunc).map(|m| {
+        f.iter().map(|row| (0..=self.max_m).map(|m| {
             let (mut re, mut im) = (0.0, 0.0);
             for i in 0..self.nlon { re += row[i] * self.cos_t[m][i]; im -= row[i] * self.sin_t[m][i]; }
             (re / self.nlon as f64, im / self.nlon as f64)
@@ -101,7 +104,7 @@ impl Sphere {
     fn synthesis(&self, f: &[Vec<C>]) -> Vec<Vec<f64>> {
         f.iter().map(|row| (0..self.nlon).map(|i| {
             let mut v = row[0].0;
-            for m in 1..=self.trunc { v += 2.0 * (row[m].0 * self.cos_t[m][i] - row[m].1 * self.sin_t[m][i]); }
+            for m in 1..=self.max_m { v += 2.0 * (row[m].0 * self.cos_t[m][i] - row[m].1 * self.sin_t[m][i]); }
             v
         }).collect()).collect()
     }
@@ -118,7 +121,7 @@ impl Sphere {
     /// Spectral to grid.
     pub fn grid(&self, s: &[C]) -> Vec<Vec<f64>> {
         let four: Vec<Vec<C>> = (0..self.nlat).map(|j| {
-            let mut row = vec![(0.0, 0.0); self.trunc + 1];
+            let mut row = vec![(0.0, 0.0); self.max_m + 1];
             for (k, &(m, _)) in self.modes.iter().enumerate() { row[m].0 += s[k].0 * self.plm[j][k]; row[m].1 += s[k].1 * self.plm[j][k]; }
             row
         }).collect();
@@ -130,7 +133,7 @@ impl Sphere {
         let a = self.radius;
         let inv = |s: &[C]| -> Vec<C> { s.iter().zip(&self.modes).map(|(x, &(_, n))| if n == 0 { (0.0, 0.0) } else { let f = -a * a / (n * (n + 1)) as f64; (x.0 * f, x.1 * f) }).collect() };
         let (psi, chi) = (inv(z), inv(d));
-        let (mut fu, mut fv) = (vec![vec![(0.0, 0.0); self.trunc + 1]; self.nlat], vec![vec![(0.0, 0.0); self.trunc + 1]; self.nlat]);
+        let (mut fu, mut fv) = (vec![vec![(0.0, 0.0); self.max_m + 1]; self.nlat], vec![vec![(0.0, 0.0); self.max_m + 1]; self.nlat]);
         for j in 0..self.nlat {
             for (k, &(m, _)) in self.modes.iter().enumerate() {
                 let (p, h, im) = (self.plm[j][k], self.hlm[j][k], (0.0, m as f64));
@@ -289,7 +292,7 @@ pub struct WindResult { pub lat: Vec<f64>, pub u: Vec<f64>, pub v: Vec<f64>, pub
 /// Zonal winds and diagnostic cloud cover for a world, driven by its annual-mean temperature from the energy balance model.
 ///
 /// The temperature contrast sets an equilibrium geopotential at the upper troposphere (thickness up to 0.25 of surface pressure); the
-/// layer relaxes to it in 15 days, with 30 days of drag. Cloud cover is diagnosed from ascent: a rule of thumb, not a cloud scheme,
+/// layer relaxes to it in 15 days, with 30 days of drag. The flow is zonally symmetric, so there are no eddies. Cloud cover is diagnosed from ascent: a rule of thumb, not a cloud scheme,
 /// and it does not feed back on temperature.
 pub fn world_winds(world: &World, climate: &ClimateResult, trunc: usize, days: f64) -> Result<WindResult, String> {
     let atm = world.atmosphere.as_ref().ok_or("this world has no atmosphere, so there are no winds")?;
@@ -298,7 +301,8 @@ pub fn world_winds(world: &World, climate: &ClimateResult, trunc: usize, days: f
     if !world.physics.has_surface || world.physics.gm / crate::constants::G > 15.0 * 5.972e24 { return Err("winds: the model does not apply to a giant planet: its winds do not come from a surface energy balance".into()); }
     let rs = R_GAS / atm.molar_mass;
     let omega = world.omega().abs();
-    let mut sw = Sphere::new(trunc, world.physics.radius, omega, 0.0);
+    // the forcing and the start do not depend on longitude, so neither does the flow: only m = 0 is solved
+    let mut sw = Sphere::with_wavenumbers(trunc, 0, world.physics.radius, omega, 0.0);
     let n_in = climate.lat.len();
     let mean_t = climate.global_mean;
     let thick = 4f64.ln();
