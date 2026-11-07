@@ -2,7 +2,7 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/). The API may change before 1.0.
 
-## 0.3.2 — unreleased
+## 0.3.2 — 2026-11-07
 
 ### Fixed
 - `tools/fetch_textures.sh` no longer stops at the first refused download: it fetches the rest, names what failed with a page to get it from by hand, and exits with an error. Files already in place are not downloaded again.
