@@ -2,7 +2,7 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/). The API may change before 1.0.
 
-## 0.3.3 — unreleased
+## 0.3.3 — 2026-11-08
 
 Reports, law checks and collected data are bit-for-bit the same as in 0.3.2, except P3M.
 
