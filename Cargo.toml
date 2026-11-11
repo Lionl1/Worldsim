@@ -4,6 +4,12 @@ version = "0.3.3"
 edition = "2021"
 description = "Physical models of worlds (Earth, Moon, Mars, ...) for simulation and data generation"
 license = "MIT"
+repository = "https://github.com/Lionl1/Worldsim"
+readme = "README.md"
+keywords = ["physics", "simulation", "space", "robotics", "world-model"]
+categories = ["science", "simulation", "aerospace"]
+# The crate needs src, web (the embedded page), missions and the data licences; the rest stays in the repository.
+exclude = ["/python", "/deploy", "/docs/*.md", "/.github", "/Dockerfile", "/.dockerignore", "/COMPARISON.md", "/SECURITY.md"]
 
 [lib]
 name = "worldsim"

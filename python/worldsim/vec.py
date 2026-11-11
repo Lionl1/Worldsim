@@ -1,6 +1,6 @@
 """Vector environment without HTTP: direct calls into the Rust library through ctypes.
 
-Build: `cargo build --release`; the path is set by WORLDSIM_LIB or searched in target/release.
+The library comes with the PyPI wheel; in a checkout run `cargo build --release` (or set WORLDSIM_LIB).
 Finished environments start a new episode on their own; the final observation is in `info["final_obs"]`.
 """
 import ctypes as C
@@ -17,9 +17,11 @@ def _find_lib():
     env = os.environ.get("WORLDSIM_LIB")
     if env:
         return env
-    p = Path(__file__).resolve().parents[2] / "target" / "release" / name
-    if p.exists():
-        return str(p)
+    here = Path(__file__).resolve()
+    # A wheel from PyPI carries the library next to this file; a checkout has it in target/release.
+    for p in (here.parent / name, here.parents[2] / "target" / "release" / name):
+        if p.exists():
+            return str(p)
     raise FileNotFoundError(f"not found {name}: run cargo build --release or set WORLDSIM_LIB")
 
 

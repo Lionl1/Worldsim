@@ -2,9 +2,21 @@
 name = "worldsim"
 version = "0.3.3"
 description = "worldsim Python tools: environments, data and world model qualification against physical laws"
+readme = "README.md"
 requires-python = ">=3.9"
 dependencies = ["numpy>=1.24"]
 license = { text = "MIT" }
+keywords = ["physics", "simulation", "reinforcement-learning", "world-model", "space"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+
+[project.urls]
+Homepage = "https://github.com/Lionl1/Worldsim"
+Changelog = "https://github.com/Lionl1/Worldsim/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 baseline = ["torch>=2.0"]
@@ -15,3 +27,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["worldsim"]
+
+[tool.setuptools.package-data]
+# The Rust library, copied here by the release workflow before the wheel is built.
+worldsim = ["*.so", "*.dylib", "*.dll"]

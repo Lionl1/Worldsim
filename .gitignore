@@ -6,3 +6,9 @@ __pycache__/
 /runs/
 data/textures/
 .DS_Store
+python/worldsim/*.so
+python/worldsim/*.dylib
+python/worldsim/*.dll
+python/README.md
+python/build/
+dist/
